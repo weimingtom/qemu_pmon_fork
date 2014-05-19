@@ -34,7 +34,7 @@ typedef struct dma_sysbus_state {
 
 void ls1a_ac97_rec_set_dmaaddr(uint32_t val);
 void ls1a_ac97_play_set_dmaaddr(uint32_t val);
-void ls1a_nand_set_dmaaddr(uint32_t val);
+void ls1b_nand_set_dmaaddr(uint32_t val);
 
 static uint64_t dma_dma_readl(void *ptr, hwaddr addr, unsigned size)
 {
@@ -43,7 +43,7 @@ static uint64_t dma_dma_readl(void *ptr, hwaddr addr, unsigned size)
 	return val;
 }
 
-void __attribute__((weak)) ls1a_nand_set_dmaaddr(uint32_t val)
+void __attribute__((weak)) ls1b_nand_set_dmaaddr(uint32_t val)
 {
 }
 
@@ -62,7 +62,7 @@ static void dma_dma_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 	switch(chn)
 	{
 	  case 0:
-		ls1a_nand_set_dmaaddr(val);
+		ls1b_nand_set_dmaaddr(val);
 		break;
 	  case 1:
 		ls1a_ac97_play_set_dmaaddr(val);
