@@ -37,7 +37,7 @@
 #include "hw/loader.h"
 #include "elf.h"
 #include "hw/sysbus.h"
-//#include "synopGMAC.h"
+#include "hw/net/synopGMAC.h"
 #include "sysemu/blockdev.h"
 #include "hw/ssi.h"
 #include "hw/i2c/i2c.h"
