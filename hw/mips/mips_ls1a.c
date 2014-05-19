@@ -270,6 +270,18 @@ static const int sector_len = 32 * 1024;
 
 static PCIBus *pcibus_ls1a_init(qemu_irq *pic, int (*board_map_irq)(int bus,int dev,int func,int pin));
 
+static CPUUnassignedAccess real_do_unassigned_access;
+static void mips_ls1a_do_unassigned_access(CPUState *cpu, hwaddr addr,
+                                           bool is_write, bool is_exec,
+                                           int opaque, unsigned size)
+{
+    if (!is_exec) {
+        /* ignore invalid access (ie do not raise exception) */
+        return;
+    }
+    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
+}
+
 static void mips_ls1a_init (QEMUMachineInitArgs *args)
 {
 	ram_addr_t ram_size = args->ram_size;
@@ -291,6 +303,7 @@ static void mips_ls1a_init (QEMUMachineInitArgs *args)
 	DriveInfo *flash_dinfo=NULL;
 	int ddr2config = 0;
 	//ISABus *isa_bus;
+	CPUClass *cc;
 
 
 	/* init CPUs */
@@ -309,6 +322,9 @@ static void mips_ls1a_init (QEMUMachineInitArgs *args)
 		}
 		env = &cpu->env;
 
+		cc = CPU_GET_CLASS(cpu);
+		real_do_unassigned_access = cc->do_unassigned_access;
+		cc->do_unassigned_access = mips_ls1a_do_unassigned_access;
 
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
