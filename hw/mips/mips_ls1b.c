@@ -262,6 +262,18 @@ void *ls1b_intctl_init(hwaddr addr,qemu_irq parent_irq);
 
 static const int sector_len = 32 * 1024;
 
+static CPUUnassignedAccess real_do_unassigned_access;
+static void mips_ls1b_do_unassigned_access(CPUState *cpu, hwaddr addr,
+                                           bool is_write, bool is_exec,
+                                           int opaque, unsigned size)
+{
+    if (!is_exec) {
+        /* ignore invalid access (ie do not raise exception) */
+        return;
+    }
+    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
+}
+
 static void mips_ls1b_init (QEMUMachineInitArgs *args)
 {
 	ram_addr_t ram_size = args->ram_size;
@@ -281,6 +293,7 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 	qemu_irq *ls1b_irq,*ls1b_irq1;
 	DriveInfo *flash_dinfo=NULL;
 	int ddr2config = 0;
+	CPUClass *cc;
 
 
 	/* init CPUs */
@@ -299,6 +312,9 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 		}
 		env = &cpu->env;
 
+		cc = CPU_GET_CLASS(cpu);
+		real_do_unassigned_access = cc->do_unassigned_access;
+		cc->do_unassigned_access = mips_ls1b_do_unassigned_access;
 
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
