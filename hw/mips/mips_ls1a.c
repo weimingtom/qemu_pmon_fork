@@ -36,7 +36,7 @@
 #include "hw/loader.h"
 #include "elf.h"
 #include "hw/sysbus.h"
-//#include "synopGMAC.h"
+#include "hw/net/synopGMAC.h"
 #include "sysemu/blockdev.h"
 #include "hw/ssi.h"
 #include "hw/i2c/i2c.h"
@@ -443,17 +443,15 @@ static void mips_ls1a_init (QEMUMachineInitArgs *args)
 	}
 	sysbus_create_simple("ls1a_acpi",0x1fe7c000, ls1a_irq[0]);
 
-#if 0
 	if (nb_nics) {
 		gmac_sysbus_create(&nd_table[0], 0x1fe10000, ls1a_irq1[2]);
 	   if(nb_nics>1)
 	  {
 		PCIDevice *dev;
-            dev = pci_nic_init(&nd_table[1],nd_table[1].model?:"e1000","0b");
+            dev = pci_nic_init(&nd_table[1], pci_bus, nd_table[1].model?:"e1000","0b");
 	    printf("nb_nics=%d dev=%p\n", nb_nics, dev);
 	  }
 	}
-#endif
 
 #if 1
 	{
