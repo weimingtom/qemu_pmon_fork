@@ -257,7 +257,10 @@ struct EHCIState {
     DeviceState *device;
     qemu_irq irq;
     MemoryRegion mem;
+    union{
     AddressSpace *as;
+    void *as_ptr;
+    };
     MemoryRegion mem_caps;
     MemoryRegion mem_opreg;
     MemoryRegion mem_ports;

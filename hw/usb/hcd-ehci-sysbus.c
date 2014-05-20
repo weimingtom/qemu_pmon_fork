@@ -30,6 +30,7 @@ static const VMStateDescription vmstate_ehci_sysbus = {
 
 static Property ehci_sysbus_properties[] = {
     DEFINE_PROP_UINT32("maxframes", EHCISysBusState, ehci.maxframes, 128),
+    DEFINE_PROP_PTR("as", EHCISysBusState, ehci.as_ptr),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -63,6 +64,8 @@ static void ehci_sysbus_init(Object *obj)
     s->opregbase = sec->opregbase;
     s->portscbase = sec->portscbase;
     s->portnr = sec->portnr;
+
+    if(!s->as)
     s->as = &address_space_memory;
 
     usb_ehci_init(s, DEVICE(obj));
