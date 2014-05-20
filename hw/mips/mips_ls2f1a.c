@@ -21,23 +21,23 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include "hw.h"
-#include "mips.h"
-#include "mips_cpudevs.h"
-#include "pc.h"
-#include "serial.h"
-#include "isa.h"
+#include "hw/hw.h"
+#include "hw/mips/mips.h"
+#include "hw/mips/cpudevs.h"
+#include "hw/i386/pc.h"
+#include "hw/char/serial.h"
+#include "hw/isa/isa.h"
 #include "net/net.h"
 #include "sysemu/sysemu.h"
-#include "boards.h"
-#include "flash.h"
+#include "hw/boards.h"
+#include "hw/block/flash.h"
 #include "qemu/log.h"
-#include "mips-bios.h"
-#include "ide.h"
-#include "loader.h"
+#include "hw/mips/bios.h"
+#include "hw/ide.h"
+#include "hw/loader.h"
 #include "elf.h"
-#include "mc146818rtc.h"
-#include "i8254.h"
+#include "hw/timer/mc146818rtc.h"
+#include "hw/timer/i8254.h"
 #include "sysemu/blockdev.h"
 #include "exec/address-spaces.h"
 
@@ -233,6 +233,19 @@ static int aui_boot_code[] ={
 PCIBus *pci_bonito_init(CPUMIPSState *env,qemu_irq *pic, int irq,int (*board_map_irq)(int bus,int dev,int func,int pin),MemoryRegion *ram);
 int pci_ls1a_init(PCIBus *bus, int devfn, CharDriverState **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
 static const int sector_len = 32 * 1024;
+
+static CPUUnassignedAccess real_do_unassigned_access;
+static void mips_ls2h_do_unassigned_access(CPUState *cpu, hwaddr addr,
+                                           bool is_write, bool is_exec,
+                                           int opaque, unsigned size)
+{
+    if (!is_exec) {
+        /* ignore invalid access (ie do not raise exception) */
+        return;
+    }
+    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
+}
+
 static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 {
 	ram_addr_t ram_size = args->ram_size;
@@ -248,6 +261,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 	CPUMIPSState *env;
 	ResetData *reset_info;
 	DriveInfo *hd, *flash_dinfo = NULL;
+	CPUClass *cc;
 
 
     /* init CPUs */
@@ -268,6 +282,9 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 		}
 		env = &cpu->env;
 
+		cc = CPU_GET_CLASS(cpu);
+		real_do_unassigned_access = cc->do_unassigned_access;
+		cc->do_unassigned_access = mips_ls2h_do_unassigned_access;
 
     /* Init CPU internal devices */
     cpu_mips_irq_init_cpu(env);
@@ -278,7 +295,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 		qemu_register_reset(main_cpu_reset, reset_info);
 
 		/* allocate RAM */
-	memory_region_init_ram(ram, "mips_ls3a.ram", ram_size);
+	memory_region_init_ram(ram, NULL, "mips_ls3a.ram", ram_size);
 	vmstate_register_ram_global(ram);
 
     /* Try to load a BIOS image. If this fails, we continue regardless,
@@ -296,7 +313,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, "mips_r4k.bios", BIOS_SIZE);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
@@ -324,7 +341,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
         reset_info->vector = load_kernel();
 
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, "tmpbios", bios_size);
+        memory_region_init_ram(bios, NULL, "tmpbios", bios_size);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc90000, bios);
@@ -350,7 +367,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 		char devaddr[10];
 
 		sprintf(devaddr,"%x",16+i);
-		pci_nic_init(&nd_table[i],nd_table[i].model?:"rtl8139",devaddr);
+		pci_nic_init(&nd_table[i], pci_bus, nd_table[i].model?:"rtl8139",devaddr);
 	}
 
 
