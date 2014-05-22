@@ -25,12 +25,6 @@ typedef struct pcilocal{
 
 typedef struct LS1APciState {
 	PCIDevice card;
-	AddressSpace dma_ehci;
-	AddressSpace dma_ohci;
-	AddressSpace dma_ahci;
-	AddressSpace dma_gmac;
-	AddressSpace dma_nand;
-	AddressSpace dma_ac97;
 	AddressSpace as;
 	void *ls1a;
 	union{
@@ -222,33 +216,37 @@ static IOMMUTLBEntry ls1a_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr add
     LS1APciState *s = container_of(iommu, LS1APciState, iomem_root);
     uint32_t pcimap = s->pcilocalreg.pcimap;
     IOMMUTLBEntry ret;
-    AddressSpace *as;
+    AddressSpace *as, *pci_as;
     hwaddr taddr;
 
-    as = pci_get_address_space(&s->card);
+    pci_as = pci_get_address_space(&s->card);
 
 
 	if(addr >= 0x10000000 && addr < 0x14000000 )
 	{
 		taddr = (addr&0x03ffffff)|((pcimap&0x3f)<<26);
+		as = pci_as;
 	}
 	else if(addr >= 0x14000000 && addr < 0x18000000 )
 	{
 		taddr = (addr&0x03ffffff)|(((pcimap>>6)&0x3f)<<26);
+		as = pci_as;
 	}
 	else if(addr >= 0x18000000 && addr < 0x1c000000 )
 	{
 		taddr = (addr&0x03ffffff)|(((pcimap>>12)&0x3f)<<26);
+		as = pci_as;
 	}
 	else
 	{
 		taddr = addr;
+		as = &s->as;
 	}
 
 	ret = (IOMMUTLBEntry) {
 		.target_as = as,
 		.translated_addr = taddr,
-		.addr_mask = 0x03ffffffULL,
+		.addr_mask = 0,
 		.perm = IOMMU_RW,
 	};
 
@@ -348,8 +346,8 @@ static int ls1a_initfn(PCIDevice *dev)
 		SysBusDevice *sysbusdev;
 		hwaddr devaddr =  0x00e00000;
 		dev = qdev_create(NULL, "exynos4210-ehci-usb");
-		qdev_prop_set_ptr(dev, "as", &d->as);
 		qdev_init_nofail(dev);
+		qdev_prop_set_ptr(dev, "as", &d->as);
 
 		sysbusdev =  SYS_BUS_DEVICE(dev);
 		sysbusdev->mmio[0].addr = devaddr;
