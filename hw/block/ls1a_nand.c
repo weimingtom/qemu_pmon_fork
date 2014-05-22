@@ -628,8 +628,8 @@ typedef struct NandState{
 	int dma_int_status;
 	qemu_irq irq;
 	union{
-	AddressSpace *dma;
-	void *dma_ptr;
+	AddressSpace *as;
+	void *as_ptr;
 	};
 } NandState;
 
@@ -688,13 +688,13 @@ static int dma_next(NandState *s)
 
 		if(s->dma_desc.ordered & DMA_ORDER_EN)
 		{
-			dma_memory_read(s->dma, s->dma_desc.ordered & ~DMA_ORDER_EN,(uint8_t *)&s->dma_desc,4*7);
+			dma_memory_read(s->as, s->dma_desc.ordered & ~DMA_ORDER_EN,(uint8_t *)&s->dma_desc,4*7);
 			s->dma_desc.left = s->dma_desc.length * 4;
 			s->dma_desc.step_times--;
 		}
 		else if(s->dma_desc.nextaddr)
 		{
-			dma_memory_read(s->dma, s->dma_desc.nextaddr, (uint8_t *)&s->dma_desc,4*7);
+			dma_memory_read(s->as, s->dma_desc.nextaddr, (uint8_t *)&s->dma_desc,4*7);
 			s->dma_desc.nextaddr = 0;
 			s->dma_desc.left = s->dma_desc.length * 4;
 		}
@@ -823,7 +823,7 @@ static int dma_readnand(NandState *s)
 
 		if(!copied) break;
 
-		dma_memory_write(s->dma, s->dma_desc.saddr,s->chip->ioaddr,copied);
+		dma_memory_write(s->as, s->dma_desc.saddr,s->chip->ioaddr,copied);
 
 		s->chip->ioaddr += copied;
 		s->chip->iolen -= copied;
@@ -865,7 +865,7 @@ static int dma_writenand(NandState *s)
 
 		if(!copied) break;
 
-		dma_memory_read(s->dma, s->dma_desc.saddr,s->chip->ioaddr,copied);
+		dma_memory_read(s->as, s->dma_desc.saddr,s->chip->ioaddr,copied);
 
 		s->chip->ioaddr += copied;
 		s->chip->iolen += copied;
@@ -906,7 +906,7 @@ void ls1a_nand_set_dmaaddr(uint32_t val)
 		}
 		else
 		{
-		dma_memory_read(s->dma, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
+		dma_memory_read(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
 		s->dma_desc.left = s->dma_desc.length * 4;
 		s->dma_desc.step_times--;
 		s->dma_desc.active = 1;
@@ -920,7 +920,7 @@ void ls1a_nand_set_dmaaddr(uint32_t val)
 
 	if(val & 0x4)
 	{
-		dma_memory_write(s->dma, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
+		dma_memory_write(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
 	}
 
 }
@@ -1059,8 +1059,8 @@ static int ls1a_nand_init(SysBusDevice *dev)
     nand_sysbus_state *d = SYS_BUS_LS1ANAND(dev);
     //memset(&d->nand,0,sizeof(d->nand));
     d->nand.chip = nand_init(NAND_MFR_SAMSUNG, 0xa1);
-    if(!d->nand.dma)
-    d->nand.dma = &address_space_memory;
+    if(!d->nand.as)
+    d->nand.as = &address_space_memory;
     memory_region_init_io(&d->nand.iomem, NULL, &ls1a_nand_ops, (void *)&d->nand, "ls1a nand", 0x24);
     memory_region_init_io(&d->nand.iomem1, NULL, &ls1a_nand_ops, (void *)&d->nand, "ls1a nand", 0x4);
     sysbus_init_mmio(dev, &d->nand.iomem);
@@ -1072,7 +1072,7 @@ static int ls1a_nand_init(SysBusDevice *dev)
 }
 
 static Property ls1a_nand_properties[] = {
-    DEFINE_PROP_PTR("dma", nand_sysbus_state, nand.dma_ptr),
+    DEFINE_PROP_PTR("as", nand_sysbus_state, nand.as_ptr),
     DEFINE_PROP_END_OF_LIST(),
 };
 
