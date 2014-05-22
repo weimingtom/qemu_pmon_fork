@@ -739,7 +739,7 @@ static IOMMUTLBEntry ls2f_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr add
     ret = (IOMMUTLBEntry) {
         .target_as = &address_space_memory,
         .translated_addr = (pcihost->addrcfg_reg.pcidmamap[i]&~3ULL)|offset,
-        .addr_mask = -1ULL,
+        .addr_mask = 0ULL,
         .perm = IOMMU_RW,
     };
 
