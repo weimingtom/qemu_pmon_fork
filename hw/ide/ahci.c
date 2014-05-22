@@ -1786,6 +1786,7 @@ static void sysbus_ahci_realize(DeviceState *dev, Error **errp)
 
 static Property sysbus_ahci_properties[] = {
     DEFINE_PROP_UINT32("num-ports", SysbusAHCIState, num_ports, 1),
+    DEFINE_PROP_PTR("as", SysbusAHCIState, ahci.as_ptr),
     DEFINE_PROP_END_OF_LIST(),
 };
 
