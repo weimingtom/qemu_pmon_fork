@@ -248,7 +248,7 @@ static IOMMUTLBEntry ls1a_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr add
 	ret = (IOMMUTLBEntry) {
 		.target_as = as,
 		.translated_addr = taddr,
-		.addr_mask = -1ULL,
+		.addr_mask = 0x03ffffffULL,
 		.perm = IOMMU_RW,
 	};
 
@@ -497,8 +497,8 @@ static int ls1a_initfn(PCIDevice *dev)
 		dev = qdev_create(NULL, "ls1a_nand");
 		s =  SYS_BUS_DEVICE(dev);
 		s->mmio[0].addr = devaddr;
-		qdev_prop_set_ptr(dev, "dma", &d->as);
 		qdev_init_nofail(dev);
+		qdev_prop_set_ptr(dev, "dma", &d->as);
 		sysbus_connect_irq(s, 0, ls1a_irq[13]);
 		memory_region_add_subregion(&d->iomem_axi, devaddr, s->mmio[0].memory);
 	}
