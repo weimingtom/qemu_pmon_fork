@@ -1552,8 +1552,8 @@ QEMUTimer *timer;
 gmacMacRegisters mac; 
 gmacDmaRegisters dma;
 union{
-	AddressSpace *dmactx;
-	void *dmactx_ptr;
+	AddressSpace *as;
+	void *as_ptr;
 };
 qemu_irq irq;
 int receive_stop;
@@ -1639,21 +1639,21 @@ int pos;
    if(!s->dma.DmaTxCurrDesc) s->dma.DmaTxCurrDesc=s->dma.DmaTxBaseAddr;
    do
    {
-	dma_memory_read(s->dmactx,s->dma.DmaTxCurrDesc,&desc,sizeof(desc));
+	dma_memory_read(s->as,s->dma.DmaTxCurrDesc,&desc,sizeof(desc));
 	if(desc.status&DescOwnByDma)
 	{
 	 pos=0;
 	 size=0;
 	  if(desc.length&0x7ff)
 	  {
-		  dma_memory_read(s->dmactx,desc.buffer1,txbuffer+pos,desc.length&0x7ff);
+		  dma_memory_read(s->as,desc.buffer1,txbuffer+pos,desc.length&0x7ff);
 		  pos += desc.length & 0x7ff;
 		  size += desc.length & 0x7ff;
 	  }
 
 	  if(!(desc.DESC_STATUS & TxDescChain) && ((desc.length>>11)&0x7ff))
 	  {
-		  dma_memory_read(s->dmactx,desc.buffer2,txbuffer+pos,(desc.length>>11)&0x7ff);
+		  dma_memory_read(s->as,desc.buffer2,txbuffer+pos,(desc.length>>11)&0x7ff);
 		  pos += (desc.length>>11) & 0x7ff;
 		  size += (desc.length>>11) & 0x7ff;
 	  }
@@ -1668,7 +1668,7 @@ int pos;
 
 	desc.status &= ~DescOwnByDma;
 
-	dma_memory_write(s->dmactx,s->dma.DmaTxCurrDesc,&desc,sizeof(desc));
+	dma_memory_write(s->as,s->dma.DmaTxCurrDesc,&desc,sizeof(desc));
 
 
 	if(desc.DESC_STATUS & TxDescChain)
@@ -1833,14 +1833,14 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 {
 	if(!s->dma.DmaRxCurrDesc) s->dma.DmaRxCurrDesc=s->dma.DmaRxBaseAddr;
 
-	dma_memory_read(s->dmactx,s->dma.DmaRxCurrDesc,&desc,sizeof(desc));
+	dma_memory_read(s->as,s->dma.DmaRxCurrDesc,&desc,sizeof(desc));
 	if(desc.status&DescOwnByDma)
 	{
 	 pos=0;
 	  if(desc.length&0x7ff)
 	  {
 		  once=min(desc.length&0x7ff,size);
-		  dma_memory_write(s->dmactx,desc.buffer1,buf+pos,once);
+		  dma_memory_write(s->as,desc.buffer1,buf+pos,once);
 		  pos += once;
 		  size -= once;
 	  }
@@ -1848,7 +1848,7 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	  if(!(desc.length & RxDescChain) && size && ((desc.length>>11)&0x7ff))
 	  {
 		  once=min((desc.length>>11)&0x7ff,size);
-		  dma_memory_write(s->dmactx,desc.buffer2,buf+pos,once);
+		  dma_memory_write(s->as,desc.buffer2,buf+pos,once);
 		  pos += once;
 		  size -= once;
 	  }
@@ -1865,7 +1865,7 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	desc.status |=(DescRxFirst|DescRxLast);
 	desc.status &= ~DescOwnByDma;
 
-	dma_memory_write(s->dmactx,s->dma.DmaRxCurrDesc,&desc,sizeof(desc));
+	dma_memory_write(s->as,s->dma.DmaRxCurrDesc,&desc,sizeof(desc));
 
 
 	if(desc.length & RxDescChain)
@@ -1974,7 +1974,7 @@ static int pci_gmac_init(PCIDevice *pci_dev)
 
 
     gmac_new(&d->gmac,object_get_typename(OBJECT(d)),d->dev.qdev.id); 
-    if(!d->gmac.dmactx) d->gmac.dmactx = pci_get_address_space(pci_dev);
+    if(!d->gmac.as) d->gmac.as = pci_get_address_space(pci_dev);
 
     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->gmac.iomem);
 
@@ -1983,7 +1983,7 @@ static int pci_gmac_init(PCIDevice *pci_dev)
 
 static Property gmac_pci_properties[] = {
     DEFINE_NIC_PROPERTIES(gmac_pci_state, gmac.conf),
-    DEFINE_PROP_PTR("dma", gmac_pci_state, gmac.dmactx_ptr),
+    DEFINE_PROP_PTR("as", gmac_pci_state, gmac.as_ptr),
     DEFINE_PROP_INT32("buswidth", gmac_pci_state, gmac.buswidth, 128),
     DEFINE_PROP_END_OF_LIST(),
 };
@@ -2029,7 +2029,7 @@ static int gmac_sysbus_init(SysBusDevice *dev)
     gmac_sysbus_state *d = SYS_BUS_SYNOPGMAC(dev);
 
     gmac_new(&d->gmac,"synopgmac", DEVICE(dev)->id);
-    if(!d->gmac.dmactx) d->gmac.dmactx = &address_space_memory;
+    if(!d->gmac.as) d->gmac.as = &address_space_memory;
 
     sysbus_init_irq(dev, &d->gmac.irq);
     sysbus_init_mmio(dev, &d->gmac.iomem);
@@ -2039,7 +2039,7 @@ static int gmac_sysbus_init(SysBusDevice *dev)
 
 static Property gmac_sysbus_properties[] = {
     DEFINE_NIC_PROPERTIES(gmac_sysbus_state, gmac.conf),
-    DEFINE_PROP_PTR("dma", gmac_sysbus_state, gmac.dmactx_ptr),
+    DEFINE_PROP_PTR("as", gmac_sysbus_state, gmac.as_ptr),
     DEFINE_PROP_INT32("buswidth", gmac_sysbus_state, gmac.buswidth, 128),
     DEFINE_PROP_END_OF_LIST(),
 };
