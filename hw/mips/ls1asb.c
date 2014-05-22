@@ -418,7 +418,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		hwaddr devaddr =  0x00e10000;
 		dev = qdev_create(NULL, "sysbus-synopgmac");
 		qdev_set_nic_properties(dev, d->nd);
-		qdev_prop_set_ptr(dev, "dma", &d->as);
+		qdev_prop_set_ptr(dev, "as", &d->as);
 		qdev_init_nofail(dev);
 
 		sysbusdev =  SYS_BUS_DEVICE(dev);
@@ -471,7 +471,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		SysBusDevice *s;
 		hwaddr devaddr =  0x00e74000;
 		dev=sysbus_create_varargs("ls1a_ac97", -1, ls1a_irq[14], ls1a_irq[15], NULL);
-		qdev_prop_set_ptr(dev, "dma", &d->as);
+		qdev_prop_set_ptr(dev, "as", &d->as);
 		s =  SYS_BUS_DEVICE(dev);
 		s->mmio[0].addr = devaddr;
 		memory_region_add_subregion(&d->iomem_axi, devaddr, s->mmio[0].memory);
@@ -496,7 +496,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		s =  SYS_BUS_DEVICE(dev);
 		s->mmio[0].addr = devaddr;
 		qdev_init_nofail(dev);
-		qdev_prop_set_ptr(dev, "dma", &d->as);
+		qdev_prop_set_ptr(dev, "as", &d->as);
 		sysbus_connect_irq(s, 0, ls1a_irq[13]);
 		memory_region_add_subregion(&d->iomem_axi, devaddr, s->mmio[0].memory);
 	}
