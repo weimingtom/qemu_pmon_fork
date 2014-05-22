@@ -295,8 +295,10 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 		qemu_register_reset(main_cpu_reset, reset_info);
 
 		/* allocate RAM */
-	memory_region_init_ram(ram, NULL, "mips_ls3a.ram", ram_size);
+	memory_region_init_ram(ram, NULL, "mips_ls2f1a.ram", ram_size);
 	vmstate_register_ram_global(ram);
+
+	memory_region_add_subregion(get_system_memory(), 0, ram);
 
     /* Try to load a BIOS image. If this fails, we continue regardless,
        but initialize the hardware ourselves. When a kernel gets
