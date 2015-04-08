@@ -163,14 +163,14 @@ const mips_def_t mips_defs[] =
            FIXME: Eventually this should be replaced by a real CPU model. */
         .name = "godson3",
         .CP0_PRid = 0x6305,
-        .CP0_Config0 = MIPS_CONFIG0 | (0x1 << CP0C0_AR) | (0x2 << CP0C0_AT) |
-                       (MMU_TYPE_R4000 << CP0C0_MT),
-        .CP0_Config1 = MIPS_CONFIG1 | (1 << CP0C1_FP) | (63 << CP0C1_MMU) |
+        .CP0_Config0 = /*MIPS_CONFIG0 | (0x1 << CP0C0_AR) | (0x2 << CP0C0_AT) |
+                       (MMU_TYPE_R4000 << CP0C0_MT)*/0x80034483,
+        .CP0_Config1 = /*MIPS_CONFIG1 | (1 << CP0C1_FP) | (63 << CP0C1_MMU) |
                        (2 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
                        (2 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA) |
-                       (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
-        .CP0_Config2 = MIPS_CONFIG2,
-        .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA),
+                       (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP)*/0xfee37193,
+        .CP0_Config2 = /*MIPS_CONFIG2|0x80001743*/0x80001743,
+        .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA)/*0xa0*/,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x76FBFFFF,
