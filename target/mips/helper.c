@@ -268,7 +268,7 @@ static int get_physical_address (CPUMIPSState *env, hwaddr *physical,
 #if defined(TARGET_MIPS64)
     } else if (address < 0x4000000000000000ULL) {
         /* xuseg */
-        if (UX && address <= (0x3FFFFFFFFFFFFFFFULL & env->SEGMask)) {
+        if ((UX || env->CP0_PRid == 0x6303) && address <= (0x3FFFFFFFFFFFFFFFULL & env->SEGMask)) {
             ret = env->tlb->map_address(env, physical, prot, real_address, rw, access_type);
         } else {
             ret = TLBRET_BADADDR;
