@@ -26,6 +26,15 @@
 #include "exec/cpu_ldst.h"
 #include "sysemu/kvm.h"
 
+target_ulong mypc;
+void (*mypc_callback)( target_ulong pc, uint32_t opcode);
+void helper_mypc( target_ulong pc, uint32_t opcode)
+{
+mypc = pc;
+if(mypc_callback)
+mypc_callback(pc, opcode);
+}
+
 /*****************************************************************************/
 /* Exceptions processing helpers */
 
