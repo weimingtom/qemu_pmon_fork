@@ -18,7 +18,13 @@
  *
  */
 
+#include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "hw/sysbus.h"
+#include "trace.h"
+#include "sysemu/char.h"
+#include "qemu/error-report.h"
+
 #include "qemu/timer.h"
 #define DEBUG_LS1F_CAN
 #define u8 unsigned char
@@ -201,7 +207,7 @@ static void ls1a_can_recv_timer(void *vp)
 		qemu_irq_raise(s->irq);
 	}
 
-	int64_t timeout = (int64_t) get_ticks_per_sec()>>4;
+	int64_t timeout = (int64_t) NANOSECONDS_PER_SECOND>>4;
 	timer_mod(s->timer, qemu_clock_get_ms (QEMU_CLOCK_VIRTUAL) + timeout);
 }
 
