@@ -21,6 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/pci/pci.h"
 //#include "qemu-timer.h"
@@ -1953,7 +1955,6 @@ pci_gmac_uninit(PCIDevice *dev)
 {
     gmac_pci_state *d = DO_UPCAST(gmac_pci_state, dev, dev);
 
-    memory_region_destroy(&d->gmac.iomem);
     qemu_del_nic(d->gmac.nic);
 }
 
