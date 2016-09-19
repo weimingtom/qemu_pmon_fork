@@ -21,13 +21,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
-#include "hw/sysbus.h"             /* SysBusDevice */
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
-#include "framebuffer.h"
+#include "hw/loader.h"
+#include "hw/sysbus.h"             /* SysBusDevice */
 #include "sysemu/dma.h"
 #include "exec/cpu-all.h"
+#include "framebuffer.h"
 
 typedef struct {
     SysBusDevice busdev;
@@ -46,6 +49,7 @@ typedef struct {
     QemuConsole *con;
     int vram_size;
     ram_addr_t vram_offset;
+    MemoryRegionSection fbsection;
 
     union{
 	    MemoryRegion *root;
@@ -132,8 +136,14 @@ static void ls2h_fb_update_screen(void *opaque)
         break;
     }
 
-    framebuffer_update_display(surface, s->root,
-                               s->vram_offset,
+    if (s->invalidate) {
+        framebuffer_update_memory_section(&s->fbsection,
+                                          s->root,
+                                          s->vram_offset,
+                                          s->width, s->width * s->bypp);
+    }
+
+    framebuffer_update_display(surface, &s->fbsection,
                                s->width,
                                s->height,
                                s->width * s->bypp,
