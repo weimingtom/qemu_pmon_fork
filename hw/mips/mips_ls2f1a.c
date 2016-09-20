@@ -21,6 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/mips/mips.h"
 #include "hw/mips/cpudevs.h"
@@ -82,7 +84,7 @@ static int64_t load_kernel(void)
 	}
 	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
                            (uint64_t *)&entry, (uint64_t *)&kernel_low,
-                           (uint64_t *)&kernel_high,0,ELF_MACHINE, 1);
+                           (uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
@@ -246,7 +248,7 @@ static void mips_ls2h_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
-static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
+static void mips_ls2f_ls1a_init (MachineState *args)
 {
 	ram_addr_t ram_size = args->ram_size;
 	const char *cpu_model = args->cpu_model;
@@ -295,7 +297,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 		qemu_register_reset(main_cpu_reset, reset_info);
 
 		/* allocate RAM */
-	memory_region_init_ram(ram, NULL, "mips_ls2f1a.ram", ram_size);
+	memory_region_init_ram(ram, NULL, "mips_ls2f1a.ram", ram_size, &error_fatal);
 	vmstate_register_ram_global(ram);
 
 	memory_region_add_subregion(get_system_memory(), 0, ram);
@@ -315,7 +317,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
@@ -343,7 +345,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
         reset_info->vector = load_kernel();
 
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, NULL, "tmpbios", bios_size);
+        memory_region_init_ram(bios, NULL, "tmpbios", bios_size, &error_fatal);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc90000, bios);
@@ -369,7 +371,7 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 		char devaddr[10];
 
 		sprintf(devaddr,"%x",16+i);
-		pci_nic_init(&nd_table[i], pci_bus, nd_table[i].model?:"rtl8139",devaddr);
+		pci_nic_init_nofail(&nd_table[i], pci_bus, nd_table[i].model?:"rtl8139",devaddr);
 	}
 
 
@@ -382,15 +384,12 @@ static void mips_ls2f_ls1a_init (QEMUMachineInitArgs *args)
 
 }
 
-static QEMUMachine mips_gs2fls1a_machine = {
-    .name = "ls2f_ls1a",
-    .desc = "mips gs2f platform",
-    .init = mips_ls2f_ls1a_init,
-};
 
-static void mips_machine_init(void)
+
+static void mips_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&mips_gs2fls1a_machine);
+    mc->desc = "mips ls2f1a platform";
+    mc->init = mips_ls2f_ls1a_init;
 }
 
-machine_init(mips_machine_init);
+DEFINE_MACHINE("ls2f1a", mips_machine_init)
