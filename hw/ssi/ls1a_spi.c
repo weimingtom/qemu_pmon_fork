@@ -21,8 +21,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/sysbus.h"
-#include "hw/ssi.h"
+#include "hw/ssi/ssi.h"
 
 typedef struct {
     SysBusDevice busdev;
