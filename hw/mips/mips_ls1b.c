@@ -21,6 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/mips/mips.h"
 #include "hw/mips/cpudevs.h"
@@ -39,7 +41,7 @@
 #include "hw/sysbus.h"
 #include "hw/net/synopGMAC.h"
 #include "sysemu/blockdev.h"
-#include "hw/ssi.h"
+#include "hw/ssi/ssi.h"
 #include "hw/i2c/i2c.h"
 #include "exec/address-spaces.h"
 
@@ -149,7 +151,7 @@ static int64_t load_kernel(void)
 	}
 	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
 			(uint64_t *)&entry, (uint64_t *)&kernel_low,
-			(uint64_t *)&kernel_high,0,ELF_MACHINE, 1);
+			(uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
 	if (kernel_size >= 0) {
 		if ((entry & ~0x7fffffffULL) == 0x80000000)
 			entry = (int32_t)entry;
@@ -274,7 +276,7 @@ static void mips_ls1b_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
-static void mips_ls1b_init (QEMUMachineInitArgs *args)
+static void mips_ls1b_init (MachineState *args)
 {
 	ram_addr_t ram_size = args->ram_size;
 	const char *cpu_model = args->cpu_model;
@@ -284,7 +286,8 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 	char *filename;
 	MemoryRegion *address_space_mem = get_system_memory();
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
-	MemoryRegion *isa = g_new(MemoryRegion, 1);
+	MemoryRegion *isa_io = g_new(MemoryRegion, 1);
+	MemoryRegion *isa_mem = g_new(MemoryRegion, 1);
 	MemoryRegion *bios;
 	int bios_size;
 	MIPSCPU *cpu;
@@ -322,7 +325,7 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 		qemu_register_reset(main_cpu_reset, reset_info);
 
 		/* allocate RAM */
-	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size);
+	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 	vmstate_register_ram_global(ram);
 
 	memory_region_add_subregion(address_space_mem, 0, ram);
@@ -345,7 +348,7 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
@@ -376,14 +379,14 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 	cpu_mips_irq_init_cpu(env);
 	cpu_mips_clock_init(env);
 
-	/* Register 64 KB of IO space at 0x1f000000 */
-	isa_bus_new(NULL, get_system_io());
+	memory_region_init_alias(isa_io, NULL, "isa-io",
+			get_system_io(), 0, 0x00010000);
+	memory_region_init(isa_mem, NULL, "isa-mem", 0x01000000);
+	memory_region_add_subregion(get_system_memory(), 0x1c000000, isa_io);
+	memory_region_add_subregion(get_system_memory(), 0x10000000, isa_mem);
 
-	/* ISA IO space at 0x90000000 */
-	memory_region_init_alias(isa, NULL, "isa_mmio",
-			get_system_io(), 0, 0x010000);
-	memory_region_add_subregion(get_system_memory(), 0x1c000000, isa);
-	isa_mem_base = 0x10000000;
+    isa_bus_new(NULL, isa_mem, get_system_io(), &error_abort);
+
 
 	ls1b_irq =ls1b_intctl_init(0x1Fd01040,env->irq[2]);
 	ls1b_irq1=ls1b_intctl_init(0x1Fd01058,env->irq[3]);
@@ -469,9 +472,7 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 		if(flash_dinfo)
 		{
 			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
-			if (qdev_prop_set_drive(dev1, "drive", flash_dinfo->bdrv)) {
-				abort();
-			}
+			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
 			qdev_prop_set_uint32(dev1, "size", 0x100000);
 			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 			qdev_init_nofail(dev1);
@@ -569,18 +570,14 @@ static void mips_ls1b_init (QEMUMachineInitArgs *args)
 
 }
 
-QEMUMachine mips_ls1b_machine = {
-	.name = "ls1b",
-	.desc = "mips ls1b platform",
-	.init = mips_ls1b_init,
-};
 
-static void mips_machine_init(void)
+static void mips_machine_init(MachineClass *mc)
 {
-	qemu_register_machine(&mips_ls1b_machine);
+    mc->desc = "mips ls1b platform";
+    mc->init = mips_ls1b_init;
 }
 
-machine_init(mips_machine_init);
+DEFINE_MACHINE("ls1b", mips_machine_init)
 
 //------------
 //#define DEBUG_IRQ
