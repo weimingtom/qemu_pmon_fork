@@ -21,6 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/i386/pc.h"
 #include "hw/char/serial.h"
@@ -51,7 +53,7 @@
 #include "sysemu/qtest.h"
 #include "qemu/error-report.h"
 #include "hw/empty_slot.h"
-#include "hw/ssi.h"
+#include "hw/ssi/ssi.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 
@@ -456,7 +458,7 @@ static int64_t load_kernel(void)
 	}
 	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
                            (uint64_t *)&entry, (uint64_t *)&kernel_low,
-                           (uint64_t *)&kernel_high,0,ELF_MACHINE, 1);
+                           (uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
@@ -534,13 +536,13 @@ static void mips_ls2h_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
-static void mips_ls2h_init (QEMUMachineInitArgs *args)
+static void mips_ls2h_init(MachineState *machine)
 {
-	ram_addr_t ram_size = args->ram_size;
-	const char *cpu_model = args->cpu_model;
-	const char *kernel_filename = args->kernel_filename;
-	const char *kernel_cmdline = args->kernel_cmdline;
-	const char *initrd_filename = args->initrd_filename;
+	ram_addr_t ram_size = machine->ram_size;
+	const char *cpu_model = machine->cpu_model;
+	const char *kernel_filename = machine->kernel_filename;
+	const char *kernel_cmdline = machine->kernel_cmdline;
+	const char *initrd_filename = machine->initrd_filename;
 	char *filename;
 	MemoryRegion *address_space_mem = get_system_memory();
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
@@ -581,7 +583,7 @@ static void mips_ls2h_init (QEMUMachineInitArgs *args)
 		qemu_register_reset(main_cpu_reset, reset_info);
 
 		/* allocate RAM */
-	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size);
+	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 	vmstate_register_ram_global(ram);
 
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
@@ -618,7 +620,7 @@ static void mips_ls2h_init (QEMUMachineInitArgs *args)
 
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
@@ -718,8 +720,8 @@ static void mips_ls2h_init (QEMUMachineInitArgs *args)
 
 			dev = qdev_create(idebus[0], hd->media_cd ? "ide-cd" : "ide-hd");
 			qdev_prop_set_uint32(dev, "unit", 0);
-			if(!qdev_prop_set_drive(dev, "drive", hd->bdrv))
-				qdev_init_nofail(dev);
+			qdev_prop_set_drive(dev, "drive", blk_by_legacy_dinfo(hd),&error_fatal);
+			qdev_init_nofail(dev);
 		}
 	}
 
@@ -771,9 +773,7 @@ static void mips_ls2h_init (QEMUMachineInitArgs *args)
 		if(flash_dinfo)
 		{
 			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
-			if (qdev_prop_set_drive(dev1, "drive", flash_dinfo->bdrv)) {
-				abort();
-			}
+			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
 			qdev_prop_set_uint32(dev1, "size", 0x100000);
 			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 			qdev_init_nofail(dev1);
@@ -887,18 +887,14 @@ static void mips_ls2h_init (QEMUMachineInitArgs *args)
 	//mypc_callback =  mypc_callback_for_net;
 }
 
-QEMUMachine mips_ls2h_machine = {
-	.name = "ls2h",
-	.desc = "mips ls2h platform",
-	.init = mips_ls2h_init,
-};
 
-static void mips_machine_init(void)
+static void mips_machine_init(MachineClass *mc)
 {
-	qemu_register_machine(&mips_ls2h_machine);
+    mc->desc = "mips ls2h platform";
+    mc->init = mips_ls2h_init;
 }
 
-machine_init(mips_machine_init);
+DEFINE_MACHINE("ls2h", mips_machine_init)
 
 //------------
 #include "hw/pci/pci.h"
@@ -1147,14 +1143,10 @@ static const MemoryRegionOps bonito_pciconf_ops = {
 
 static int bonito_initfn(PCIDevice *dev)
 {
-    int rc;
     PCIBonitoState *s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, dev);
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
 
-    rc = pci_bridge_initfn(dev, TYPE_PCI_BUS);
-    if (rc < 0) {
-        return rc;
-    }
+    pci_bridge_initfn(dev, TYPE_PCI_BUS);
 
     memory_region_init_io(&s->iomem, NULL, &pci_bonito_local_ops, s, "ls2h_pci_conf", 0x100);
     sysbus_init_mmio(sysbus, &s->iomem);
@@ -1275,7 +1267,7 @@ static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
 /* Handle PCI-to-system address translation.  */
 /* TODO: A translation failure here ought to set PCI error codes on the
    Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr addr)
+static IOMMUTLBEntry ls2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr addr, bool is_write)
 {
     //BonitoState *pcihost = container_of(iommu, BonitoState, iomem_mem);
     IOMMUTLBEntry ret;
