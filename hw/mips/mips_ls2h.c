@@ -779,7 +779,7 @@ static void mips_ls2h_init(MachineState *machine)
 			qdev_init_nofail(dev1);
 		}
 		else dev1 = ssi_create_slave(bus, "ssi-sd");
-		cs_line = qdev_get_gpio_in(dev1, 0);
+		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
 	}
 
