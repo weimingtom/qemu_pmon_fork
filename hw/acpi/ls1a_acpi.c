@@ -16,6 +16,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qemu-common.h"
 #include "hw/sysbus.h"
 #include "hw/hw.h"
 #include "hw/i386/pc.h"
@@ -90,14 +93,14 @@ static const VMStateDescription vmstate_ls1a_acpi = {
 static uint32_t get_pmtmr(PIIX4PMState *s)
 {
     uint32_t d;
-    d = muldiv64(qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL), PM_FREQ, get_ticks_per_sec());
+    d = muldiv64(qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL), PM_FREQ, NANOSECONDS_PER_SECOND);
     return d & 0xffffff;
 }
 
 static int get_pmsts(PIIX4PMState *s)
 {
     int64_t d;
-    d = muldiv64(qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL), PM_FREQ, get_ticks_per_sec());
+    d = muldiv64(qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL), PM_FREQ, NANOSECONDS_PER_SECOND);
     if (d >= s->tmr_overflow_time)
         s->pmsts |= TMROF_EN;
     return s->pmsts;
@@ -114,7 +117,7 @@ static void pm_update_sci(PIIX4PMState *s)
     qemu_set_irq(s->irq, sci_level);
     /* schedule a timer interruption if needed */
     if ((s->pmen & TMROF_EN) && !(pmsts & TMROF_EN)) {
-        expire_time = muldiv64(s->tmr_overflow_time, get_ticks_per_sec(), PM_FREQ);
+        expire_time = muldiv64(s->tmr_overflow_time, NANOSECONDS_PER_SECOND, PM_FREQ);
         timer_mod(s->tmr_timer, expire_time);
     } else {
         timer_del(s->tmr_timer);
@@ -140,7 +143,7 @@ static void pm_mem_write(void *opaque, hwaddr addr, uint64_t val, unsigned size)
             if (pmsts & val & TMROF_EN) {
                 /* if TMRSTS is reset, then compute the new overflow time */
                 d = muldiv64(qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL), PM_FREQ,
-                             get_ticks_per_sec());
+                             NANOSECONDS_PER_SECOND);
                 s->tmr_overflow_time = (d + 0x800000LL) & ~0x7fffffLL;
             }
             s->pmsts &= ~val;
