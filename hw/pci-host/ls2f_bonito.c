@@ -6,6 +6,8 @@
  *
  * This code is licenced under the LGPL.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/pci/pci.h"
 #include "hw/i386/pc.h"
@@ -421,11 +423,11 @@ static void update_pcimap(BonitoState *pcihost)
 	uint32_t pcimap = d->pcimap;
 
 	memory_region_transaction_begin();
-	if(pcihost->iomem_pcimap[0].parent)
+	if(pcihost->iomem_pcimap[0].container == get_system_memory())
 	memory_region_del_subregion(get_system_memory(), &pcihost->iomem_pcimap[0]);
-	if(pcihost->iomem_pcimap[1].parent)
+	if(pcihost->iomem_pcimap[1].container == get_system_memory())
 	memory_region_del_subregion(get_system_memory(), &pcihost->iomem_pcimap[1]);
-	if(pcihost->iomem_pcimap[2].parent)
+	if(pcihost->iomem_pcimap[2].container == get_system_memory())
 	memory_region_del_subregion(get_system_memory(), &pcihost->iomem_pcimap[2]);
 
         memory_region_init_alias(&pcihost->iomem_pcimap[0], NULL, "pcimem0", &pcihost->iomem_pcimem, (pcimap&0x3f)<<26, 0x4000000);
@@ -453,7 +455,7 @@ memory_region_transaction_begin();
 		if(!bit) continue;
 		bit--;
 
-		if(pcihost->iomem_cpumap[i].parent)
+		if(pcihost->iomem_cpumap[i].container == get_system_memory())
 			memory_region_del_subregion(get_system_memory(), &pcihost->iomem_cpumap[i]);
 
 		if(pcihost->addrcfg_reg.cpumap[i]&1)
@@ -504,7 +506,7 @@ static void pci_bonito_local_writel (void *opaque, hwaddr addr,
 		case 0x80:
 			//ddr config register
 			memory_region_transaction_begin();
-			if(ddrcfg_iomem->parent)
+			if(ddrcfg_iomem->container == get_system_memory())
 				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
 			
 
@@ -630,7 +632,9 @@ static int bonito_initfn(PCIDevice *dev)
     PCIBonitoState *s = DO_UPCAST(PCIBonitoState, dev, dev);
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
     PCIHostState *phb = PCI_HOST_BRIDGE(s->pcihost);
-    MemoryRegion *isa = g_new(MemoryRegion, 1);
+    //ISABus *isa_bus;
+    MemoryRegion *isa_io = g_new(MemoryRegion, 1);
+    MemoryRegion *isa_mem = g_new(MemoryRegion, 1);
 
     /* Bonito North Bridge, built on FPGA, VENDOR_ID/DEVICE_ID are "undefined" */
     pci_config_set_prog_interface(dev->config, 0x00);
@@ -668,14 +672,13 @@ static int bonito_initfn(PCIDevice *dev)
 
 	/* Register 64 KB of ISA IO space at 0x1fd00000 */
 
-	isa_bus_new(NULL, get_system_io());
+    memory_region_init_alias(isa_io, NULL, "isa-io",
+                             get_system_io(), 0, 0x00010000);
+    memory_region_init(isa_mem, NULL, "isa-mem", 0x01000000);
+    memory_region_add_subregion(get_system_memory(), 0x1fd00000, isa_io);
+    memory_region_add_subregion(get_system_memory(), 0x10000000, isa_mem);
 
-	/* ISA IO space at 0x90000000 */
-	memory_region_init_alias(isa, NULL, "isa_mmio",
-			get_system_io(), 0, 0x010000);
-	memory_region_add_subregion(get_system_memory(), 0x1fd00000, isa);
-
-	isa_mem_base = 0x10000000;
+    isa_bus_new(NULL, isa_mem, get_system_io(), &error_abort);
 
     /* set the default value of north bridge pci config */
     pci_set_word(dev->config + PCI_COMMAND, 0x0000);
@@ -717,7 +720,7 @@ static const TypeInfo bonito_info = {
 /* Handle PCI-to-system address translation.  */
 /* TODO: A translation failure here ought to set PCI error codes on the
    Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls2f_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr addr)
+static IOMMUTLBEntry ls2f_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr addr, bool is_write)
 {
     BonitoState *pcihost = container_of(iommu, BonitoState, iomem_mem);
     IOMMUTLBEntry ret;
