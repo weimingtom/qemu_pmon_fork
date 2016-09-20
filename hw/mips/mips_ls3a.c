@@ -21,6 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/mips/mips.h"
 #include "hw/mips/cpudevs.h"
@@ -236,7 +238,7 @@ static int64_t load_kernel(void)
 	}
 	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
                            (uint64_t *)&entry, (uint64_t *)&kernel_low,
-                           (uint64_t *)&kernel_high,0,ELF_MACHINE, 1);
+                           (uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
@@ -484,7 +486,7 @@ static void mips_ls3a_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
-static void mips_ls3a_init (QEMUMachineInitArgs *args)
+static void mips_ls3a_init (MachineState *args)
 {
 	ram_addr_t ram_size = args->ram_size;
 	const char *cpu_model = args->cpu_model;
@@ -496,7 +498,8 @@ static void mips_ls3a_init (QEMUMachineInitArgs *args)
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
 	MemoryRegion *lowram = g_new(MemoryRegion, 1);
 	MemoryRegion *bios;
-	MemoryRegion *isa = g_new(MemoryRegion, 1);
+	MemoryRegion *isa_io = g_new(MemoryRegion, 1);
+	MemoryRegion *isa_mem = g_new(MemoryRegion, 1);
 	int bios_size;
 	MIPSCPU *cpu;
 	CPUMIPSState *env;
@@ -562,7 +565,7 @@ static void mips_ls3a_init (QEMUMachineInitArgs *args)
 
 }
 
-	memory_region_init_ram(ram, NULL, "mips_ls3a.ram", ram_size);
+	memory_region_init_ram(ram, NULL, "mips_ls3a.ram", ram_size, &error_fatal);
         memory_region_init_alias(lowram, NULL, "mips_ls3a.lowram", ram, 0, MIN(ram_size,256*0x100000));
 	vmstate_register_ram_global(ram);
 
@@ -591,7 +594,7 @@ static void mips_ls3a_init (QEMUMachineInitArgs *args)
 #endif
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
@@ -600,7 +603,7 @@ static void mips_ls3a_init (QEMUMachineInitArgs *args)
     } else if ((dinfo = drive_get(IF_PFLASH, 0, 0)) != NULL) {
         uint32_t mips_rom = 0x00400000;
         if (!pflash_cfi01_register(0x1fc00000, NULL, "mips_r4k.bios", mips_rom,
-                                   dinfo->bdrv, sector_len,
+                                   blk_by_legacy_dinfo(dinfo), sector_len,
                                    mips_rom / sector_len,
                                    4, 0, 0, 0, 0, be)) {
             fprintf(stderr, "qemu: Error registering flash memory.\n");
@@ -608,7 +611,7 @@ static void mips_ls3a_init (QEMUMachineInitArgs *args)
     }
     else {
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
         vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
@@ -632,12 +635,13 @@ static void mips_ls3a_init (QEMUMachineInitArgs *args)
 
     ISABus *isa_bus;
 
-    isa_bus = isa_bus_new(NULL, get_system_io());
-	/* ISA IO space at 0x90000000 */
-	memory_region_init_alias(isa, NULL, "isa_mmio",
-			get_system_io(), 0, 0x010000);
-	memory_region_add_subregion(get_system_memory(), 0xefdfc000000LL, isa);
-	isa_mem_base = 0x10000000;
+    memory_region_init_alias(isa_io, NULL, "isa-io",
+                             get_system_io(), 0, 0x00010000);
+    memory_region_init(isa_mem, NULL, "isa-mem", 0x01000000);
+    memory_region_add_subregion(get_system_memory(), 0xefdfc000000LL, isa_io);
+    memory_region_add_subregion(get_system_memory(), 0x10000000, isa_mem);
+
+    isa_bus = isa_bus_new(NULL, isa_mem, get_system_io(), &error_abort);
 
 
 	i8259 = ls3a_intctl_init(isa_bus, mycpu);
@@ -696,7 +700,7 @@ static void mips_ls3a_init (QEMUMachineInitArgs *args)
 char *p;
 MemoryRegion *iomem;
         iomem = g_new(MemoryRegion, 1);
-	memory_region_init_ram(iomem, NULL, "mips_r4k.ram", 0x1000);
+	memory_region_init_ram(iomem, NULL, "mips_r4k.ram", 0x1000, &error_fatal);
 	memory_region_add_subregion(address_space_mem, 0x3ff00000, iomem);
   	p = memory_region_get_ram_ptr(iomem);
 
@@ -711,7 +715,7 @@ MemoryRegion *iomem;
 	*(long long *)(p+0x180) = 0xf0;
 
         iomem = g_new(MemoryRegion, 1);
-	memory_region_init_ram(iomem, NULL, "mips_r4k.ram", 0x1000);
+	memory_region_init_ram(iomem, NULL, "mips_r4k.ram", 0x1000, &error_fatal);
 	memory_region_add_subregion(address_space_mem, 0x3ff02000, iomem);
   	p = memory_region_get_ram_ptr(iomem);
 	memset(p,0,0x800);
@@ -745,20 +749,16 @@ static void mips_ls3a_reset(void)
 	}
 }
 
-QEMUMachine mips_godson_machine = {
-    .name = "ls3a",
-    .desc = "Godson3 Multicore platform",
-    .init = mips_ls3a_init,
-    .reset = mips_ls3a_reset,
-    .max_cpus = 255,
-};
-
-static void mips_machine_init(void)
+static void mips_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&mips_godson_machine);
+    mc->desc = "mips ls3a platform";
+    mc->init = mips_ls3a_init;
+    mc->reset = mips_ls3a_reset;
+    mc->max_cpus = 16;
 }
 
-machine_init(mips_machine_init);
+DEFINE_MACHINE("ls3a", mips_machine_init)
+
 
 static const TypeInfo bonito_pcihost_info = {
     .name          = TYPE_BONITO_PCI_HOST_BRIDGE,
