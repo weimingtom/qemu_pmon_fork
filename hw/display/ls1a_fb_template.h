@@ -63,7 +63,7 @@ static void glue(draw_line_, BITS)(void *opaque, uint8_t *d, const uint8_t *s,
     {
     uint16_t rgb565;
     while (width--) {
-        rgb565 = lduw_raw(s);
+        rgb565 = lduw_le_p(s);
         r = ((rgb565 >> 11) & 0x1f) << 3;
         g = ((rgb565 >>  5) & 0x3f) << 2;
         b = ((rgb565 >>  0) & 0x1f) << 3;
@@ -75,7 +75,7 @@ static void glue(draw_line_, BITS)(void *opaque, uint8_t *d, const uint8_t *s,
     {
     uint32_t rgb888;
     while (width--) {
-        rgb888 = ldl_raw(s);
+        rgb888 = ldl_le_p(s);
         r = ((rgb888 >>  0) & 0xff);
         g = ((rgb888 >>  8) & 0xff);
         b = ((rgb888 >>  16) & 0xff);
