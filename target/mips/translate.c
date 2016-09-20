@@ -1435,7 +1435,7 @@ static TCGv_i64 msa_wr_d[64];
         tcg_gen_movi_tl(helper_tmp, arg1); \
     gen_helper_##name(helper_tmp, helper_tmp1);                          \
     tcg_temp_free(helper_tmp);                                \
-    tcg_temp_free(helper_tmp1);                                \
+    tcg_temp_free_i32(helper_tmp1);                                \
     } while(0)
 
 typedef struct DisasContext {
