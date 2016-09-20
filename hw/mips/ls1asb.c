@@ -1,3 +1,5 @@
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/sysbus.h"
 #include "hw/pci/pci.h"
@@ -8,12 +10,13 @@
 #include "net/net.h"
 #include "hw/i386/pc.h"
 #include "sysemu/blockdev.h"
-#include "hw/ssi.h"
+#include "hw/ssi/ssi.h"
 #include "hw/i2c/i2c.h"
 #include "exec/address-spaces.h"
 
 #define PCI_VENDOR_ID_LS1A 0x104a
 #define PCI_DEVICE_ID_LS1A 0x0
+#define TYPE_BONITO_IOMMU_MEMORY_REGION "ls1asb-bonito-iommu-memory-region"
 
 typedef struct pcilocal{
 	unsigned int pcimap;
@@ -28,7 +31,7 @@ typedef struct LS1APciState {
 	AddressSpace as;
 	void *ls1a;
 	union{
-		CharDriverState **serial_hds;
+		Chardev **serial_hds;
 		void *serial_ptr;
 	};
 	union{
@@ -45,7 +48,8 @@ typedef struct LS1APciState {
 	};
 	qemu_irq *pin0_irqs, *pin1_irqs;
 	uint8_t pin0_irqstat, pin1_irqstat;
-	MemoryRegion iomem_root;
+	//MemoryRegion iomem_root;
+	IOMMUMemoryRegion iommu;
 	MemoryRegion iomem_dc;
 	MemoryRegion iomem_axi;
 	MemoryRegion iomem_ddr;
@@ -56,8 +60,8 @@ typedef struct LS1APciState {
 } LS1APciState;
 
 
-int pci_ls1a_init(PCIBus *bus, int devfn, CharDriverState **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
-int pci_ls1a_init(PCIBus *bus, int devfn, CharDriverState **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash)
+int pci_ls1a_init(PCIBus *bus, int devfn, Chardev **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
+int pci_ls1a_init(PCIBus *bus, int devfn, Chardev **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash)
 {
     PCIDevice *dev;
 
@@ -129,7 +133,7 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 		case 0x00d00420:
 			memory_region_transaction_begin();
-			if(ddrcfg_iomem->parent)
+			if(ddrcfg_iomem->container == &sbstat->iomem_ddr)
 				memory_region_del_subregion(&sbstat->iomem_ddr, ddrcfg_iomem);
 
 			if((val&0x2) == 0)
@@ -211,9 +215,9 @@ static const MemoryRegionOps pci_bonito_local_ops = {
 /* Handle PCI-to-system address translation.  */
 /* TODO: A translation failure here ought to set PCI error codes on the
    Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls1a_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr addr)
+static IOMMUTLBEntry ls1a_pcidma_translate_iommu(IOMMUMemoryRegion *iommu, hwaddr addr, bool is_write)
 {
-    LS1APciState *s = container_of(iommu, LS1APciState, iomem_root);
+    LS1APciState *s = container_of(iommu, LS1APciState, iommu);
     uint32_t pcimap = s->pcilocalreg.pcimap;
     IOMMUTLBEntry ret;
     AddressSpace *as, *pci_as;
@@ -254,12 +258,8 @@ static IOMMUTLBEntry ls1a_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr add
     return ret;
 }
 
-static const MemoryRegionIOMMUOps ls1a_pcidma_iommu_ops = {
-    .translate = ls1a_pcidma_translate_iommu,
-};
 
-
-static int ls1a_initfn(PCIDevice *dev)
+static void ls1a_initfn(PCIDevice *dev, Error **errp)
 {
     struct LS1APciState *d;
     qemu_irq *ls1a_irq,*ls1a_irq1;
@@ -283,7 +283,7 @@ static int ls1a_initfn(PCIDevice *dev)
     memory_region_init(&d->iomem_ddr, NULL, "ls1a_ddr", 0x40000000);
     {
 	    MemoryRegion *ram = g_new(MemoryRegion, 1);
-	    memory_region_init_ram(ram, NULL, "mips_r4k.ram", 0x10000000);
+	    memory_region_init_ram(ram, NULL, "mips_r4k.ram", 0x10000000, &error_fatal);
 	    vmstate_register_ram_global(ram);
 	    memory_region_add_subregion(&d->iomem_ddr, 0, ram);
     }
@@ -293,15 +293,15 @@ static int ls1a_initfn(PCIDevice *dev)
     memory_region_init_alias(&d->iomem_ddr0, NULL, "ls1a_ddr0", &d->iomem_ddr, 0, 0x10000000);
 
 
-    memory_region_init(&d->iomem_root, NULL, "system", INT32_MAX);
-    address_space_init(&d->as, &d->iomem_root, "ls1a memory");
+    memory_region_init_iommu(&d->iommu, sizeof(&d->iommu),
+                             TYPE_BONITO_IOMMU_MEMORY_REGION, OBJECT(dev),
+                             "iommu-ls1apci", UINT64_MAX);
+    address_space_init(&d->as, MEMORY_REGION(&d->iommu), "ls1a memory");
 
-    memory_region_init_iommu(&d->iomem_root, OBJECT(d), &ls1a_pcidma_iommu_ops, "iommu-ls1apci", UINT32_MAX);
 
-
-    memory_region_add_subregion(&d->iomem_root, 0x1c200000, &d->iomem_dc0);
-    memory_region_add_subregion(&d->iomem_root, 0x1f000000, &d->iomem_axi0);
-    memory_region_add_subregion(&d->iomem_root, 0x00000000, &d->iomem_ddr0);
+    memory_region_add_subregion(MEMORY_REGION(&d->iommu), 0x1c200000, &d->iomem_dc0);
+    memory_region_add_subregion(MEMORY_REGION(&d->iommu), 0x1f000000, &d->iomem_axi0);
+    memory_region_add_subregion(MEMORY_REGION(&d->iommu), 0x00000000, &d->iomem_ddr0);
 
     d->pin0_irqs = qemu_allocate_irqs(pin0_set_irq, d, 2);
     d->pin1_irqs = qemu_allocate_irqs(pin1_set_irq, d, 3);
@@ -337,7 +337,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		dev = sysbus_create_simple("ls1a_fb", -1, NULL);
 		sysbusdev =  SYS_BUS_DEVICE(dev);
 		sysbusdev->mmio[0].addr = devaddr;
-		qdev_prop_set_ptr(dev, "root", &d->iomem_root);
+		qdev_prop_set_ptr(dev, "root", MEMORY_REGION(&d->iommu));
 		memory_region_add_subregion(&d->iomem_dc, devaddr, sysbusdev->mmio[0].memory);
 	}
 
@@ -393,8 +393,7 @@ static int ls1a_initfn(PCIDevice *dev)
 
 			dev = qdev_create(idebus[0], d->hd->media_cd ? "ide-cd" : "ide-hd");
 			qdev_prop_set_uint32(dev, "unit", 0);
-			if(!qdev_prop_set_drive(dev, "drive", d->hd->bdrv))
-				qdev_init_nofail(dev);
+			qdev_prop_set_drive(dev, "drive", blk_by_legacy_dinfo(d->hd), &error_fatal);
 		}
 	}
 
@@ -454,9 +453,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		if(d->flash)
 		{
 			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
-			if (qdev_prop_set_drive(dev1, "drive", d->flash->bdrv)) {
-				abort();
-			}
+			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(d->flash), &error_fatal);
 			qdev_prop_set_uint32(dev1, "size", 0x100000);
 			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 			qdev_init_nofail(dev1);
@@ -566,7 +563,6 @@ static int ls1a_initfn(PCIDevice *dev)
     pci_register_bar(&d->card, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->iomem_dc);
     pci_register_bar(&d->card, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->iomem_axi);
     pci_register_bar(&d->card, 4, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->iomem_ddr);
-    return 0;
 }
 
 
@@ -593,7 +589,7 @@ static void ls1a_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = ls1a_initfn;
+    k->realize = ls1a_initfn;
     k->config_write = ls1a_write_config;
     k->vendor_id = PCI_VENDOR_ID_LS1A;
     k->device_id = PCI_DEVICE_ID_LS1A;
@@ -608,11 +604,30 @@ static const TypeInfo ls1a_info = {
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(LS1APciState),
     .class_init    = ls1a_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_CONVENTIONAL_PCI_DEVICE },
+        { }
+    },
+};
+
+static void bonito_iommu_memory_region_class_init(ObjectClass *klass,
+                                                   void *data)
+{
+    IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
+
+    imrc->translate = ls1a_pcidma_translate_iommu;
+}
+
+static const TypeInfo typhoon_iommu_memory_region_info = {
+    .parent = TYPE_IOMMU_MEMORY_REGION,
+    .name = TYPE_BONITO_IOMMU_MEMORY_REGION,
+    .class_init = bonito_iommu_memory_region_class_init,
 };
 
 static void ls1a_register_types(void)
 {
     type_register_static(&ls1a_info);
+    type_register_static(&typhoon_iommu_memory_region_info);
 }
 
 type_init(ls1a_register_types)
