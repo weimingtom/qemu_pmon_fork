@@ -26,11 +26,15 @@
 #include "exec/cpu_ldst.h"
 #include "sysemu/kvm.h"
 
+#define MAX_CPUS 16
 target_ulong mypc;
+target_ulong mypcs[MAX_CPUS];
 void (*mypc_callback)( target_ulong pc, uint32_t opcode);
 void helper_mypc( target_ulong pc, uint32_t opcode)
 {
 mypc = pc;
+if(current_cpu->cpu_index<MAX_CPUS)
+	mypcs[current_cpu->cpu_index] = pc;
 if(mypc_callback)
 mypc_callback(pc, opcode);
 }
