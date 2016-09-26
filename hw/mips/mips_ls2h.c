@@ -648,8 +648,8 @@ static void mips_ls2h_init(MachineState *machine)
 
 
 	/* Init CPU internal devices */
-	cpu_mips_irq_init_cpu(env);
-	cpu_mips_clock_init(env);
+	cpu_mips_irq_init_cpu(cpu);
+	cpu_mips_clock_init(cpu);
 
 
 	/* Register 64 KB of IO space at 0x1f000000 */
