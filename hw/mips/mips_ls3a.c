@@ -556,8 +556,8 @@ static void mips_ls3a_init (MachineState *args)
 
 
     /* Init CPU internal devices */
-    cpu_mips_irq_init_cpu(env);
-    cpu_mips_clock_init(env);
+    cpu_mips_irq_init_cpu(cpu);
+    cpu_mips_clock_init(cpu);
 
     godson_ipi_init(env->irq[6] , i, gipis);  // by zxh&dw
   }
