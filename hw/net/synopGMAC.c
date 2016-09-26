@@ -1917,7 +1917,7 @@ static void gmac_cleanup(NetClientState *nc)
 }
 
 static NetClientInfo net_gmac_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
+    .type = NET_CLIENT_DRIVER_NIC,
     .size = sizeof(NICState),
     .can_receive = gmac_can_receive,
     .receive = gmac_receive,
