@@ -289,8 +289,8 @@ static void mips_ls2f_ls1a_init (MachineState *args)
 		cc->do_unassigned_access = mips_ls2h_do_unassigned_access;
 
     /* Init CPU internal devices */
-    cpu_mips_irq_init_cpu(env);
-    cpu_mips_clock_init(env);
+    cpu_mips_irq_init_cpu(cpu);
+    cpu_mips_clock_init(cpu);
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
 		reset_info->vector = env->active_tc.PC;
