@@ -16,6 +16,7 @@
 #include "sysemu/sysemu.h"
 #include "exec/address-spaces.h"
 #include "qemu/range.h"
+#include "cpu.h"
 
 #define gdb_printf(...) //printf
 
