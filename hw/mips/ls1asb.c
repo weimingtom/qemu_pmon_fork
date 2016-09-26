@@ -13,6 +13,7 @@
 #include "hw/ssi/ssi.h"
 #include "hw/i2c/i2c.h"
 #include "exec/address-spaces.h"
+#include "cpu.h"
 
 #define PCI_VENDOR_ID_LS1A 0x104a
 #define PCI_DEVICE_ID_LS1A 0x0
