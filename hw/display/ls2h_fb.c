@@ -29,7 +29,6 @@
 #include "hw/loader.h"
 #include "hw/sysbus.h"             /* SysBusDevice */
 #include "sysemu/dma.h"
-#include "exec/cpu-all.h"
 #include "framebuffer.h"
 
 typedef struct {
