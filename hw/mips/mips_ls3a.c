@@ -45,6 +45,14 @@
 #include "hw/pci/pci_host.h"
 #include "loongson_bootparam.h"
 
+#ifdef DEBUG_LS3A
+#define DPRINTF(fmt, ...) \
+do { fprintf(stderr, "i82374: " fmt , ## __VA_ARGS__); } while (0)
+#else
+#define DPRINTF(fmt, ...) \
+do {} while (0)
+#endif
+
 #ifdef TARGET_WORDS_BIGENDIAN
 #define BIOS_FILENAME "mips_bios.bin"
 #else
@@ -87,7 +95,7 @@ typedef struct ResetData {
 } ResetData;
 
 
-#define BOOTPARAM_PHYADDR ((64 << 20))
+#define BOOTPARAM_PHYADDR 0x0ff00000
 #define BOOTPARAM_ADDR (0x80000000+BOOTPARAM_PHYADDR)
 // should set argc,argv
 //env->gpr[REG][env->current_tc]
@@ -333,6 +341,8 @@ static CPUMIPSState *mycpu[4];
 
 #define MYID 0xa0
 
+extern target_ulong mypc;
+
 typedef struct gipi_single {
     uint32_t status;
     uint32_t en;
@@ -357,6 +367,8 @@ static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 	int coreno = (addr>>8)&3;
 	int no = coreno+node*4;
     
+
+    if(size!=4) hw_error("size not 4");
 
 //    printf("gipi_writel addr=%llx val=%8x\n", addr, val);
     addr &= 0xff;
@@ -383,17 +395,21 @@ static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
         default:
             break;
        }
-    //printf("gipi_write: NODE#%d addr=0x%02x val=0x%02x, opaque=%p\n", node, addr, val, opaque);
+    DPRINTF("gipi_write: addr=0x%02x val=0x%02x cpu=%d pc=%x\n", addr, val, (int)cpu->cpu_index, (int)mypc);
 }
 
 static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 {
     gipiState * s = opaque;
+#ifdef DEBUG_LS3A
+    CPUState *cpu = current_cpu;
+#endif
     uint32_t ret=0;
     int node = (addr>>44)&3;
 	int coreno = (addr>>8)&3;
 	int no = coreno+node*4;
     addr &= 0xff;
+    if(size!=4) hw_error("size not 4 %d", size);
 
     switch(addr){
         case CORE0_STATUS_OFF: 
@@ -403,10 +419,10 @@ static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
             ret =  s->core[no].en;
             break;
         case CORE0_SET_OFF:
-            hw_error("CORE0_SET_OFF Can't be Read\n");
+            ret = 0;//hw_error("CORE0_SET_OFF Can't be Read\n");
             break;
         case CORE0_CLEAR_OFF:
-            hw_error("CORE0_CLEAR_OFF Can't be Read\n");
+            ret = 0;//hw_error("CORE0_CLEAR_OFF Can't be Read\n");
         case 0x20 ... 0x3c:
             ret = s->core[no].buf[(addr-0x20)/4];
             break;
@@ -416,6 +432,7 @@ static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 
     //if(ret!=0) printf("CPU#%d:gipi_read: NODE#%d addr=%p val=0x%02x pc=%x, opaque=%p\n",cpu->cpu_index, node, addr, ret, cpu->active_tc.PC, opaque);
     //if(ret!=0) printf("CPU#%d:gipi_read: addr=0x%02x val=0x%02x pc=%x\n",cpu->cpu_index, addr, ret, cpu->PC[0]);
+    DPRINTF("gipi_read: addr=0x%02x val=0x%02x cpu=%d pc=%x\n", addr, ret, (int)cpu->cpu_index, (int)mypc);
     return ret;
 }
 
@@ -780,6 +797,7 @@ type_init(bonito_register_types)
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_host.h"
 
+#undef DPRINTF
 //#define DEBUG_IRQ
 
 #ifdef DEBUG_IRQ
