@@ -132,6 +132,33 @@ const mips_def_t mips_defs[] =
         .mmu_type = MMU_TYPE_R4000,
     },
     {
+        /* A generic CPU providing MIPS64 Release 2 features.
+           FIXME: Eventually this should be replaced by a real CPU model. */
+        .name = "ls232e",
+        .CP0_PRid = 0x144230,
+        .CP0_Config0 = /*MIPS_CONFIG0 | (0x1 << CP0C0_AR) | (0x2 << CP0C0_AT) |
+                       (MMU_TYPE_R4000 << CP0C0_MT)*/ 0x80000480,
+        .CP0_Config1 = /*MIPS_CONFIG1 | (1 << CP0C1_FP) | (63 << CP0C1_MMU) |
+                       (2 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
+                       (2 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA) |
+                       (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP)*/0xbe2f1793,
+        .CP0_Config2 = /*MIPS_CONFIG2*/0x8000020f,
+        .CP0_Config3 = /*MIPS_CONFIG3 | (1 << CP0C3_LPA)*/0x20a0,
+        .SYNCI_Step = 32,
+        .CCRes = 2,
+        .CP0_Status_rw_bitmask = 0x76FBFFFF,
+        .CP1_fcr0 = (1 << FCR0_F64) | (1 << FCR0_3D) | (1 << FCR0_PS) |
+                    (1 << FCR0_L) | (1 << FCR0_W) | (1 << FCR0_D) |
+                    (1 << FCR0_S) | (0x00 << FCR0_PRID) | (0x0 << FCR0_REV),
+        .SEGBITS = 42,
+        /* The architectural limit is 59, but we have hardcoded 36 bit
+           in some places...
+        .PABITS = 59, */ /* the architectural limit */
+        .PABITS = 48,
+        .insn_flags = CPU_MIPS32R2 | ASE_MIPS3D | INSN_LOONGSON2F,
+        .mmu_type = MMU_TYPE_R4000,
+    },
+    {
         .name = "ASIP",
       //  .CP0_PRid = 0x00019300,
 	.CP0_PRid = 0x00004220,
