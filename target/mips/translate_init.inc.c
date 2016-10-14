@@ -194,7 +194,7 @@ const mips_def_t mips_defs[] =
         .SEGBITS = 32,
         .PABITS = 32,
         .insn_flags = CPU_MIPS32R2 | ASE_MIPS16,
-        .mmu_type = MMU_TYPE_R4000,
+        .mmu_type = MMU_TYPE_NONE,
     },
     {
         /* A generic CPU providing MIPS64 Release 2 features.
