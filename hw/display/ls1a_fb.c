@@ -218,7 +218,7 @@ addr=0x1c301240 + addr;
 	  switch(val&7)
 	  {
 		  case 4:
-			  s->depth = 24;
+			  s->depth = 32;
 			  break;
 		  case 3:
 			  s->depth = 16;
@@ -230,6 +230,7 @@ addr=0x1c301240 + addr;
 			  s->depth = 16;
 			  break;
 	  }
+	  s->bypp = (s->depth + 7) >> 3;
 	  s->need_update = 1;
 	ls1a_fb_size(s);
       }
