@@ -211,7 +211,7 @@ static void ls2h_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned si
 	  switch(val&7)
 	  {
 		  case 4:
-			  s->depth = 24;
+			  s->depth = 32;
 			  break;
 		  case 3:
 			  s->depth = 16;
@@ -223,6 +223,7 @@ static void ls2h_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned si
 			  s->depth = 16;
 			  break;
 	  }
+	  s->bypp = (s->depth + 7) >> 3;
 	  s->need_update = 1;
 	ls2h_fb_size(s);
       }
