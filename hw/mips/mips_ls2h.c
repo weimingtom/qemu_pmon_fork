@@ -228,6 +228,8 @@ static void mypc_callback_for_net( target_ulong pc, uint32_t opcode)
 #endif
 
 
+static MemoryRegion *ddrcfg_iomem;
+static int reg200;
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
@@ -235,7 +237,22 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case 0x1fd00200:
+			reg200 = val;
+			memory_region_transaction_begin();
+			if(ddrcfg_iomem->container == get_system_memory())
+				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
+
+			if((val&0x2000) == 0)
+			{
+				memory_region_add_subregion_overlap(get_system_memory(), 0x0ff00000, ddrcfg_iomem, 1);
+			}
+
+			memory_region_transaction_commit();
+			break;
 		case 0x1fd00210:
+		break;
+		case 0x1fd00220:
 		break;
 		case 0x1fd00800 ... 0x1fd0082c:
 		*(int *)((char *)&mynet + (addr-0x1fd00800)) = val;
@@ -283,13 +300,21 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case 0x1fd00200:
+		return reg200;
 		case 0x1fd00210:
-		return 0x1800;
+		return 0x049bbf00;
+		case 0x1fd00220:
+		return 0x08521120;
 		case 0x1fd00800 ... 0x1fd0082c:
 		return *(int *)((char *)&mynet + (addr-0x1fd00800));
 		case 0x1fd00830:
 		return 0;
 		break;
+		case 0x0ff00960:
+		return 0x100;
+		case 0x0ff00010:
+		return 1;
 	}
 	return 0;
 }
@@ -861,6 +886,20 @@ static void mips_ls2h_init(MachineState *machine)
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00800, "0x1fd00800", 0x34);
                 memory_region_add_subregion(address_space_mem, 0x1fd00800, iomem);
+	}
+
+
+	{
+                ddrcfg_iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(ddrcfg_iomem, NULL, &mips_qemu_ops, (void *)0x0ff00000, "ddr", 0x100000);
+	}
+
+	{
+
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00200, "0x1fd00200", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fd00200, iomem);
+		mips_qemu_writel((void *)0x1fd00200, 0, 0x2000, 4);
 	}
 
 
