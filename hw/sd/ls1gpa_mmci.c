@@ -22,7 +22,7 @@
 
 # define REG_FMT		"0x" TARGET_FMT_plx
 typedef struct LS1GPA_MMCIState LS1GPA_MMCIState;
-LS1GPA_MMCIState *ls1gpa_mmci_init(MemoryRegion *sysmem,
+void *ls1gpa_mmci_init(MemoryRegion *sysmem,
                 hwaddr base,
                 BlockBackend *blk, qemu_irq irq);
 
@@ -268,14 +268,13 @@ static void ls1gpa_mmci_data_transfer(LS1GPA_MMCIState *s);
 static void ls1gpa_mmci_update_irq(LS1GPA_MMCIState *s)
 {
 	/* edge interrupt */
-	if(s->dma_int_status & 1)
+	if(s->sdioregs.sdiintmsk)
 	{
 		qemu_irq_raise(s->irq);
-		qemu_irq_lower(s->irq);
 	}
+	else
+		qemu_irq_lower(s->irq);
 	
-	
-	s->dma_int_status = 0;
 }
 
 static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
@@ -290,6 +289,7 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
     request.arg = s->sdioregs.sdicmdarg;
     DPRINT_L1("sending CMD%u ARG[0x%08x]\n", request.cmd, request.arg);
     rlen = sdbus_do_command(&s->sdbus, &request, response);
+    printf("sdicmdcon 0x%x len 0x%x\n", s->sdioregs.sdicmdcon, rlen);
 
     if (s->sdioregs.sdicmdcon  & SDICMDCON_WAITRSP ) {
         if (rlen == 4) {
@@ -317,6 +317,9 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
             s->sdioregs.sdiintmsk |= SDIIMSK_CMDTIMEOUT;
         }
 
+    }
+    else {
+        s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
     }
 
 
@@ -536,7 +539,6 @@ static void ls1gpa_mmci_data_transfer(LS1GPA_MMCIState *s)
 static uint64_t ls1gpa_mmci_read(void *opaque, hwaddr offset, unsigned size)
 {
     LS1GPA_MMCIState *s = (LS1GPA_MMCIState *) opaque;
-    uint32_t ret;
 
     switch (offset) {
        case SDIINTMSK:
@@ -556,6 +558,7 @@ static void ls1gpa_mmci_write(void *opaque,
     switch (offset) {
     case SDIINTMSK:
 	s->sdioregs.sdiintmsk &= ~value;
+        ls1gpa_mmci_update_irq(s);
 	break;
     case SDICMDCON:
 	s->regdata[offset/4] = value;
@@ -572,7 +575,7 @@ static const MemoryRegionOps ls1gpa_mmci_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-LS1GPA_MMCIState *ls1gpa_mmci_init(MemoryRegion *sysmem,
+void *ls1gpa_mmci_init(MemoryRegion *sysmem,
                 hwaddr base,
                 BlockBackend *blk, qemu_irq irq)
 {
@@ -585,7 +588,7 @@ LS1GPA_MMCIState *ls1gpa_mmci_init(MemoryRegion *sysmem,
     s = LS1GPA_MMCI(dev);
     sbd = SYS_BUS_DEVICE(dev);
     sysbus_connect_irq(sbd, 0, irq);
-    memory_region_add_subregion(system, base, sbd->mmio[0].memory);
+    memory_region_add_subregion(sysmem, base, sbd->mmio[0].memory);
 
     /* Create and plug in the sd card */
     carddev = qdev_create(qdev_get_child_bus(dev, "sd-bus"), TYPE_SD_CARD);
@@ -631,7 +634,7 @@ void ls1gpa_mmci_handlers(LS1GPA_MMCIState *s, qemu_irq readonly,
 
 static void ls1gpa_mmci_reset(DeviceState *d)
 {
-    LS1GPA_MMCIState *s = LS1GPA_MMCI(d);
+ //   LS1GPA_MMCIState *s = LS1GPA_MMCI(d);
 
 }
 
@@ -639,7 +642,7 @@ static void ls1gpa_mmci_instance_init(Object *obj)
 {
     LS1GPA_MMCIState *s = LS1GPA_MMCI(obj);
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
-    DeviceState *dev = DEVICE(obj);
+//    DeviceState *dev = DEVICE(obj);
 
     ls1gp_sdio = s;
 
