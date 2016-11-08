@@ -19,6 +19,7 @@
 #include "hw/qdev-properties.h"
 #include "qemu/error-report.h"
 #include <sysemu/dma.h>
+#include "cpu.h"
 
 # define REG_FMT		"0x" TARGET_FMT_plx
 typedef struct LS1GPA_MMCIState LS1GPA_MMCIState;
@@ -277,6 +278,7 @@ static void ls1gpa_mmci_update_irq(LS1GPA_MMCIState *s)
 	
 }
 
+extern target_ulong mypc;
 static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
 {
     SDRequest request;
@@ -287,7 +289,8 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
     s->sdioregs.sdiintmsk = 0;
     request.cmd = s->sdioregs.sdicmdcon & SDICMDCON_INDEX;
     request.arg = s->sdioregs.sdicmdarg;
-    DPRINT_L1("sending CMD%u ARG[0x%08x]\n", request.cmd, request.arg);
+    request.crc = 0;	/* FIXME */
+    DPRINT_L1("sending CMD%u ARG[0x%08x] pc=0x%lx\n", request.cmd, request.arg, (long)mypc);
     rlen = sdbus_do_command(&s->sdbus, &request, response);
     printf("sdicmdcon 0x%x len 0x%x\n", s->sdioregs.sdicmdcon, rlen);
 
@@ -297,6 +300,8 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
                            (response[2] << 8)  |  response[3];
              s->sdioregs.sdirsp1 = s->sdioregs.sdirsp2 = s->sdioregs.sdirsp3 = 0;
             DPRINT_L1("Response: RSPREG[31..0]=0x%08x\n", s->sdioregs.sdirsp0);
+	    s->sdioregs.sdicmdsta |= SDICMDSTAT_RSPFIN;
+	    s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
         } else if (rlen == 16) {
             s->sdioregs.sdirsp0 = (response[11] << 24) | (response[12] << 16) |
                            (response[13] << 8) |  response[14];
@@ -309,8 +314,8 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
             DPRINT_L1("Response received:\n RSPREG[127..96]=0x%08x, RSPREG[95.."
                   "64]=0x%08x,\n RSPREG[63..32]=0x%08x, RSPREG[31..0]=0x%08x\n",
                   s->sdioregs.sdirsp3, s->sdioregs.sdirsp2, s->sdioregs.sdirsp1, s->sdioregs.sdirsp0);
-	s->sdioregs.sdicmdsta |= SDICMDSTAT_RSPFIN;
-        s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
+	    s->sdioregs.sdicmdsta |= SDICMDSTAT_RSPFIN;
+	    s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
         } else {
             ERRPRINT("Timeout waiting for command response\n");
 	    s->sdioregs.sdicmdsta |= SDICMDSTAT_CMDTIMEOUT;
@@ -562,6 +567,7 @@ static void ls1gpa_mmci_write(void *opaque,
 	break;
     case SDICMDCON:
 	s->regdata[offset/4] = value;
+	if(value&SDICMDCON_CMDSTART)
 	ls1gpa_mmci_send_command(s);
 	break;
     default:
