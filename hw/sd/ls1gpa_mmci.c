@@ -206,7 +206,7 @@ DMA_INT = 2,
 DMA_SINGLE_TRANS_OVER = 4,
 DMA_TRANS_OVER = 8,
 DMA_ORDER_EN = 1,
-DMA_READ_DDR = 0x1,
+DMA_READ_DDR = 0x1<<12,
 };
 
 struct LS1GPA_MMCIState {
@@ -287,6 +287,9 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
 
     s->sdioregs.sdicmdsta = 0;
     s->sdioregs.sdiintmsk = 0;
+    if(s->iolen) printf("bug iolen is %d\n", s->iolen);
+    s->iolen = 0;
+    s->ioaddr = s->fifo_buffer;
     request.cmd = s->sdioregs.sdicmdcon & SDICMDCON_INDEX;
     request.arg = s->sdioregs.sdicmdarg;
     request.crc = 0;	/* FIXME */
@@ -303,17 +306,17 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
 	    s->sdioregs.sdicmdsta |= SDICMDSTAT_RSPFIN;
 	    s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
         } else if (rlen == 16) {
-            s->sdioregs.sdirsp0 = (response[11] << 24) | (response[12] << 16) |
+            s->sdioregs.sdirsp3 = (response[11] << 24) | (response[12] << 16) |
                            (response[13] << 8) |  response[14];
-            s->sdioregs.sdirsp1 = (response[7] << 24) | (response[8] << 16) |
+            s->sdioregs.sdirsp2 = (response[7] << 24) | (response[8] << 16) |
                            (response[9] << 8)  |  response[10];
-            s->sdioregs.sdirsp2 = (response[3] << 24) | (response[4] << 16) |
+            s->sdioregs.sdirsp1 = (response[3] << 24) | (response[4] << 16) |
                            (response[5] << 8)  |  response[6];
-            s->sdioregs.sdirsp3 = (response[0] << 16) | (response[1] << 8) |
+            s->sdioregs.sdirsp0 = (response[0] << 16) | (response[1] << 8) |
                             response[2];
             DPRINT_L1("Response received:\n RSPREG[127..96]=0x%08x, RSPREG[95.."
                   "64]=0x%08x,\n RSPREG[63..32]=0x%08x, RSPREG[31..0]=0x%08x\n",
-                  s->sdioregs.sdirsp3, s->sdioregs.sdirsp2, s->sdioregs.sdirsp1, s->sdioregs.sdirsp0);
+                  s->sdioregs.sdirsp0, s->sdioregs.sdirsp1, s->sdioregs.sdirsp2, s->sdioregs.sdirsp3);
 	    s->sdioregs.sdicmdsta |= SDICMDSTAT_RSPFIN;
 	    s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
         } else {
@@ -327,15 +330,14 @@ static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
         s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
     }
 
-
-    s->sdioregs.sdicmdsta |= SDICMDSTAT_CMDSENT;
-
     if (s->sdioregs.sdibsize && (s->sdioregs.sdidatcon & SDIDCON_BLKNUM )) {
         s->blknum = s->sdioregs.sdidatcon & SDIDCON_BLKNUM;
         s->blksize = s->sdioregs.sdibsize;
         ls1gpa_mmci_data_transfer(s);
     }
 
+    s->sdioregs.sdicmdsta |= SDICMDSTAT_CMDSENT;
+    s->sdioregs.sdicmdcon &= ~SDICMDCON_CMDSTART;
     ls1gpa_mmci_update_irq(s);
 }
 
@@ -360,10 +362,7 @@ void ls1gpa_sdio_set_dmaaddr(uint32_t val)
 		s->dma_desc.step_times--;
 		s->dma_desc.active = 1;
 		s->dma_desc.nextaddr = 0;
-		if(s->dma_desc.cmd & DMA_READ_DDR)
-			dma_writesdio(s);
-		else
-			dma_readsdio(s);
+                ls1gpa_mmci_data_transfer(s);
 		}
 	}
 
@@ -426,6 +425,7 @@ static int dma_readsdio(LS1GPA_MMCIState *s)
                  s->fifo_buffer[i] = sdbus_read_data(&s->sdbus);
                  s->ioaddr = s->fifo_buffer;
 		 s->blknum--;
+                 s->iolen = s->blksize;
 		}
 
 		if(!s->dma_desc.left && !dma_next(s))
@@ -442,10 +442,11 @@ static int dma_readsdio(LS1GPA_MMCIState *s)
 		s->dma_desc.saddr += copied;
 		s->dma_desc.left -= copied;
 
+		if(!s->dma_desc.left)
+		 dma_next(s);
 
 		if(!s->blknum && !s->iolen)
 		{
-			s->sdioregs.sdicmdcon &= ~SDICMDCON_CMDSTART;
         		ls1gpa_mmci_end_transfer(s);
 			break;
 		}
@@ -493,7 +494,6 @@ static int dma_writesdio(LS1GPA_MMCIState *s)
 
 		if(!s->blknum && !s->iolen)
 		{
-			s->sdioregs.sdicmdcon &= ~SDICMDCON_CMDSTART;
         		ls1gpa_mmci_end_transfer(s);
 			break;
 		}
@@ -528,7 +528,7 @@ static void ls1gpa_mmci_data_transfer(LS1GPA_MMCIState *s)
 {
 
 	if (s->sdioregs.sdidatcon  & MISC_CTRL_SDIO_DMAEN) {
-	if(s->dma_desc.active && (s->blknum || s->iolen)  && (s->sdioregs.sdicmdcon & SDICMDCON_CMDSTART))
+	if(s->dma_desc.active && (s->blknum || s->iolen) && s->blksize  && (s->sdioregs.sdicmdcon & SDICMDCON_CMDSTART))
         {
 		if (s->dma_desc.cmd & DMA_READ_DDR) {
 			dma_writesdio(s);
@@ -592,6 +592,8 @@ void *ls1gpa_mmci_init(MemoryRegion *sysmem,
 
     dev = qdev_create(NULL, TYPE_LS1GPA_MMCI);
     s = LS1GPA_MMCI(dev);
+    if(!s->as) s->as = &address_space_memory;
+    s->ioaddr = s->fifo_buffer;
     sbd = SYS_BUS_DEVICE(dev);
     sysbus_connect_irq(sbd, 0, irq);
     memory_region_add_subregion(sysmem, base, sbd->mmio[0].memory);
