@@ -640,9 +640,59 @@ void ls1gpa_mmci_handlers(LS1GPA_MMCIState *s, qemu_irq readonly,
     ls1gpa_mmci_set_readonly(dev, sdbus_get_readonly(&s->sdbus));
 }
 
+typedef struct initcmd {
+uint8_t cmd;
+uint32_t arg;
+} initcmd_t;
+
 static void ls1gpa_mmci_reset(DeviceState *d)
 {
- //   LS1GPA_MMCIState *s = LS1GPA_MMCI(d);
+	if(getenv("SDBOOT"))
+	{
+		LS1GPA_MMCIState *s = LS1GPA_MMCI(d);
+		SDRequest request;
+		uint8_t response[16];
+		int i;
+		uint32_t rca = 0;
+		initcmd_t initcmd[] = {
+			{0,0},
+			{8,0x1aa},
+			{55, 0},
+			{41, 0x40ff8000},
+			{2, 0},
+			{3, 0},
+			{7, 0},
+			{55, 0},
+			{6, 2}
+		};
+
+		for(i=0;i<sizeof(initcmd)/sizeof(initcmd[0]);i++)
+		{
+			request.cmd = initcmd[i].cmd;
+			request.crc = 0;	/* FIXME */
+
+			switch(initcmd[i].cmd)
+			{
+				case 7:
+				case 55:
+					request.arg = rca;
+					break;
+				default:
+					request.arg = initcmd[i].arg;
+					break;
+			}
+
+
+			sdbus_do_command(&s->sdbus, &request, response);
+
+			switch(initcmd[i].cmd)
+			{
+				case 3:
+					rca = (response[0] << 24) | (response[1] << 16);
+					break;
+			}
+		}
+	}
 
 }
 
