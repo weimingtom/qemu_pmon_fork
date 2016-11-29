@@ -580,6 +580,8 @@ static void mips_ls2h_init(MachineState *machine)
 	PCIBus *pci_bus[4];
 	DriveInfo *flash_dinfo=NULL;
 	CPUClass *cc;
+	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
+	AddressSpace *as = g_new(AddressSpace, 1);
 
 
 	/* init CPUs */
@@ -616,16 +618,16 @@ static void mips_ls2h_init(MachineState *machine)
 	memory_region_add_subregion(address_space_mem, 0, ram1);
 	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
 
-/*fix me
- current ahci code use address_space_memory
-*/
-	{
-	int dma_size;
-	dma_size = ram_size > 0x10000000? 0x10000000: ram_size;
-	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram1, NULL, "dma mem", ram, 0, dma_size);
-	memory_region_add_subregion(address_space_mem, 0x40000000, ram1);
-	}
+
+        //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls2h axi", UINT32_MAX);
+        memory_region_init(iomem_root, NULL,  "ls2h axi", UINT32_MAX);
+        memory_region_init(iomem_root, NULL,  "ls2h axi", UINT32_MAX);
+	address_space_init(as,iomem_root, "ls2h axi memory");
+
+	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram2, NULL, "lowmem", ram, 0, ram_size);
+        memory_region_add_subregion(iomem_root, 0, ram2);
+
 
 	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
 	//memory_region_add_subregion(address_space_mem, 0x1fbf0000, iomem);
@@ -715,12 +717,22 @@ static void mips_ls2h_init(MachineState *machine)
 	pci_bus[3]=pcibus_ls2h_init(3, &ls2h_irq1[23],pci_ls2h_map_irq);
 
 
-	sysbus_create_simple("exynos4210-ehci-usb",0x1fe00000, ls2h_irq1[0]);
+	{
+		DeviceState *dev;
+		dev = qdev_create(NULL, "exynos4210-ehci-usb");
+		qdev_prop_set_ptr(dev, "as", as);
+		qdev_init_nofail(dev);
+		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe00000);
+		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[0]);
+	//sysbus_create_simple("exynos4210-ehci-usb",0x1fe00000, ls2h_irq1[0]);
+
+	}
 	{
 		DeviceState *dev;
 		dev = qdev_create(NULL, "sysbus-ohci");
 		qdev_prop_set_uint32(dev, "num-ports", 4);
 		qdev_prop_set_uint64(dev, "dma-offset", 0);
+		qdev_prop_set_ptr(dev, "as", as);
 		qdev_init_nofail(dev);
 		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe08000);
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[1]);
@@ -734,7 +746,7 @@ static void mips_ls2h_init(MachineState *machine)
 		DriveInfo *hd;
 		dev = qdev_create(NULL, "sysbus-ahci");
 		qdev_prop_set_uint32(dev, "num-ports", 1);
-		//qdev_prop_set_ptr(dev, "dma", &ls2h_dma.dma);
+		qdev_prop_set_ptr(dev, "as", as);
 		qdev_init_nofail(dev);
 		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe30000);
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[5]);
@@ -757,7 +769,7 @@ static void mips_ls2h_init(MachineState *machine)
 #endif
 
 	if (nb_nics) {
-#if 1
+#if 0
 	int i;
 	int devfn;
 		//gmac_sysbus_create(&nd_table[0], 0x1fe10000, ls2h_irq1[3]);
@@ -779,7 +791,17 @@ static void mips_ls2h_init(MachineState *machine)
 	  }
 #else
 		printf("pci_bus=%p\n", pci_bus);
-		gmac_sysbus_create(&nd_table[0], 0x1fe10000, ls2h_irq1[3]);
+		{
+			DeviceState *dev;
+
+			dev = qdev_create(NULL, "sysbus-synopgmac");
+			qdev_set_nic_properties(dev, &nd_table[0]);
+			qdev_prop_set_ptr(dev, "as", as);
+			qdev_prop_set_int32(dev, "enh_desc", 1);
+			qdev_init_nofail(dev);
+			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe10000);
+			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[3]);
+		}
 #endif
 	}
 
@@ -824,27 +846,9 @@ static void mips_ls2h_init(MachineState *machine)
 	}
 #endif
 
-	{
-		DeviceState *dev;
-		SysBusDevice *s;
-		dev = qdev_create(NULL, "ls1a_dma");
-		printf("ac97 dev=%p\n",dev);
-		qdev_init_nofail(dev);
-		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fd00100);
-	}
+		sysbus_create_simple("ls1a_dma",0x1fd00100, NULL);
+		sysbus_create_simple("ls1a_nand",0x1fee0000, ls2h_irq[13]);
 
-#if 1
-	{
-		DeviceState *dev;
-		SysBusDevice *s;
-		dev = qdev_create(NULL, "ls1a_nand");
-		qdev_init_nofail(dev);
-		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fee0000);
-		sysbus_connect_irq(s, 0, ls2h_irq[13]);
-	}
-#endif
 
 #if 1
 	{
