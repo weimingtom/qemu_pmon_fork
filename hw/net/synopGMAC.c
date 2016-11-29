@@ -39,6 +39,33 @@
 #define DESC_STATUS length
 #endif
 
+enum{
+TxDescChain_ENH = 0x00100000,
+TxDescChain_NENH = 0x01000000,
+DescTxIntEnable_ENH = 0x40000000,
+DescTxIntEnable_NENH = 0x80000000,
+TxDescEndOfRing_ENH = 0x00200000,
+TxDescEndOfRing_NENH = 0x02000000,
+RxDescChain_ENH = 0x00004000,
+RxDescChain_NENH = 0x01000000,
+RxDescEndOfRing_ENH = 0x00008000,
+RxDescEndOfRing_NENH = 0x02000000,
+DescTxLast_ENH = 0x20000000,
+DescTxLast_NENH= 0x40000000,
+DescTxFirst_ENH = 0x10000000,
+DescTxFirst_NENH = 0x20000000,
+};
+
+#define desc_status(s,desc) (s->enh_desc?desc.status:desc.length)
+#define status_TxDescChain(s) (s->enh_desc?TxDescChain_ENH:TxDescChain_NENH)
+#define status_DescTxIntEnable(s) (s->enh_desc?DescTxIntEnable_ENH:DescTxIntEnable_NENH)
+#define status_TxDescEndOfRing(s) (s->enh_desc?TxDescEndOfRing_ENH:TxDescEndOfRing_NENH)
+#define length_RxDescChain(s) (s->enh_desc?RxDescChain_ENH:RxDescChain_NENH)
+#define length_RxDescEndOfRing(s) (s->enh_desc?RxDescEndOfRing_ENH:RxDescEndOfRing_NENH)
+#define status_TxFirst(s) (s->enh_desc?DescTxFirst_ENH:DescTxFirst_NENH)
+#define status_TxLast(s) (s->enh_desc?DescTxLast_ENH:DescTxLast_NENH)
+
+
 #define DPRINTF(a...) //fprintf(stderr,a)
 #define min(a,b) (((a)<(b))?(a):(b))
 
@@ -105,8 +132,6 @@ typedef struct DmaDescStruct
   uint32_t   reserved1;      /* Reserved word                                                                */
   uint32_t   timestamplow;   /* Lower 32 bits of the 64 bit timestamp value                                  */
   uint32_t   timestamphigh;  /* Higher 32 bits of the 64 bit timestamp value                                  */
-  uint32_t   data1;          /* This holds virtual address of buffer1, not used by DMA  			*/
-  uint32_t   data2;          /* This holds virtual address of buffer2, not used by DMA  			*/
 } DmaDesc;
 #else
 typedef struct DmaDescStruct    
@@ -116,9 +141,6 @@ typedef struct DmaDescStruct
   uint32_t   buffer1;        /* Network Buffer 1 pointer (Dma-able) 							*/
   uint32_t   buffer2;        /* Network Buffer 2 pointer or next descriptor pointer (Dma-able)in chain structure 	*/
   			/* This data below is used only by driver					*/
-  uint32_t   data1;          /* This holds virtual address of buffer1, not used by DMA  			*/
-  uint32_t   data2;          /* This holds virtual address of buffer2, not used by DMA  			*/
-  uint32_t  dummy[2]; /*for data alignment*/
 } DmaDesc;
 #endif
 
@@ -1560,6 +1582,7 @@ union{
 qemu_irq irq;
 int receive_stop;
 int buswidth;
+int enh_desc;
 } GMACState;
 
 typedef struct gmac_pci_state {
@@ -1635,17 +1658,25 @@ static uint64_t gmac_mem_readl(void *ptr, hwaddr addr, unsigned size)
 static void gmac_transmit_demand(GMACState *s)
 {
 DmaDesc desc;
-uint8_t txbuffer[0x2000];
-uint32_t size;
-int pos;
+uint8_t txbuffer[0x4000];
+uint32_t size = 0;
+int pos = 0;
+int unfinished = 0;
    if(!s->dma.DmaTxCurrDesc) s->dma.DmaTxCurrDesc=s->dma.DmaTxBaseAddr;
    do
    {
 	dma_memory_read(s->as,s->dma.DmaTxCurrDesc,&desc,sizeof(desc));
 	if(desc.status&DescOwnByDma)
 	{
-	 pos=0;
-	 size=0;
+             //printf("desc.length=0x%08x\n", desc.length);
+
+		if(desc_status(s,desc) & status_TxFirst(s))
+		{
+			pos=0;
+			size=0;
+                        unfinished = 1;
+		}
+
 	  if(desc.length&0x7ff)
 	  {
 		  dma_memory_read(s->as,desc.buffer1,txbuffer+pos,desc.length&0x7ff);
@@ -1653,31 +1684,35 @@ int pos;
 		  size += desc.length & 0x7ff;
 	  }
 
-	  if(!(desc.DESC_STATUS & TxDescChain) && ((desc.length>>11)&0x7ff))
+	  if(!(desc_status(s,desc) & status_TxDescChain(s)) && ((desc.length>>11)&0x7ff))
 	  {
 		  dma_memory_read(s->as,desc.buffer2,txbuffer+pos,(desc.length>>11)&0x7ff);
 		  pos += (desc.length>>11) & 0x7ff;
 		  size += (desc.length>>11) & 0x7ff;
 	  }
 
-	qemu_send_packet(qemu_get_queue(s->nic),txbuffer,size);
-	
+	  if(desc_status(s,desc) & status_TxLast(s))
+	  {
+		  qemu_send_packet(qemu_get_queue(s->nic),txbuffer,size);
 
-	if(desc.DESC_STATUS&DescTxIntEnable)
-	s->dma.DmaStatus |= DmaIntTxCompleted|DmaIntNormal;
+		  if(desc_status(s,desc) & status_DescTxIntEnable(s))
+			  s->dma.DmaStatus |= DmaIntTxCompleted|DmaIntNormal;
 
-	gmac_check_irq(s);
+		  gmac_check_irq(s);
+		  unfinished = 0;
+		 //printf("transmit size %d\n", size);
+	  }
 
 	desc.status &= ~DescOwnByDma;
 
 	dma_memory_write(s->as,s->dma.DmaTxCurrDesc,&desc,sizeof(desc));
 
 
-	if(desc.DESC_STATUS & TxDescChain)
+	if(desc_status(s,desc) & status_TxDescChain(s))
 	{
 	s->dma.DmaTxCurrDesc=desc.buffer2;
 	}
-	else if(desc.DESC_STATUS & TxDescEndOfRing)
+	else if(desc_status(s,desc) & status_TxDescEndOfRing(s))
 	{
 	s->dma.DmaTxCurrDesc=s->dma.DmaTxBaseAddr;
 	}
@@ -1687,14 +1722,13 @@ int pos;
 	}
 
 	}
-
 	else
 	{
-	 s->dma.DmaStatus |= DmaIntTxNoBuffer; 
-	gmac_check_irq(s);
-	break;
+	 //s->dma.DmaStatus |= DmaIntTxNoBuffer; 
+	//gmac_check_irq(s);
+	  if(!unfinished) break;
 	}
- }while(0);
+ }while(1);
 
 }
 
@@ -1730,11 +1764,11 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		switch(reg)
 		{
 			case PHY_ID_HI_REG:
-			   s->mac.GmacGmiiData = (phy==1)?0x12:0;
+			   s->mac.GmacGmiiData = (phy==1)?0x12:0xffff;
 			   break;
 
 			case PHY_ID_LOW_REG:
-			   s->mac.GmacGmiiData = (phy==1)?0x12:0;
+			   s->mac.GmacGmiiData = (phy==1)?0x12:0xffff;
 			   break;
 
 			case PHY_SPECIFIC_STATUS_REG:
@@ -1780,6 +1814,14 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		{
 		case 0x1000:
 		s->dma.DmaBusMode = val&~1;
+		if(val &1)
+		{
+			s->dma.DmaRxCurrDesc = s->dma.DmaRxBaseAddr = 0;
+			s->dma.DmaTxCurrDesc = s->dma.DmaTxBaseAddr = 0;
+			s->dma.DmaControl = 0;
+			s->dma.DmaStatus = 0;
+			s->dma.DmaInterrupt = 0;
+		}
 		   break;
 		case 0x1000+DmaTxPollDemand:
 		gmac_transmit_demand(s);//s->dma.DmaTxCurrDesc
@@ -1796,10 +1838,14 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		gmac_check_irq(s);
 		break;
 		case 0x1000+DmaRxBaseAddr:
-		s->dma.DmaRxCurrDesc = s->dma.DmaRxBaseAddr = val;
+		s->dma.DmaRxBaseAddr = val;
 		break;
 		case 0x1000+DmaTxBaseAddr:
-		s->dma.DmaTxCurrDesc = s->dma.DmaTxBaseAddr = val;
+		s->dma.DmaTxBaseAddr = val;
+		break;
+		case 0x1000+DmaControl:
+		s->dma.DmaControl = val;
+		break;
 		default:
 		p=(void *)&s->dma;
 		p[(addr-0x1000)>>2]=val;
@@ -1827,18 +1873,24 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	DmaDesc desc;
 	int pos;
 	int once;
+	int first;
+	int last;
 
 	size=size_;
+	pos = 0;
+	first = DescRxFirst;
+	last = 0;
 
 	 if((s->dma.DmaControl & DmaRxStart) == 0 || s->receive_stop == 1) return size_; /*dma not start,ignore*/
 
-{
+   do
+   {
 	if(!s->dma.DmaRxCurrDesc) s->dma.DmaRxCurrDesc=s->dma.DmaRxBaseAddr;
 
 	dma_memory_read(s->as,s->dma.DmaRxCurrDesc,&desc,sizeof(desc));
 	if(desc.status&DescOwnByDma)
 	{
-	 pos=0;
+	  //printf("desc.length=0x%x\n", desc.length);
 	  if(desc.length&0x7ff)
 	  {
 		  once=min(desc.length&0x7ff,size);
@@ -1847,7 +1899,7 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 		  size -= once;
 	  }
 
-	  if(!(desc.length & RxDescChain) && size && ((desc.length>>11)&0x7ff))
+	  if(!(desc.length & length_RxDescChain(s)) && size && ((desc.length>>11)&0x7ff))
 	  {
 		  once=min((desc.length>>11)&0x7ff,size);
 		  dma_memory_write(s->as,desc.buffer2,buf+pos,once);
@@ -1856,25 +1908,22 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	  }
 
 
+	last = size?0:DescRxLast;
 
-	if((desc.length&RxDisIntCompl)==0)
-	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
-
-	gmac_check_irq(s);
-
-	desc.status &= ~(0x3fff<<16);
-	desc.status |= ((size_-size+4)&0x3fff)<<16;
-	desc.status |=(DescRxFirst|DescRxLast);
 	desc.status &= ~DescOwnByDma;
+	desc.status &= ~(0x3fff<<16);
+	desc.status |= ((size_-size+(last?4:0))&0x3fff)<<16;
+	desc.status |=(first|last);
+	first = 0;
 
 	dma_memory_write(s->as,s->dma.DmaRxCurrDesc,&desc,sizeof(desc));
 
 
-	if(desc.length & RxDescChain)
+	if(desc.length & length_RxDescChain(s))
 	{
 	s->dma.DmaRxCurrDesc=desc.buffer2;
 	}
-	else if(desc.length & RxDescEndOfRing)
+	else if(desc.length & length_RxDescEndOfRing(s))
 	{
 	s->dma.DmaRxCurrDesc=s->dma.DmaRxBaseAddr;
 	}
@@ -1883,15 +1932,26 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	s->dma.DmaRxCurrDesc += 16 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
 	}
 
+	if(last)
+	{
+	if((desc.length&RxDisIntCompl)==0)
+	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
+
+	gmac_check_irq(s);
+	break;
+	}
+	//printf("size: %d\n", size);
+
 	}
 	else
 	{
 	 //s->receive_stop = 1;
 	 s->dma.DmaStatus |= DmaIntRxNoBuffer; 
 	gmac_check_irq(s);
+	break;
 	}
 
-}
+ }while(size);
 
 
     return size_;
@@ -2042,6 +2102,7 @@ static Property gmac_sysbus_properties[] = {
     DEFINE_NIC_PROPERTIES(gmac_sysbus_state, gmac.conf),
     DEFINE_PROP_PTR("as", gmac_sysbus_state, gmac.as_ptr),
     DEFINE_PROP_INT32("buswidth", gmac_sysbus_state, gmac.buswidth, 128),
+    DEFINE_PROP_INT32("enh_desc", gmac_sysbus_state, gmac.enh_desc, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
