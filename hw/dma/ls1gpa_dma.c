@@ -25,7 +25,7 @@
 #include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/sysbus.h"
-#define DPRINTF(a...) //printf(a)
+#define DPRINTF(a...) printf(a)
 
 typedef struct dma_fifo_regs{
 int source;
@@ -64,8 +64,15 @@ void ls1b_nand_set_dmaaddr(uint32_t val);
 
 static uint64_t dma_dma_readl(void *ptr, hwaddr addr, unsigned size)
 {
-	uint32_t val = 0;
-	DPRINTF("dma_dma_readl:  (addr 0x%08X), val 0x%08X\n", (unsigned) addr, val);
+	uint64_t val;
+	int ch, offs;
+	dma_fifo_regs_t *udma;
+	dma_sysbus_state *d = ptr;
+	ch = addr/32;
+	offs = addr & 0x1f;
+	udma = &d->udma[ch];
+        val = *(int *)((void *)udma+offs);
+	DPRINTF("dma_dma_readl:  (addr 0x%08X), val 0x%08X\n", (unsigned) addr, (unsigned)val);
 	return val;
 }
 
@@ -94,7 +101,7 @@ udma = &d->udma[ch];
 		  break;
 		case 0x10:
 		  udma->command =((udma->command & ~val & (RDMA_DONE|WDMA_DONE))) | (val & ~(RDMA_DONE|WDMA_DONE));
-		  if(val & RDMA_START)
+		  if(val & DMA_START)
 		  {
 			  char *buf;
 			  int i;
@@ -116,7 +123,7 @@ udma = &d->udma[ch];
 		break;
 	}
 
-	DPRINTF("dma_dma_writel:  (addr 0x%08X), val 0x%08X\n", (unsigned) addr, val);
+	DPRINTF("dma_dma_writel:  (addr 0x%08X), val 0x%08X\n", (unsigned) addr, (unsigned)val);
 }
 
 static const MemoryRegionOps dma_ops = {
@@ -133,7 +140,7 @@ static const MemoryRegionOps dma_ops = {
 static int dma_sysbus_init(SysBusDevice *dev)
 {
     dma_sysbus_state *d = SYS_BUS_LS1BDMA(dev);
-    memory_region_init_io(&d->dma, NULL, &dma_ops, (void *)d, "dma", 0x4);
+    memory_region_init_io(&d->dma, NULL, &dma_ops, (void *)d, "dma", 0x80);
 
     sysbus_init_mmio(dev, &d->dma);
     sysbus_init_irq(dev, &d->irq);
