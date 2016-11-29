@@ -56,7 +56,10 @@ typedef struct {
     USBBus bus;
     qemu_irq irq;
     MemoryRegion mem;
+    union{
     AddressSpace *as;
+    void *as_ptr;
+    };
     int num_ports;
     const char *name;
 
@@ -2157,6 +2160,7 @@ static Property ohci_sysbus_properties[] = {
     DEFINE_PROP_UINT32("num-ports", OHCISysBusState, num_ports, 3),
     DEFINE_PROP_UINT32("firstport", OHCISysBusState, firstport, 0),
     DEFINE_PROP_DMAADDR("dma-offset", OHCISysBusState, dma_offset, 0),
+    DEFINE_PROP_PTR("as", OHCISysBusState, ohci.as_ptr),
     DEFINE_PROP_END_OF_LIST(),
 };
 

@@ -87,24 +87,32 @@ static void pin0_set_irq(void *opaque, int irq, int level)
 	 d->pin0_irqstat &= ~mask;
 
 	if(d->pin0_irqstat)
-	  qemu_irq_raise(d->card.irq[0]);
+		pci_set_irq(&d->card, 1);
 	else
-	  qemu_irq_lower(d->card.irq[0]);
+		pci_set_irq(&d->card, 0);
 }
 
 static void pin1_set_irq(void *opaque, int irq, int level)
 {
 	struct LS1APciState *d = opaque;
 	uint32_t mask = 1 << irq;
+	int pin;
+
 	if(level)
 	 d->pin1_irqstat |= mask;
 	else
 	 d->pin1_irqstat &= ~mask;
 
+
+	pin = pci_get_byte(d->card.config + PCI_INTERRUPT_PIN);
+	pci_set_byte(d->card.config + PCI_INTERRUPT_PIN, 2);
+
 	if(d->pin1_irqstat)
-	  qemu_irq_raise(d->card.irq[1]);
+		pci_set_irq(&d->card, 1);
 	else
-	  qemu_irq_lower(d->card.irq[1]);
+		pci_set_irq(&d->card, 0);
+
+	pci_set_byte(d->card.config + PCI_INTERRUPT_PIN, pin);
 }
 
 #include "ls1a_int.c"
@@ -238,10 +246,10 @@ static IOMMUTLBEntry ls1a_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr add
 	}
 
 	ret = (IOMMUTLBEntry) {
-		.target_as = &as,
-			.translated_addr = addr,
-			.addr_mask = -1ULL,
-			.perm = IOMMU_RW,
+		.target_as = as,
+		.translated_addr = taddr,
+		.addr_mask = -1ULL,
+		.perm = IOMMU_RW,
 	};
 
 
@@ -249,7 +257,7 @@ static IOMMUTLBEntry ls1a_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr add
 }
 
 static const MemoryRegionIOMMUOps ls1a_pcidma_iommu_ops = {
-    .translate = ls1a_pciedma_translate_iommu,
+    .translate = ls1a_pcidma_translate_iommu,
 };
 
 
@@ -272,24 +280,23 @@ static int ls1a_initfn(PCIDevice *dev)
     d->card.config[PCI_INTERRUPT_PIN]   = 1;     /* interrupt pin 0 */
 
 
-    memory_region_init(&d->iomem_dc, "ls1a_dc", 0x200000);
-    memory_region_init(&d->iomem_axi, "ls1a_axi", 0x1000000);
-    memory_region_init(&d->iomem_ddr, "ls1a_ddr", 0x40000000);
+    memory_region_init(&d->iomem_dc, NULL, "ls1a_dc", 0x200000);
+    memory_region_init(&d->iomem_axi, NULL, "ls1a_axi", 0x1000000);
+    memory_region_init(&d->iomem_ddr, NULL, "ls1a_ddr", 0x40000000);
     {
 	    MemoryRegion *ram = g_new(MemoryRegion, 1);
-	    memory_region_init_ram(ram, "mips_r4k.ram", 0x10000000);
+	    memory_region_init_ram(ram, NULL, "mips_r4k.ram", 0x10000000);
 	    vmstate_register_ram_global(ram);
 	    memory_region_add_subregion(&d->iomem_ddr, 0, ram);
     }
 
-    memory_region_init_alias(&d->iomem_dc0, "ls1a_dc0", &d->iomem_dc, 0, 0x00200000);
-    memory_region_init_alias(&d->iomem_axi0, "ls1a_axi0", &d->iomem_axi, 0, 0x00e80000);
-    memory_region_init_alias(&d->iomem_ddr0, "ls1a_ddr0", &d->iomem_ddr, 0, 0x10000000);
+    memory_region_init_alias(&d->iomem_dc0, NULL, "ls1a_dc0", &d->iomem_dc, 0, 0x00200000);
+    memory_region_init_alias(&d->iomem_axi0, NULL, "ls1a_axi0", &d->iomem_axi, 0, 0x00e80000);
+    memory_region_init_alias(&d->iomem_ddr0, NULL, "ls1a_ddr0", &d->iomem_ddr, 0, 0x10000000);
 
 
-    memory_region_init(&d->iomem_root, "system", INT32_MAX);
-    address_space_init(&d->as, &d->iomem_root);
-    address_space_memory.name = "ls1a memory";
+    memory_region_init(&d->iomem_root, NULL, "system", INT32_MAX);
+    address_space_init(&d->as, &d->iomem_root, "ls1a memory");
 
     memory_region_init_iommu(&d->iomem_root, OBJECT(d), &ls1a_pcidma_iommu_ops, "iommu-ls1apci", UINT32_MAX);
 
@@ -341,7 +348,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		SysBusDevice *sysbusdev;
 		hwaddr devaddr =  0x00e00000;
 		dev = qdev_create(NULL, "exynos4210-ehci-usb");
-		qdev_prop_set_ptr(dev, "dma", &d->iomem_root);
+		qdev_prop_set_ptr(dev, "as", &d->as);
 		qdev_init_nofail(dev);
 
 		sysbusdev =  SYS_BUS_DEVICE(dev);
@@ -356,9 +363,9 @@ static int ls1a_initfn(PCIDevice *dev)
 		hwaddr devaddr =  0x00e08000;
 		dev = qdev_create(NULL, "sysbus-ohci");
 		qdev_prop_set_uint32(dev, "num-ports", 4);
-		qdev_prop_set_taddr(dev, "dma-offset", 0);
-		qdev_prop_set_ptr(dev, "dma", &d->dma_ohci);
+		qdev_prop_set_uint64(dev, "dma-offset", 0);
 		qdev_init_nofail(dev);
+		qdev_prop_set_ptr(dev, "as", &d->as);
 
 		sysbusdev =  SYS_BUS_DEVICE(dev);
 		sysbusdev->mmio[0].addr = devaddr;
@@ -373,8 +380,8 @@ static int ls1a_initfn(PCIDevice *dev)
 		BusState *idebus[4];
 		dev = qdev_create(NULL, "sysbus-ahci");
 		qdev_prop_set_uint32(dev, "num-ports", 2);
-		qdev_prop_set_ptr(dev, "dma", &d->dma_ahci);
 		qdev_init_nofail(dev);
+		qdev_prop_set_ptr(dev, "as", &d->as);
 
 		sysbusdev =  SYS_BUS_DEVICE(dev);
 		sysbusdev->mmio[0].addr = devaddr;
@@ -413,7 +420,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		hwaddr devaddr =  0x00e10000;
 		dev = qdev_create(NULL, "sysbus-synopgmac");
 		qdev_set_nic_properties(dev, d->nd);
-		qdev_prop_set_ptr(dev, "dma", &d->dma_gmac);
+		qdev_prop_set_ptr(dev, "dma", &d->as);
 		qdev_init_nofail(dev);
 
 		sysbusdev =  SYS_BUS_DEVICE(dev);
@@ -466,7 +473,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		SysBusDevice *s;
 		hwaddr devaddr =  0x00e74000;
 		dev=sysbus_create_varargs("ls1a_ac97", -1, ls1a_irq[14], ls1a_irq[15], NULL);
-		qdev_prop_set_ptr(dev, "dma", &d->dma_ac97);
+		qdev_prop_set_ptr(dev, "dma", &d->as);
 		s =  SYS_BUS_DEVICE(dev);
 		s->mmio[0].addr = devaddr;
 		memory_region_add_subregion(&d->iomem_axi, devaddr, s->mmio[0].memory);
@@ -490,7 +497,7 @@ static int ls1a_initfn(PCIDevice *dev)
 		dev = qdev_create(NULL, "ls1a_nand");
 		s =  SYS_BUS_DEVICE(dev);
 		s->mmio[0].addr = devaddr;
-		qdev_prop_set_ptr(dev, "dma", &d->dma_nand);
+		qdev_prop_set_ptr(dev, "dma", &d->as);
 		qdev_init_nofail(dev);
 		sysbus_connect_irq(s, 0, ls1a_irq[13]);
 		memory_region_add_subregion(&d->iomem_axi, devaddr, s->mmio[0].memory);
@@ -548,13 +555,13 @@ static int ls1a_initfn(PCIDevice *dev)
 #endif
 	{
                 ddrcfg_iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(ddrcfg_iomem, &mips_qemu_ops, (void *)(0x0ffffe00&TARGET_PAGE_MASK), "ddr", TARGET_PAGE_SIZE);
+                memory_region_init_io(ddrcfg_iomem, NULL, &mips_qemu_ops, (void *)(0x0ffffe00&TARGET_PAGE_MASK), "ddr", TARGET_PAGE_SIZE);
 		mips_qemu_writel((void *)0x00d00420, 0, 0x0, 4);
 	}
 
 	{
 	 MemoryRegion *pcilocal_iomem = g_new(MemoryRegion, 1);
-	 memory_region_init_io(pcilocal_iomem, &pci_bonito_local_ops, d, "ls1a_pci_conf", 16);
+	 memory_region_init_io(pcilocal_iomem, NULL, &pci_bonito_local_ops, d, "ls1a_pci_conf", 16);
 	 memory_region_add_subregion(&d->iomem_axi, 0x00d01114, pcilocal_iomem);
 	}
 
@@ -595,7 +602,6 @@ static void ls1a_class_init(ObjectClass *klass, void *data)
     k->class_id = 0x3800;
     k->revision = 0xc0;
     dc->desc = "ls1a pci card";
-    dc->no_user = 1;
     dc->props = ls1a_properties;
 }
 
