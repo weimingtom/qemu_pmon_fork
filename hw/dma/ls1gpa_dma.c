@@ -45,15 +45,15 @@ MODE_DMA32 = 0x8,
 MODE_DMA8 = 0x10,
 RDMA_START = 0x20,
 RDMA_DONE = 0x40,
-INTMODE_WONLY = 0x80,
-INTMODE_RW = 0x0
+INTMODE_WONLY = 0x0,
+INTMODE_RW = 0x80
 };
 
 /*irq is placed on each module now */
 typedef struct dma_sysbus_state {
 	SysBusDevice busdev;
 	MemoryRegion dma;
-	qemu_irq irq;
+	qemu_irq irq[4];
         dma_fifo_regs_t udma[4];
 } dma_sysbus_state;
 
@@ -111,12 +111,12 @@ udma = &d->udma[ch];
 				  buf[i] ^= 0x55;
 			  cpu_physical_memory_write(udma->dest,buf,udma->wcount);
 			  free(buf);
-			  udma->command |= RDMA_DONE|WDMA_DONE;
+			  udma->command |= (udma->command&INTMODE_RW)? (RDMA_DONE|WDMA_DONE):WDMA_DONE;
 
-			  qemu_irq_raise(d->irq);
+			  qemu_irq_raise(d->irq[ch]);
 		  }
 		  else if((udma->command & (RDMA_DONE|WDMA_DONE)) == 0)
-			  qemu_irq_lower(d->irq);
+			  qemu_irq_lower(d->irq[ch]);
                   
 		break;
 	  default:
@@ -139,11 +139,13 @@ static const MemoryRegionOps dma_ops = {
 
 static int dma_sysbus_init(SysBusDevice *dev)
 {
+    int i;
     dma_sysbus_state *d = SYS_BUS_LS1BDMA(dev);
     memory_region_init_io(&d->dma, NULL, &dma_ops, (void *)d, "dma", 0x80);
 
     sysbus_init_mmio(dev, &d->dma);
-    sysbus_init_irq(dev, &d->irq);
+    for(i=0;i<4;i++)
+    sysbus_init_irq(dev, &d->irq[i]);
 
     return 0;
 }
