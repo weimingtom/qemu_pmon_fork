@@ -267,7 +267,7 @@ static int ls1a_rtc_init(SysBusDevice *dev)
     memory_region_init_io(&d->iomem, NULL, &ls1a_rtc_ops, (void *)d, "ls1artc", 0x1000);
 
     for(i=0;i<3;i++)
-    sysbus_init_irq(dev, &d->irq[3]);
+    sysbus_init_irq(dev, &d->irq[i]);
     sysbus_init_mmio(dev, &d->iomem);
 
     d->toy_timer = timer_new_ms(rtc_clock, toy_timer, d);
