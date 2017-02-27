@@ -221,7 +221,7 @@ const mips_def_t mips_defs[] =
            in some places...
         .PABITS = 59, */ /* the architectural limit */
         .PABITS = 48,
-        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F,
+        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F | INSN_LOONGSON3A,
         .mmu_type = MMU_TYPE_R4000,
     },
     {
@@ -249,7 +249,7 @@ const mips_def_t mips_defs[] =
            in some places...
         .PABITS = 59, */ /* the architectural limit */
         .PABITS = 48,
-        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F,
+        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F | INSN_LOONGSON3A,
         .mmu_type = MMU_TYPE_R4000,
     },
     {
