@@ -725,8 +725,8 @@ static int dma_next(NandState *s)
 }
 
 
-#define ADDR_SPARE(s) ((s->regs.addr_l&0xfff)|((long long)s->regs.addr_h<<16))
-#define ADDR_NOSPARE(s) ((s->regs.addr_l&0xfff)|((long long)s->regs.addr_h<<16))
+#define ADDR_SPARE(s) ((s->regs.addr_l&0xfff)|((long long)(s->regs.addr_h&0xffff)<<16))
+#define ADDR_NOSPARE(s) ((s->regs.addr_l&0xfff)|((long long)(s->regs.addr_h&0xffff)<<16))
 
 static int nand_load_next(NandState *s)
 {
