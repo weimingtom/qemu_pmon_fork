@@ -28,6 +28,7 @@
 #include "ui/pixel_ops.h"
 #include "hw/loader.h"
 #include "hw/sysbus.h"             /* SysBusDevice */
+#include "hw/pci/pci.h"
 #include "sysemu/dma.h"
 #include "framebuffer.h"
 
@@ -317,3 +318,77 @@ static void ls2h_fb_sysbus_register_types(void)
 }
 
 type_init(ls2h_fb_sysbus_register_types)
+
+//-------------
+typedef struct ls1a_fb_pci_state {
+    PCIDevice dev;
+    ls1a_fb_state dc;
+} ls1a_fb_pci_state;
+
+/* PCI interface */
+#define LS2KDC_VENDOR_ID  0x0014
+#define LS2KDC_DEVICE_ID  0x7a06
+
+static int ls1a_fb_pci_init(PCIDevice *pci_dev)
+{
+    ls1a_fb_pci_state *d = DO_UPCAST(ls1a_fb_pci_state, dev, pci_dev);
+    uint8_t *pci_conf;
+
+    pci_conf = d->dev.config;
+
+    pci_config_set_vendor_id(pci_conf, LS2KDC_VENDOR_ID);
+    pci_config_set_device_id(pci_conf, LS2KDC_DEVICE_ID);
+    pci_conf[0x04] = 0x07; /* command = I/O space, Bus Master */
+    pci_config_set_class(pci_conf, PCI_CLASS_NETWORK_ETHERNET);
+    pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL; /* header_type */
+    pci_conf[PCI_INTERRUPT_PIN] = 1; /* interrupt pin A */
+    pci_conf[0x34] = 0xdc;
+
+
+    d->dc.root = get_system_memory();
+
+    memory_region_init_io(&d->dc.iomem, NULL, &ls2h_fb_ops, (void *)d, "ls2h fb", 0x10000);
+    pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->dc.iomem);
+
+    d->dc.vram_size = 0;
+    d->dc.vram_offset = 0;
+    
+    d->dc.con = graphic_console_init(DEVICE(pci_dev), 0, &ls2hfb_fb_ops, &d->dc);
+    ls2h_fb_reset(&d->dc);
+
+    return 0;
+}
+
+
+static Property ls1a_fb_pci_properties[] = {
+    DEFINE_PROP_PTR("root", ls1a_fb_pci_state, dc.root_ptr),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
+static void ls1a_fb_pci_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->init = ls1a_fb_pci_init;
+    k->vendor_id = LS2KDC_VENDOR_ID;
+    k->device_id = LS2KDC_DEVICE_ID;
+    k->revision = 0x03;
+    k->class_id = PCI_CLASS_NETWORK_ETHERNET;
+    dc->desc = "ls1a dc pci";
+    dc->props = ls1a_fb_pci_properties;
+}
+
+static const TypeInfo ls1a_fb_pci_info = {
+    .name          = "pci_ls2h_fb",
+    .parent        = TYPE_PCI_DEVICE,
+    .instance_size = sizeof(ls1a_fb_pci_state),
+    .class_init    = ls1a_fb_pci_class_init,
+};
+
+static void ls1a_fb_pci_register_types(void)
+{
+    type_register_static(&ls1a_fb_pci_info);
+}
+
+type_init(ls1a_fb_pci_register_types)
