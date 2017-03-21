@@ -54,6 +54,8 @@
 #include "qemu/error-report.h"
 #include "hw/empty_slot.h"
 #include "hw/ssi/ssi.h"
+#include "hw/ide/pci.h"
+#include "hw/ide/ahci.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 
@@ -1206,6 +1208,7 @@ static const TypeInfo bonito_info = {
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 
+#define MAX_SATA_PORTS     6
 static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num))
 {
     DeviceState *dev;
@@ -1215,6 +1218,7 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     SysBusDevice *sysbus;
     PCIBridge *br;
     PCIBus *bus2;
+    DriveInfo *hd[MAX_SATA_PORTS];
 
     dev = qdev_create(NULL, TYPE_BONITO_PCI_HOST_BRIDGE);
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
@@ -1258,6 +1262,19 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
 #endif
+
+    /* ahci and SATA device, for q35 1 ahci controller is built-in */
+    d= pci_create_simple_multifunction(pcihost->bus,
+                                           PCI_DEVFN(8,0),
+                                           true, "ich9-ahci");
+
+    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a08);
+
+    ide_drive_get(hd, ICH_AHCI(d)->ahci.ports);
+    ahci_ide_create_devs(d, hd);
+
+    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
 
     sysbus = SYS_BUS_DEVICE(s->pcihost);
      /*self header*/
