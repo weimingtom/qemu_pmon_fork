@@ -1245,6 +1245,11 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
 
+    d = pci_create(pcihost->bus, PCI_DEVFN(1, 0), "pci-synopgmac");
+    qdev_init_nofail(DEVICE(d));
+    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
+
 
     d = pci_create(pcihost->bus, PCI_DEVFN(4, 0), "pci-ohci");
     qdev_init_nofail(DEVICE(d));
