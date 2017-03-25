@@ -58,6 +58,7 @@
 #include "hw/ide/ahci.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
+#include "loongson3a_rom.h"
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
 
@@ -555,6 +556,132 @@ static void main_cpu_reset(void *opaque)
 	env->active_tc.gpr[6]=loaderparams.a2;
 }
 
+#define MAX_CPUS 2
+static CPUMIPSState *mycpu[MAX_CPUS];
+
+#define CORE0_STATUS_OFF       0x000
+#define CORE0_EN_OFF           0x004
+#define CORE0_SET_OFF          0x008
+#define CORE0_CLEAR_OFF        0x00c
+#define CORE0_BUF_20           0x020
+#define CORE0_BUF_28           0x028
+#define CORE0_BUF_30           0x030
+#define CORE0_BUF_38           0x038
+
+
+#define MYID 0xa0
+#define IPI_DPRINTF(...)
+
+typedef struct gipi_single {
+    uint32_t status;
+    uint32_t en;
+    uint32_t set;
+    uint32_t clear;
+    uint32_t buf[8];
+    qemu_irq irq;
+} gipi_single;
+
+typedef struct gipiState  gipiState;
+struct gipiState {
+	gipi_single core[8];
+} ;
+
+
+static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
+{
+    gipiState * s = opaque;
+    CPUState *cpu = current_cpu;
+
+    int no = (addr>>8)&3;
+    
+
+    if(size!=4) hw_error("size not 4");
+
+//    printf("gipi_writel addr=%llx val=%8x\n", addr, val);
+    addr &= 0xff;
+    switch(addr){
+        case CORE0_STATUS_OFF: 
+            hw_error("CORE0_SET_OFF Can't be write\n");
+            break;
+        case CORE0_EN_OFF:
+		if((cpu->mem_io_vaddr&0xff)!=addr) break;
+            s->core[no].en = val;
+            break;
+        case CORE0_SET_OFF:
+            s->core[no].status |= val;
+            qemu_irq_raise(s->core[no].irq);
+            break;
+        case CORE0_CLEAR_OFF:
+		if((cpu->mem_io_vaddr&0xff)!=addr) break;
+            s->core[no].status ^= val;
+            qemu_irq_lower(s->core[no].irq);
+            break;
+        case 0x20 ... 0x3c:
+            s->core[no].buf[(addr-0x20)/4] = val;
+            break;
+        default:
+            break;
+       }
+    IPI_DPRINTF("gipi_write: addr=0x%02x val=0x%02x cpu=%d pc=%x\n", addr, val, (int)cpu->cpu_index, (int)mypc);
+}
+
+static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
+{
+    gipiState * s = opaque;
+#ifdef DEBUG_LS3A
+    CPUState *cpu = current_cpu;
+#endif
+    uint32_t ret=0;
+    int no = (addr>>8)&3;
+    addr &= 0xff;
+    if(size!=4) hw_error("size not 4 %d", size);
+
+    switch(addr){
+        case CORE0_STATUS_OFF: 
+            ret =  s->core[no].status;
+            break;
+        case CORE0_EN_OFF:
+            ret =  s->core[no].en;
+            break;
+        case CORE0_SET_OFF:
+            ret = 0;//hw_error("CORE0_SET_OFF Can't be Read\n");
+            break;
+        case CORE0_CLEAR_OFF:
+            ret = 0;//hw_error("CORE0_CLEAR_OFF Can't be Read\n");
+        case 0x20 ... 0x3c:
+            ret = s->core[no].buf[(addr-0x20)/4];
+            break;
+        default:
+            break;
+       }
+
+    //if(ret!=0) printf("CPU#%d:gipi_read: NODE#%d addr=%p val=0x%02x pc=%x, opaque=%p\n",cpu->cpu_index, node, addr, ret, cpu->active_tc.PC, opaque);
+    //if(ret!=0) printf("CPU#%d:gipi_read: addr=0x%02x val=0x%02x pc=%x\n",cpu->cpu_index, addr, ret, cpu->PC[0]);
+    IPI_DPRINTF("gipi_read: addr=0x%02x val=0x%02x cpu=%d pc=%x\n", addr, ret, (int)cpu->cpu_index, (int)mypc);
+    return ret;
+}
+
+
+
+static const MemoryRegionOps gipi_ops = {
+    .read = gipi_readl,
+    .write = gipi_writel,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
+
+
+static MemoryRegion *gipi_iomem;
+
+static int godson_ipi_init(qemu_irq parent_irq , unsigned long index, gipiState * s)
+{
+      s->core[index].irq = parent_irq;
+      return 0;
+}
+
+
+
+
 
 static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq);
 
@@ -592,12 +719,13 @@ static void mips_ls2k_init(MachineState *machine)
 	int bios_size;
 	MIPSCPU *cpu;
 	CPUMIPSState *env;
-	ResetData *reset_info;
+	ResetData *reset_info[2];
 	PCIBus *pci_bus[4];
 	DriveInfo *flash_dinfo=NULL;
 	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
+	int i;
 
 
 	/* init CPUs */
@@ -609,21 +737,37 @@ static void mips_ls2k_init(MachineState *machine)
 #endif
 	}
 
+	gipiState * gipis =g_malloc0(sizeof(gipiState));
+	gipi_iomem = g_new(MemoryRegion, 1);
+	memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x200);
+        memory_region_add_subregion(get_system_memory(), 0x1fe11000, gipi_iomem);
+
+	for(i = 0; i < smp_cpus; i++) {
 		cpu = cpu_mips_init(cpu_model);
 		if (cpu == NULL) {
 			fprintf(stderr, "Unable to find CPU definition\n");
 			exit(1);
 		}
 		env = &cpu->env;
+		env->CP0_EBase |= i;
+		mycpu[i] = env;
 
 		cc = CPU_GET_CLASS(cpu);
 		real_do_unassigned_access = cc->do_unassigned_access;
 		cc->do_unassigned_access = mips_ls2k_do_unassigned_access;
 
-		reset_info = g_malloc0(sizeof(ResetData));
-		reset_info->cpu = cpu;
-		reset_info->vector = env->active_tc.PC;
-		qemu_register_reset(main_cpu_reset, reset_info);
+		reset_info[i] = g_malloc0(sizeof(ResetData));
+		reset_info[i]->cpu = cpu;
+		reset_info[i]->vector = env->active_tc.PC;
+		qemu_register_reset(main_cpu_reset, reset_info[i]);
+
+	/* Init CPU internal devices */
+		cpu_mips_irq_init_cpu(cpu);
+		cpu_mips_clock_init(cpu);
+		godson_ipi_init(env->irq[6] , i, gipis);  // by zxh&dw
+	}
+	
+	env = mycpu[0];
 
 		/* allocate RAM */
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
@@ -673,9 +817,14 @@ static void mips_ls2k_init(MachineState *machine)
     } else if ((flash_dinfo = drive_get_next(IF_PFLASH)))
 	ddr2config = 1;
     else {
-	/* not fatal */
-        fprintf(stderr, "qemu: Warning, could not load MIPS bios '%s'\n",
-		bios_name);
+        bios = g_new(MemoryRegion, 1);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
+        vmstate_register_ram_global(bios);
+        memory_region_set_readonly(bios, true);
+        memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
+
+	bios_size = sizeof(aui_boot_code);
+	rom_add_blob_fixed("bios",aui_boot_code,bios_size,0x1fc00000);
     }
     if (filename) {
         g_free(filename);
@@ -686,13 +835,10 @@ static void mips_ls2k_init(MachineState *machine)
         loaderparams.kernel_filename = kernel_filename;
         loaderparams.kernel_cmdline = kernel_cmdline;
         loaderparams.initrd_filename = initrd_filename;
-        reset_info->vector = load_kernel();
+        reset_info[0]->vector = load_kernel();
     }
 
 
-	/* Init CPU internal devices */
-	cpu_mips_irq_init_cpu(cpu);
-	cpu_mips_clock_init(cpu);
 
 
 	/* Register 64 KB of IO space at 0x1f000000 */
@@ -881,6 +1027,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls2k platform";
     mc->init = mips_ls2k_init;
+    mc->max_cpus = 2;
 }
 
 DEFINE_MACHINE("ls2k", mips_machine_init)
@@ -902,7 +1049,6 @@ DEFINE_MACHINE("ls2k", mips_machine_init)
  *
  */
 
-#define MAX_CPUS 1
 #define MAX_PILS 16
 
 #include "ls2k_int.c"
