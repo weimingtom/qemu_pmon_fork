@@ -58,7 +58,8 @@
 #include "hw/ide/ahci.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
-#include "loongson3a_rom.h"
+#include "loongson2k_rom.h"
+extern target_ulong mypc;
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
 
@@ -87,25 +88,9 @@ static void *boot_params_p;
 #define align(x) (((x)+15)&~15)
 static int pci_ls2k_map_irq(PCIDevice *d, int irq_num);
 
-static struct {
-unsigned long long runins;
-unsigned long long pc_low;
-unsigned long long pc_high;
-unsigned long long skb;
-unsigned long long skb_data;
-unsigned long long stack;
-unsigned int count;
-} __attribute__((packed)) mynet ;
 
 extern void (*mypc_callback)(target_ulong pc, uint32_t opcode);
 
-typedef struct {
-int pc;
-unsigned long long addr;
-} __attribute__((packed)) mypc;
-static mypc *pcbuf;
-static int pcbuf_size;
-static int pcbuf_pos;
 
 #define MASK_OP_MAJOR(op)  (op & (0x3F << 26))
 
@@ -255,80 +240,13 @@ static MemoryRegion *ddrcfg_iomem;
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
-	addr=((hwaddr)(long)opaque) + addr;
-	switch(addr)
-	{
-		case 0x1fd00800 ... 0x1fd0082c:
-		*(int *)((char *)&mynet + (addr-0x1fd00800)) = val;
-		break;
-		case 0x1fd00830:
-		mynet.count = val;
-
-		{
-			int fd, ret;
-			int len1, len2;
-			static int i = 0;
-			static char *filename[10];
-
-			if(filename[i]) unlink(filename[i]);
-			ret=asprintf(&filename[i], "/tmp/pc.sample%d.%d", i%10,(int)val);
-			if(ret==-1) printf("error\n");
-			printf("create file %s\n", filename[i]);
-			fd = open(filename[i],O_CREAT|O_TRUNC|O_WRONLY, 0666);
-			ret = write (fd, &mynet.skb,24);
-			if(pcbuf_size-pcbuf_pos>val)
-			{
-				len1 = val*sizeof(mypc);
-				len2 = 0;
-			}
-			else
-			{
-				len1 =  (pcbuf_size-pcbuf_pos)*sizeof(mypc);
-				len2 = val*sizeof(mypc)-len1;
-			}
-			ret = write(fd, pcbuf + ((pcbuf_size + pcbuf_pos - val)%pcbuf_size), len1);
-			if(len2)
-				ret += write(fd, pcbuf, len2); 	
-
-			if(ret!=val*sizeof(mypc)) printf("error\n");
-			close(fd);
-			i++;
-		}
-
-		break;
-	}
 }
 
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 {
-	uint32_t isr;
-	uint32_t en;
-
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
-		case 0x1fe11040:
-			address_space_read(&address_space_memory, 0x1fe11420, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
-			address_space_read(&address_space_memory, 0x1fe11424, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
-			return isr & en;
-			break;
-		case 0x1fe11140:
-		case 0x1fe11144:
-		case 0x1fe11148:
-		case 0x1fe1114c:
-		case 0x1fe1104c:
-		case 0x1fe11044:
-			return 0;
-		case 0x1fe11048:
-			address_space_read(&address_space_memory, 0x1fe11460, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
-			address_space_read(&address_space_memory, 0x1fe11464, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
-			return isr & en;
-			break;
-		case 0x1fd00800 ... 0x1fd0082c:
-		return *(int *)((char *)&mynet + (addr-0x1fd00800));
-		case 0x1fd00830:
-		return 0;
-		break;
 		case 0x0ff00960:
 		return 0x100;
 		case 0x0ff00010:
@@ -570,7 +488,12 @@ static CPUMIPSState *mycpu[MAX_CPUS];
 
 
 #define MYID 0xa0
+//#define DEBUG_LS2K
+#ifdef DEBUG_LS2K
+#define IPI_DPRINTF printf
+#else
 #define IPI_DPRINTF(...)
+#endif
 
 typedef struct gipi_single {
     uint32_t status;
@@ -589,76 +512,98 @@ struct gipiState {
 
 static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
-    gipiState * s = opaque;
-    CPUState *cpu = current_cpu;
+	gipiState * s = opaque;
+	CPUState *cpu = current_cpu;
+	int no = (addr>>8)&3;
 
-    int no = (addr>>8)&3;
-    
 
-    if(size!=4) hw_error("size not 4");
+	if(size!=4) hw_error("size not 4");
 
-//    printf("gipi_writel addr=%llx val=%8x\n", addr, val);
-    addr &= 0xff;
-    switch(addr){
-        case CORE0_STATUS_OFF: 
-            hw_error("CORE0_SET_OFF Can't be write\n");
-            break;
-        case CORE0_EN_OFF:
-		if((cpu->mem_io_vaddr&0xff)!=addr) break;
-            s->core[no].en = val;
-            break;
-        case CORE0_SET_OFF:
-            s->core[no].status |= val;
-            qemu_irq_raise(s->core[no].irq);
-            break;
-        case CORE0_CLEAR_OFF:
-		if((cpu->mem_io_vaddr&0xff)!=addr) break;
-            s->core[no].status ^= val;
-            qemu_irq_lower(s->core[no].irq);
-            break;
-        case 0x20 ... 0x3c:
-            s->core[no].buf[(addr-0x20)/4] = val;
-            break;
-        default:
-            break;
-       }
-    IPI_DPRINTF("gipi_write: addr=0x%02x val=0x%02x cpu=%d pc=%x\n", addr, val, (int)cpu->cpu_index, (int)mypc);
+	//    printf("gipi_writel addr=%llx val=%8x\n", addr, val);
+	addr &= 0xff;
+	switch(addr){
+		case CORE0_STATUS_OFF: 
+			hw_error("CORE0_SET_OFF Can't be write\n");
+			break;
+		case CORE0_EN_OFF:
+			if((cpu->mem_io_vaddr&0xff)!=addr) break;
+			s->core[no].en = val;
+			break;
+		case CORE0_SET_OFF:
+			s->core[no].status |= val;
+			qemu_irq_raise(s->core[no].irq);
+			break;
+		case CORE0_CLEAR_OFF:
+			if((cpu->mem_io_vaddr&0xff)!=addr) break;
+			s->core[no].status ^= val;
+			qemu_irq_lower(s->core[no].irq);
+			break;
+		case 0x20 ... 0x3c:
+			s->core[no].buf[(addr-0x20)/4] = val;
+			break;
+		default:
+			break;
+	}
+	IPI_DPRINTF("gipi_write: addr=0x%02x val=0x%02llx cpu=%d pc=%llx\n", (int)addr, (long long)val, (int)cpu->cpu_index, (long long)mypc);
 }
 
 static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 {
-    gipiState * s = opaque;
-#ifdef DEBUG_LS3A
-    CPUState *cpu = current_cpu;
+	gipiState * s = opaque;
+#ifdef DEBUG_LS2K
+	CPUState *cpu = current_cpu;
 #endif
-    uint32_t ret=0;
-    int no = (addr>>8)&3;
-    addr &= 0xff;
-    if(size!=4) hw_error("size not 4 %d", size);
+	uint64_t ret=0;
+	int no = (addr>>8)&3;
+	uint32_t isr;
+	uint32_t en;
 
-    switch(addr){
-        case CORE0_STATUS_OFF: 
-            ret =  s->core[no].status;
-            break;
-        case CORE0_EN_OFF:
-            ret =  s->core[no].en;
-            break;
-        case CORE0_SET_OFF:
-            ret = 0;//hw_error("CORE0_SET_OFF Can't be Read\n");
-            break;
-        case CORE0_CLEAR_OFF:
-            ret = 0;//hw_error("CORE0_CLEAR_OFF Can't be Read\n");
-        case 0x20 ... 0x3c:
-            ret = s->core[no].buf[(addr-0x20)/4];
-            break;
-        default:
-            break;
-       }
 
-    //if(ret!=0) printf("CPU#%d:gipi_read: NODE#%d addr=%p val=0x%02x pc=%x, opaque=%p\n",cpu->cpu_index, node, addr, ret, cpu->active_tc.PC, opaque);
-    //if(ret!=0) printf("CPU#%d:gipi_read: addr=0x%02x val=0x%02x pc=%x\n",cpu->cpu_index, addr, ret, cpu->PC[0]);
-    IPI_DPRINTF("gipi_read: addr=0x%02x val=0x%02x cpu=%d pc=%x\n", addr, ret, (int)cpu->cpu_index, (int)mypc);
-    return ret;
+
+	addr &= 0xff;
+	if(size!=4) hw_error("size not 4 %d", size);
+
+	switch(addr){
+		case CORE0_STATUS_OFF: 
+			ret =  s->core[no].status;
+			break;
+		case CORE0_EN_OFF:
+			ret =  s->core[no].en;
+			break;
+		case CORE0_SET_OFF:
+			ret = 0;//hw_error("CORE0_SET_OFF Can't be Read\n");
+			break;
+		case CORE0_CLEAR_OFF:
+			ret = 0;//hw_error("CORE0_CLEAR_OFF Can't be Read\n");
+		case 0x20 ... 0x3c:
+			ret = s->core[no].buf[(addr-0x20)/4];
+			break;
+		case 0x40:
+			if(no == 0)
+			{
+				address_space_read(&address_space_memory, 0x1fe11420, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
+				address_space_read(&address_space_memory, 0x1fe11424, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
+				ret = isr&en;
+			}
+			else
+				ret = 0;
+			break;
+		case 0x48:
+			if(no == 0)
+			{
+				address_space_read(&address_space_memory, 0x1fe11460, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
+				address_space_read(&address_space_memory, 0x1fe11464, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
+				ret = isr & en;
+			}
+			else
+				ret = 0;
+			break;
+		default:
+			break;
+	}
+
+	IPI_DPRINTF("gipi_read: addr=0x%02x val=0x%02llx cpu=%d pc=%llx\n", (int)addr, (long long)ret, (int)cpu->cpu_index, (long long)mypc);
+	return ret;
 }
 
 
@@ -671,7 +616,6 @@ static const MemoryRegionOps gipi_ops = {
 
 
 
-static MemoryRegion *gipi_iomem;
 
 static int godson_ipi_init(qemu_irq parent_irq , unsigned long index, gipiState * s)
 {
@@ -738,9 +682,6 @@ static void mips_ls2k_init(MachineState *machine)
 	}
 
 	gipiState * gipis =g_malloc0(sizeof(gipiState));
-	gipi_iomem = g_new(MemoryRegion, 1);
-	memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x200);
-        memory_region_add_subregion(get_system_memory(), 0x1fe11000, gipi_iomem);
 
 	for(i = 0; i < smp_cpus; i++) {
 		cpu = cpu_mips_init(cpu_model);
@@ -988,16 +929,13 @@ static void mips_ls2k_init(MachineState *machine)
                 memory_region_init_io(ddrcfg_iomem, NULL, &mips_qemu_ops, (void *)0x0ff00000, "ddr", 0x100000);
 	}
 
+
 	{
-
-                MemoryRegion *iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe11040, "0x1fe11040", 16);
-                memory_region_add_subregion(address_space_mem, 0x1fe11040, iomem);
-		iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe11140, "0x1fe11140", 16);
-                memory_region_add_subregion(address_space_mem, 0x1fe11140, iomem);
+	static MemoryRegion *gipi_iomem;
+	gipi_iomem = g_new(MemoryRegion, 1);
+	memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x200);
+        memory_region_add_subregion(get_system_memory(), 0x1fe11000, gipi_iomem);
 	}
-
 
 #if 0
 	{
@@ -1016,9 +954,6 @@ static void mips_ls2k_init(MachineState *machine)
 	}
 #endif
 
-	pcbuf_size = 0x100000;
-	pcbuf_pos = 0;
-	pcbuf = malloc(pcbuf_size*sizeof(mypc));
 	mypc_callback =  mypc_callback_for_net;
 }
 
@@ -1525,4 +1460,5 @@ static void bonito_register_types(void)
 
 type_init(bonito_register_types)
 #define LOONGSON_2H
+#define LOONGSON_2K
 #include "loongson_bootparam.c"
