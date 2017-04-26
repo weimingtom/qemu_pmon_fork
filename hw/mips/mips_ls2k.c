@@ -513,7 +513,7 @@ struct gipiState {
 static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
 	gipiState * s = opaque;
-	CPUState *cpu = current_cpu;
+//	CPUState *cpu = current_cpu;
 	int no = (addr>>8)&3;
 
 
@@ -526,7 +526,7 @@ static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 			hw_error("CORE0_SET_OFF Can't be write\n");
 			break;
 		case CORE0_EN_OFF:
-			if((cpu->mem_io_vaddr&0xff)!=addr) break;
+			//if((cpu->mem_io_vaddr&0xff)!=addr) break;
 			s->core[no].en = val;
 			break;
 		case CORE0_SET_OFF:
@@ -534,7 +534,7 @@ static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 			qemu_irq_raise(s->core[no].irq);
 			break;
 		case CORE0_CLEAR_OFF:
-			if((cpu->mem_io_vaddr&0xff)!=addr) break;
+			//if((cpu->mem_io_vaddr&0xff)!=addr) break;
 			s->core[no].status ^= val;
 			qemu_irq_lower(s->core[no].irq);
 			break;
