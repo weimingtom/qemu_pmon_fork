@@ -235,8 +235,6 @@ static  enum loongson_cpu_type cputype = Loongson_3A;
 struct efi_cpuinfo_loongson *init_cpu_info(void *g_cpuinfo_loongson)
 {
   struct efi_cpuinfo_loongson *c = g_cpuinfo_loongson;
-
-  c->processor_id = PRID_IMP_LOONGSON;
   c->cputype  = cputype;
 
   c->cpu_clock_freq = atoi(getenv("ENV_cpuclock")?:"200000000");
@@ -264,7 +262,7 @@ struct efi_cpuinfo_loongson *init_cpu_info(void *g_cpuinfo_loongson)
   c->nr_cpus = 1;
 #endif
 
-#ifdef LOONGSON_3ASINGLE
+#if defined(LOONGSON_3ASINGLE) || defined(LOONGSON_2K)
   c->total_node = 1;
   c->nr_cpus = smp_cpus;
 #endif
@@ -290,7 +288,7 @@ struct system_loongson *init_system_loongson(void *g_sysitem)
   s->ccnuma_smp = 1;
   s->sing_double_channel = 2;
 #endif
-#ifdef LOONGSON_3ASINGLE
+#if defined(LOONGSON_3ASINGLE) || defined(LOONGSON_2K)
   s->ccnuma_smp = 0;
   s->sing_double_channel = 1;
 #endif
