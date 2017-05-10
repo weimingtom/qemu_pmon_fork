@@ -347,7 +347,7 @@ static int ls1a_fb_pci_init(PCIDevice *pci_dev)
 
     d->dc.root = get_system_memory();
 
-    memory_region_init_io(&d->dc.iomem, NULL, &ls2h_fb_ops, (void *)d, "ls2h fb", 0x10000);
+    memory_region_init_io(&d->dc.iomem, NULL, &ls2h_fb_ops, (void *)&d->dc, "ls2h fb", 0x10000);
     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->dc.iomem);
 
     d->dc.vram_size = 0;
