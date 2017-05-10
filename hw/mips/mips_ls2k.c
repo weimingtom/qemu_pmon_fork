@@ -251,6 +251,10 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 0x100;
 		case 0x0ff00010:
 		return 1;
+		case 0x1fe104b0:
+		return 0x10000;
+		case 0x1fe104c0:
+		return 0x10000;
 	}
 	return 0;
 }
@@ -801,8 +805,6 @@ static void mips_ls2k_init(MachineState *machine)
 	if (serial_hds[3])
 		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls2k_irq[0],115200,serial_hds[3], DEVICE_NATIVE_ENDIAN);
 
-	sysbus_create_simple("ls2h_fb", 0x1fe50000, NULL);
-
 
 
 	pci_bus[0]=pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq);
@@ -915,12 +917,11 @@ static void mips_ls2k_init(MachineState *machine)
 	{
 
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00210, "0x1fd00210", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fd00210, iomem);
-		/*ins*/
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104b0, "0x1fe104b0", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe104b0, iomem);
                 iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00800, "0x1fd00800", 0x34);
-                memory_region_add_subregion(address_space_mem, 0x1fd00800, iomem);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104c0, "0x1fe104c0", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe104c0, iomem);
 	}
 
 
