@@ -91,6 +91,10 @@ static int pci_ls2k_map_irq(PCIDevice *d, int irq_num);
 
 extern void (*mypc_callback)(target_ulong pc, uint32_t opcode);
 
+void *ls1gpa_mmci_init(MemoryRegion *sysmem,
+                hwaddr base,
+                BlockBackend *blk, qemu_irq irq);
+
 
 #define MASK_OP_MAJOR(op)  (op & (0x3F << 26))
 
@@ -235,11 +239,23 @@ if(((opcode & 0xffe00000) == OP_MTC0) || ((opcode & 0xffe00000) == OP_DMTC0))
 #endif
 
 
+void ls1gpa_sdio_set_dmaaddr(uint32_t val);
+void __attribute__((weak)) ls1gpa_sdio_set_dmaaddr(uint32_t val)
+{
+}
+
 static MemoryRegion *ddrcfg_iomem;
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
+	addr=((hwaddr)(long)opaque) + addr;
+	switch(addr)
+	{
+		case 0x1fe10c10:
+		ls1gpa_sdio_set_dmaaddr(val);
+		break;
+	}
 }
 
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
@@ -882,6 +898,19 @@ static void mips_ls2k_init(MachineState *machine)
 		sysbus_create_simple("ls1a_dma",0x1fe10c00, NULL);
 		sysbus_create_simple("ls1a_nand",0x1fe06000, ls2k_irq[12]);
 
+	{
+		DriveInfo *dinfo;
+		dinfo = drive_get(IF_SD, 0, 0);
+		if (!dinfo) {
+			fprintf(stderr, "qemu: missing SecureDigital device\n");
+			exit(1);
+		}
+
+		ls1gpa_mmci_init(iomem_root, 0x1fe0c000,
+				blk_by_legacy_dinfo(dinfo),
+				ls2k_irq[31]
+				);
+	}
 
 #if 1
 	{
@@ -922,6 +951,9 @@ static void mips_ls2k_init(MachineState *machine)
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104c0, "0x1fe104c0", 0x4);
                 memory_region_add_subregion(address_space_mem, 0x1fe104c0, iomem);
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10c10, "0x1fe10c10", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe10c10, iomem);
 	}
 
 
