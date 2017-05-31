@@ -705,7 +705,7 @@ static void ls1gpa_mmci_instance_init(Object *obj)
     ls1gp_sdio = s;
 
     memory_region_init_io(&s->iomem, obj, &ls1gpa_mmci_ops, s,
-                          "ls1gpa-mmci", 0x00100000);
+                          "ls1gpa-mmci", 0x001000);
     sysbus_init_mmio(sbd, &s->iomem);
     sysbus_init_irq(sbd, &s->irq);
 
