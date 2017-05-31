@@ -742,7 +742,6 @@ static void mips_ls2k_init(MachineState *machine)
 
         //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls2k axi", UINT32_MAX);
         memory_region_init(iomem_root, NULL,  "ls2k axi", UINT32_MAX);
-        memory_region_init(iomem_root, NULL,  "ls2k axi", UINT32_MAX);
 	address_space_init(as,iomem_root, "ls2k axi memory");
 
 	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
@@ -873,10 +872,10 @@ static void mips_ls2k_init(MachineState *machine)
 			qdev_prop_set_uint32(dev1, "size", 0x100000);
 			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 			qdev_init_nofail(dev1);
-		}
-		else dev1 = ssi_create_slave(bus, "ssi-sd");
 		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
+		}
+		//else dev1 = ssi_create_slave(bus, "ssi-sd");
 	}
 
 
@@ -906,7 +905,7 @@ static void mips_ls2k_init(MachineState *machine)
 			exit(1);
 		}
 
-		ls1gpa_mmci_init(iomem_root, 0x1fe0c000,
+		ls1gpa_mmci_init(address_space_mem, 0x1fe0c000,
 				blk_by_legacy_dinfo(dinfo),
 				ls2k_irq[31]
 				);
