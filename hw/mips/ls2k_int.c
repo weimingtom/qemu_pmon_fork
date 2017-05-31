@@ -93,6 +93,7 @@ static void ls2k_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 			break;
 		case 3: //clr
 			s->intreg_pending &= ~val;
+			s->intreg_en &= ~val;
 			ls2k_check_interrupts(s);
 			break;
 		case 4:
