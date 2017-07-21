@@ -1134,7 +1134,11 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
         put_packet(s, "OK");
         break;
     case 'm':
+	{
+		const char *pold=p;
         addr = strtoull(p, (char **)&p, 16);
+		if(p-pold<16 && (addr&(1<<31)))addr|=0xffffffff00000000ULL;
+	}
         if (*p == ',')
             p++;
         len = strtoull(p, NULL, 16);
@@ -1153,7 +1157,11 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
         }
         break;
     case 'M':
+	{
+		const char *pold=p;
         addr = strtoull(p, (char **)&p, 16);
+		if(p-pold<16 && (addr&(1<<31)))addr|=0xffffffff00000000ULL;
+	}
         if (*p == ',')
             p++;
         len = strtoull(p, (char **)&p, 16);
@@ -1201,10 +1209,14 @@ static int gdb_handle_packet(GDBState *s, const char *line_buf)
         break;
     case 'Z':
     case 'z':
+	{
+		const char *pold=p;
         type = strtoul(p, (char **)&p, 16);
         if (*p == ',')
             p++;
         addr = strtoull(p, (char **)&p, 16);
+		if(p-pold<16 && (addr&(1<<31)))addr|=0xffffffff00000000ULL;
+	}
         if (*p == ',')
             p++;
         len = strtoull(p, (char **)&p, 16);
