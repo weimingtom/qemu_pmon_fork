@@ -180,6 +180,7 @@ enum {
 
 static MemoryRegion *ddrcfg_iomem;
 static int reg180;
+extern target_ulong mypc;
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
@@ -190,13 +191,11 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 		case 0x1fe00180:
 			reg180 = val;
 			memory_region_transaction_begin();
-				printf("memory_region_add_subregion_overlap haha\n");
 			if(ddrcfg_iomem->container == get_system_memory())
 				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
 
 			if((val&0x10) == 0)
 			{
-				printf("memory_region_add_subregion_overlap %lx\n", val);
 				memory_region_add_subregion_overlap(get_system_memory(), 0x0ff00000, ddrcfg_iomem, 1);
 			}
 
@@ -523,7 +522,6 @@ static CPUMIPSState *mycpu[4];
 
 #define MYID 0xa0
 
-extern target_ulong mypc;
 
 typedef struct gipi_single {
     uint32_t status;
@@ -1007,8 +1005,8 @@ static void mips_ls3a2h_init(MachineState *machine)
 	{
 
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe00180, "0x1fe00180", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1bd00200, iomem);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe00180, "0x1fe00180", 0x8);
+                memory_region_add_subregion(address_space_mem, 0x1fe00180, iomem);
 		mips_qemu_writel((void *)0x1fe00180, 0, 0xff003180, 4);
 	}
 
