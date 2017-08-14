@@ -245,6 +245,7 @@ void __attribute__((weak)) ls1gpa_sdio_set_dmaaddr(uint32_t val)
 }
 
 static MemoryRegion *ddrcfg_iomem;
+static int reg424;
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
@@ -255,6 +256,19 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 		case 0x1fe10c10:
 		ls1gpa_sdio_set_dmaaddr(val);
 		break;
+		case 0x1fe10424:
+			reg424 = val;
+			memory_region_transaction_begin();
+			if(ddrcfg_iomem->container == get_system_memory())
+				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
+
+			if((val&0x100) == 0)
+			{
+				memory_region_add_subregion_overlap(get_system_memory(), 0x0ff00000, ddrcfg_iomem, 1);
+			}
+
+			memory_region_transaction_commit();
+			break;
 	}
 }
 
@@ -271,6 +285,22 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 0x10000;
 		case 0x1fe104c0:
 		return 0x10000;
+		case 0x1fe10480:
+		return 0x10000;
+		case 0x1fe10490:
+		return 0x10000;
+		case 0x1fe104a0:
+		return 0x10000;
+		case 0x0ff00160:
+		return 0x01000000;
+		case 0x0ff00184:
+		return 0xffff00;
+		case 0x0ff00188:
+		return 0x1000000;
+		case 0x0ff0018c:
+		return 0x1;
+		case 0x1fe10424:
+		return reg424;
 	}
 	return 0;
 }
@@ -918,7 +948,7 @@ static void mips_ls2k_init(MachineState *machine)
 		dev = qdev_create(NULL, "ls1a_rtc");
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fe03000);
+		sysbus_mmio_map(s, 0, 0x1fe07820);
 		sysbus_connect_irq(s, 0, ls2k_irq[14]);
 		sysbus_connect_irq(s, 1, ls2k_irq[15]);
 		sysbus_connect_irq(s, 2, ls2k_irq[16]);
@@ -953,6 +983,22 @@ static void mips_ls2k_init(MachineState *machine)
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10c10, "0x1fe10c10", 0x4);
                 memory_region_add_subregion(address_space_mem, 0x1fe10c10, iomem);
+
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10480, "0x1fe10480", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe10480, iomem);
+
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10490, "0x1fe10490", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe10490, iomem);
+
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104a0, "0x1fe104a0", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe104a0, iomem);
+
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10424, "0x1fe10424", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe10424, iomem);
 	}
 
 
@@ -1450,7 +1496,7 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", UINT64_MAX);
+    //memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", UINT64_MAX);
 
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
 
