@@ -292,7 +292,7 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		case 0x1fe104a0:
 		return 0x10000;
 		case 0x0ff00160:
-		return 0x01000000;
+		return 0x0f000000;
 		case 0x0ff00184:
 		return 0xffff00;
 		case 0x0ff00188:
@@ -1257,7 +1257,7 @@ static uint64_t pci_ls2k_config_readl (void *opaque, hwaddr addr, unsigned size)
 
 
 	val = pci_data_read(phb->bus, addr, size);
-	printf("pci_ls2k_config_readl 0x%x 0x%x\n", (int)addr, val);
+	//printf("pci_ls2k_config_readl 0x%x 0x%x\n", (int)addr, val);
 	return val;
 }
 
@@ -1413,7 +1413,7 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     d = pci_create(pcihost->bus, PCI_DEVFN(4, 0), "pci-ohci");
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a04);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
 
 #if 0
     d = pci_create(pcihost->bus, PCI_DEVFN(4, 1), "pci-ehci-usb");
