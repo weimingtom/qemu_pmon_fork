@@ -1409,8 +1409,19 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
 
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 0), true, "usb-ehci");
+    qdev_init_nofail(DEVICE(d));
+    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a04);
 
-    d = pci_create(pcihost->bus, PCI_DEVFN(4, 0), "pci-ohci");
+#if 1
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 1), true, "usb-ehci");
+    qdev_init_nofail(DEVICE(d));
+    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a14);
+#endif
+
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 2), true, "pci-ohci");
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
@@ -1492,11 +1503,11 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     PCIHostState *phb;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
 
-    memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT32_MAX);
+    memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT64_MAX);
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-    //memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", UINT64_MAX);
+    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", INT64_MAX);
 
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
 
