@@ -1445,13 +1445,13 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     /* ahci and SATA device, for q35 1 ahci controller is built-in */
     d= pci_create_simple_multifunction(pcihost->bus,
                                            PCI_DEVFN(8,0),
-                                           true, "ich9-ahci");
+                                           true, "ls2k-ahci");
 
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a08);
 
-    ide_drive_get(hd, ICH_AHCI(d)->ahci.ports);
-    ahci_ide_create_devs(d, hd);
+    ide_drive_get(hd, LS2K_AHCI(d)->ahci.ports);
+    ls2k_ahci_ide_create_devs(d, hd);
 
     pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
 
