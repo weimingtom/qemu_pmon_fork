@@ -681,7 +681,7 @@ static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq
 
 static const int sector_len = 32 * 1024;
 
-static PCIBus *pcibus_ls2k_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num));
+static PCIBus *pcibus_ls2k_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1);
 
 
 
@@ -768,6 +768,10 @@ static void mips_ls2k_init(MachineState *machine)
 	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
 	memory_region_add_subregion(address_space_mem, 0, ram1);
 	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
+	MemoryRegion *ram_pciram = g_new(MemoryRegion, 1);
+	MemoryRegion *ram_pciram1 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram_pciram1, NULL, "ddrlowmem", ram, 0, 0x10000000);
+	memory_region_init_alias(ram_pciram, NULL, "ddrmem", ram, 0, memory_region_size(ram));
 
 
         //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls2k axi", UINT32_MAX);
@@ -852,7 +856,7 @@ static void mips_ls2k_init(MachineState *machine)
 
 
 
-	pci_bus[0]=pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq);
+	pci_bus[0]=pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1);
 
 
 
@@ -1368,7 +1372,7 @@ static const TypeInfo bonito_info = {
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 
 #define MAX_SATA_PORTS     6
-static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num))
+static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1)
 {
     DeviceState *dev;
     BonitoState *pcihost;
@@ -1462,6 +1466,8 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
 
 //pci-synopgmac
 
+    memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
+    memory_region_add_subregion(&pcihost->iomem_mem, 0x100000000UL, ram);
 
     return bus2;
 }
@@ -1497,6 +1503,14 @@ static const MemoryRegionIOMMUOps ls2k_pciedma_iommu_ops = {
     .translate = ls2k_pciedma_translate_iommu,
 };
 
+/*
+two way to translate pci dma address:
+pci_setup_iommu
+memory_region_init_iommu
+pci_setup_iommu will not change addr.
+memory_region_init_iommu can translate region and addr.
+*/
+
 static int bonito_pcihost_initfn(SysBusDevice *dev)
 {
     BonitoState *pcihost;
@@ -1507,7 +1521,7 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", INT64_MAX);
+    //memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", INT64_MAX);
 
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
 
