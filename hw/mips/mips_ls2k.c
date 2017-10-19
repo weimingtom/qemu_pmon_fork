@@ -681,7 +681,7 @@ static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq
 
 static const int sector_len = 32 * 1024;
 
-static PCIBus *pcibus_ls2k_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1);
+static PCIBus **pcibus_ls2k_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1);
 
 
 
@@ -714,7 +714,7 @@ static void mips_ls2k_init(MachineState *machine)
 	MIPSCPU *cpu;
 	CPUMIPSState *env;
 	ResetData *reset_info[2];
-	PCIBus *pci_bus[4];
+	PCIBus **pci_bus;
 	DriveInfo *flash_dinfo=NULL;
 	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
@@ -856,7 +856,7 @@ static void mips_ls2k_init(MachineState *machine)
 
 
 
-	pci_bus[0]=pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1);
+	pci_bus=pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1);
 
 
 
@@ -886,6 +886,15 @@ static void mips_ls2k_init(MachineState *machine)
 	  }
 #endif
 	}
+
+{
+    PCIDevice *dev = pci_create_multifunction(pci_bus[1], -1, false, "pciram");
+    qdev_prop_set_uint16(&dev->qdev, "vendor", 0x1002);
+    qdev_prop_set_uint16(&dev->qdev, "device", 0x9615);
+    qdev_prop_set_uint32(&dev->qdev, "bar0", ~(0x04000000-1));
+    qdev_prop_set_uint32(&dev->qdev, "bar1", ~(0x04000-1));
+    qdev_init_nofail(&dev->qdev);
+}
 
 #if 0
 	{
@@ -1373,7 +1382,7 @@ static const TypeInfo bonito_info = {
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 
 #define MAX_SATA_PORTS     6
-static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1)
+static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1)
 {
     DeviceState *dev;
     BonitoState *pcihost;
@@ -1383,6 +1392,7 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     PCIBridge *br;
     PCIBus *bus2;
     DriveInfo *hd[MAX_SATA_PORTS];
+    static PCIBus *pci_bus[4];
 
     dev = qdev_create(NULL, TYPE_BONITO_PCI_HOST_BRIDGE);
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
@@ -1403,6 +1413,20 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     bus2 = pci_bridge_get_sec_bus(br);
 
     pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
+    pci_bus[0] = bus2;
+
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(0xa, 0), true, "LS2K_Bonito");
+
+    s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
+    s->pcihost = pcihost;
+    pcihost->pci_dev = s;
+    br = PCI_BRIDGE(d);
+    pci_bridge_map_irq(br, "Advanced PCI Bus secondary bridge 1", board_map_irq);
+    qdev_init_nofail(DEVICE(d));
+    bus2 = pci_bridge_get_sec_bus(br);
+
+    pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
+    pci_bus[1] = bus2;
 
     d = pci_create(pcihost->bus, PCI_DEVFN(3, 0), "pci-synopgmac");
     qdev_init_nofail(DEVICE(d));
@@ -1471,7 +1495,7 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
     memory_region_add_subregion(&pcihost->iomem_mem, 0x100000000UL, ram);
 
-    return bus2;
+    return pci_bus;
 }
 
 
