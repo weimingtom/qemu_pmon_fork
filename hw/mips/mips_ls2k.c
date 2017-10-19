@@ -1232,6 +1232,7 @@ struct BonitoState {
     PCIBonitoState *pci_dev;
     MemoryRegion iomem_mem;
     MemoryRegion iomem_submem;
+    MemoryRegion iomem_subbigmem;
     MemoryRegion iomem_io;
     AddressSpace as_mem;
     AddressSpace as_io;
@@ -1462,6 +1463,7 @@ static PCIBus *pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     sysbus_mmio_map(sysbus, 1, 0x1a000000);
 
     memory_region_add_subregion(get_system_memory(), 0x10000000UL, &pcihost->iomem_submem);
+    memory_region_add_subregion(get_system_memory(), 0x40000000UL, &pcihost->iomem_subbigmem);
     memory_region_add_subregion(get_system_memory(), 0x18000000UL, &pcihost->iomem_io);
 
 //pci-synopgmac
@@ -1524,6 +1526,7 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     //memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", INT64_MAX);
 
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
+    memory_region_init_alias(&pcihost->iomem_subbigmem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x40000000, 0x20000000);
 
     memory_region_init(&pcihost->iomem_io, OBJECT(pcihost), "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
