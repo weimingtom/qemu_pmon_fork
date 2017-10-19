@@ -339,7 +339,7 @@ static void nand_reset(NANDFlashState *s)
     s->addrlen = 0;
     s->iolen = 0;
     s->offset = 0;
-    s->status &= NAND_IOSTATUS_UNPROTCT;
+    s->status = 0xe0;
 }
 
 static void nand_command(NANDFlashState *s)
@@ -974,6 +974,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 
 		s->regs.cmd |= CMD_DONE;
 		s->regs.cmd &= ~CMD_VALID;
+		s->regs.status_id_h = (s->regs.status_id_h&~0xff0000)|0xe00000;
 	}
 	else if(cmd & CMD_READID)
 	{
@@ -981,7 +982,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 		nand_command(s->chip);
 		memcpy(&s->regs.id_l,s->chip->io,4);
 		s->regs.id_l = 0xff|(s->chip->io[1]<<24)|(s->chip->io[2]<<16)|(s->chip->io[3]<<8);
-		s->regs.status_id_h = s->chip->io[0];
+		s->regs.status_id_h = s->chip->io[0] | 0xe00000;
 		s->regs.cmd |= CMD_DONE;
 		s->regs.cmd &= ~CMD_VALID;
 	}
@@ -990,7 +991,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 		s->chip->cmd = NAND_CMD_READSTATUS;
 		nand_command(s->chip);
 		s->regs.status_id_h &= 0xff;
-		memcpy((char *)(&s->regs.status_id_h)+1,s->chip->io,1);
+		memcpy((char *)(&s->regs.status_id_h)+2,s->chip->io,1);
 		s->regs.cmd |= CMD_DONE;
 		s->regs.cmd &= ~CMD_VALID;
 	}
@@ -1004,6 +1005,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 	{
 		s->chip->ioaddr = s->chip->io;
 		s->chip->iolen = 0;
+		s->regs.status_id_h = (s->regs.status_id_h&~0xff0000)|0xe00000;
 		dma_writenand(s);
 	}
 	else 
