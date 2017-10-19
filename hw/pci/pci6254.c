@@ -19,6 +19,7 @@ unsigned int mask;
 qemu_irq irq;
 MemoryRegion ram_vreg;
 MemoryRegion ram_vram;
+uint16_t vendor_id, device_id;
 } PCI6254State;
 
 typedef struct pci6254_pci_state {
@@ -65,8 +66,6 @@ static int pci_pci6254_init(PCIDevice *dev)
     uint8_t *pci_conf;
 
     pci_conf = d->card.config;
-    pci_config_set_vendor_id(pci_conf, PCI6254_VENDOR_ID);
-    pci_config_set_device_id(pci_conf, PCI6254_DEVICE_ID);
     pci_conf[0x04] = 0x07; /* command = I/O space, Bus Master */
     pci_config_set_class(pci_conf, PCI_CLASS_MEMORY_RAM);
     pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL; /* header_type */
@@ -78,7 +77,13 @@ static int pci_pci6254_init(PCIDevice *dev)
     pci6254_new(&d->pci6254);
 
 
+    pci_config_set_vendor_id(pci_conf, d->pci6254.vendor_id?:PCI6254_VENDOR_ID);
+    pci_config_set_device_id(pci_conf, d->pci6254.device_id?:PCI6254_DEVICE_ID);
+
     pci_register_bar(&d->card, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->pci6254.ram_vreg);
+    if(d->pci6254.vendor_id == 0x1022)
+    pci_register_bar(&d->card, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->pci6254.ram_vram);
+    else
     pci_register_bar(&d->card, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->pci6254.ram_vram);
 
     //d->pci6254.irq = d->card.irq[0];
@@ -86,16 +91,27 @@ static int pci_pci6254_init(PCIDevice *dev)
 }
 
 
+static Property pci6254_properties[] = {
+    DEFINE_PROP_UINT16("vendor", pci6254_pci_state, pci6254.vendor_id,PCI6254_VENDOR_ID),
+    DEFINE_PROP_UINT16("device", pci6254_pci_state, pci6254.device_id,PCI6254_DEVICE_ID),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
+
+
 static void pci6254_class_init(ObjectClass *klass, void *data)
 {
     //DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+    DeviceClass *dc = DEVICE_CLASS(klass);
 
     k->init = pci_pci6254_init;
     k->romfile = "vgabios-vmware.bin";
     k->vendor_id = PCI6254_VENDOR_ID;
     k->device_id = PCI6254_DEVICE_ID;
     k->class_id = PCI_CLASS_MEMORY_RAM;
+    dc->desc = "pci6254 Controller";
+    dc->props = pci6254_properties;
 }
 
 static const TypeInfo pci6254_type_info = {
