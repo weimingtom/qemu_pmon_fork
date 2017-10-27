@@ -51,8 +51,8 @@
 # define NAND_IOSTATUS_READY    (1 << 6)
 # define NAND_IOSTATUS_UNPROTCT	(1 << 7)
 
-# define MAX_PAGE		0x800
-# define MAX_OOB		0x40
+# define MAX_PAGE		0x100000
+# define MAX_OOB		0x1000
 
 typedef struct NANDFlashState NANDFlashState;
 struct NANDFlashState {
@@ -60,7 +60,7 @@ struct NANDFlashState {
 
     uint8_t manf_id, chip_id;
     uint8_t buswidth; /* in BYTES */
-    int size, pages;
+    uint64_t size, pages;
     int page_shift, oob_shift, erase_shift, addr_shift;
     uint8_t *storage;
     BlockBackend *blk;
@@ -134,10 +134,15 @@ static void mem_and(uint8_t *dest, const uint8_t *src, size_t n)
 # define PAGE_SECTORS		4
 # define ADDR_SHIFT		16
 # include "nand.c"
+# define PAGE_SIZE		4096
+# define PAGE_SHIFT		12
+# define PAGE_SECTORS		8
+# define ADDR_SHIFT		16
+# include "nand.c"
 
 /* Information based on Linux drivers/mtd/nand/nand_ids.c */
 static const struct {
-    int size;
+    uint64_t size;
     int width;
     int page_shift;
     int erase_shift;
@@ -228,6 +233,7 @@ static const struct {
     [0xd5] = { 2048,	8,	0, 0, LP_OPTIONS },
     [0xb5] = { 2048,	16,	0, 0, LP_OPTIONS16 },
     [0xc5] = { 2048,	16,	0, 0, LP_OPTIONS16 },
+    [0x48] = { 2048,	8,	12, 7, 0 },
 };
 
 static void nand_reset(DeviceState *dev)
@@ -263,6 +269,13 @@ static void nand_command(NANDFlashState *s)
         s->iolen = 0;
         nand_pushio_byte(s, s->manf_id);
         nand_pushio_byte(s, s->chip_id);
+	if(s->chip_id == 0x48)
+	{
+        nand_pushio_byte(s, '0'); /* Don't-care byte (often 0xa5) */
+        nand_pushio_byte(s, 0x26); /* Don't-care byte (often 0xa5) */
+        nand_pushio_byte(s, 0xa9); /* Don't-care byte (often 0xa5) */
+	 break;
+	}
         nand_pushio_byte(s, 'Q'); /* Don't-care byte (often 0xa5) */
         if (nand_flash_ids[s->chip_id].options & NAND_SAMSUNG_LP) {
             /* Page Size, Block Size, Spare Size; bit 6 indicates
@@ -397,6 +410,9 @@ static void nand_realize(DeviceState *dev, Error **errp)
         break;
     case 2048:
         nand_init_2048(s);
+        break;
+    case 4096:
+        nand_init_4096(s);
         break;
     default:
         error_setg(errp, "Unsupported NAND block size %#x",
