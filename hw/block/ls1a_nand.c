@@ -179,7 +179,7 @@ static int dma_next(NandState *s)
 
 static int nand_load_next(NandState *s)
 {
-	uint32_t offset,addr,iolen;
+	uint32_t offset,addr,iolen, oplen;
 	int cmd;
 	cmd = s->regs.cmd;
 
@@ -203,17 +203,20 @@ static int nand_load_next(NandState *s)
 		iolen = (1 << s->chip->page_shift) - offset;
 	}
 
+	oplen = min(s->regs.op_num, iolen);
+
 	s->chip->addr = addr;
 	s->chip->blk_load(s->chip, addr, offset);
-	s->chip->iolen = iolen;
-	s->regs.addr_h += 0x1;
-	return iolen;
+	s->chip->iolen = oplen;
+	if(s->chip->iolen >= iolen)
+	 s->regs.addr_h += 0x1;
+	return oplen;
 }
 
 
 static int nand_write_next(NandState *s)
 {
-	uint32_t offset,addr,iolen;
+	uint32_t offset,addr,iolen, oplen;
 	int cmd;
 	cmd = s->regs.cmd;
 
@@ -242,21 +245,25 @@ again:
 		iolen = (1 << s->chip->page_shift) - offset;
 	}
 
-	if(s->chip->iolen >= iolen)
+	oplen = min(s->regs.op_num, iolen);
+
+	if(oplen && s->chip->iolen >= oplen)
 	{
 		s->chip->addr = addr;
 		s->chip->offset = offset;
-		s->chip->iolen = iolen;
+		s->chip->iolen = oplen;
 
 		s->chip->blk_write(s->chip);
 
 		s->chip->ioaddr = s->chip->io;
 		s->chip->iolen = 0;
+		if(s->chip->iolen >= iolen)
 		s->regs.addr_h += 0x1;
+		s->regs.op_num -= oplen;
 		goto again;
 	}
 
- return iolen - s->chip->iolen;
+ return oplen - s->chip->iolen;
 }
 
 
@@ -325,7 +332,6 @@ static int dma_writenand(NandState *s)
 		s->chip->iolen += copied;
 		s->dma_desc.saddr += copied;
 		s->dma_desc.left -= copied;
-		s->regs.op_num -= copied;
 
 		if(!s->dma_desc.left)
 		 dma_next(s);
@@ -388,7 +394,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 
 	if((cmd&CMD_VALID) == 0)
 	{
-		s->regs.cmd |= CMD_DONE;
+		s->regs.cmd |= CMD_DONE|(0xf<<16);
 		return ;
 	}
 
