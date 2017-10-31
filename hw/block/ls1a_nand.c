@@ -429,7 +429,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 		s->chip->cmd = NAND_CMD_READID;
 		nand_command(s->chip);
 		memcpy(&s->regs.id_l,s->chip->io,4);
-		s->regs.id_l = 0xff|(s->chip->io[1]<<24)|(s->chip->io[2]<<16)|(s->chip->io[3]<<8);
+		s->regs.id_l = s->chip->io[4]|(s->chip->io[1]<<24)|(s->chip->io[2]<<16)|(s->chip->io[3]<<8);
 		s->regs.status_id_h = s->chip->io[0] | 0xe00000;
 		s->regs.cmd |= CMD_DONE;
 		s->regs.cmd &= ~CMD_VALID;
