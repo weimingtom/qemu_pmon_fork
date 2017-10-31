@@ -91,9 +91,9 @@ static void program_page(SPIFlashState *s, int addr, unsigned char value, int co
 	s->buf[addr] = value;
 	if(s->blk)
 	{
-		blk_pread(s->blk, addr, pp_buf, 1<<BDRV_SECTOR_BITS);
+		blk_pread(s->blk, addr&~0x1ff, pp_buf, 1<<BDRV_SECTOR_BITS);
 		pp_buf[addr&0x1ff] = value;
-		blk_pwrite(s->blk, addr, pp_buf, 1<<BDRV_SECTOR_BITS, 0);
+		blk_pwrite(s->blk, addr&~0x1ff, pp_buf, 1<<BDRV_SECTOR_BITS, 0);
 	}
 }
 
