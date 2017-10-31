@@ -271,7 +271,7 @@ static void nand_command(NANDFlashState *s)
         nand_pushio_byte(s, s->chip_id);
 	if(s->chip_id == 0x48)
 	{
-        nand_pushio_byte(s, '0'); /* Don't-care byte (often 0xa5) */
+        nand_pushio_byte(s, 0x0); /* Don't-care byte (often 0xa5) */
         nand_pushio_byte(s, 0x26); /* Don't-care byte (often 0xa5) */
         nand_pushio_byte(s, 0xa9); /* Don't-care byte (often 0xa5) */
 	 break;
