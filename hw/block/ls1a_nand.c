@@ -188,13 +188,13 @@ static int nand_load_next(NandState *s)
 	{
 		addr = PAGE_ADDR(s) << s->chip->addr_shift;
 		offset =  COLUM_ADDR(s);
-		iolen = (1 << s->chip->oob_shift) - offset;
+		iolen = s->chip->oob_size - offset;
 	}
 	else if((cmd & (CMD_SPARE |CMD_MAIN)) == (CMD_SPARE|CMD_MAIN))
 	{
 		addr = PAGE_ADDR(s) << s->chip->addr_shift;
 		offset =  COLUM_ADDR(s);
-		iolen = (1 << s->chip->page_shift) + (1 << s->chip->oob_shift) - offset;
+		iolen = (1 << s->chip->page_shift) + s->chip->oob_size - offset;
 	}
 	else
 	{
@@ -230,13 +230,13 @@ again:
  */
 		addr = PAGE_ADDR(s) << s->chip->addr_shift;
 		offset =  COLUM_ADDR(s);
-		iolen = (1 << s->chip->oob_shift) - offset;
+		iolen = s->chip->oob_size - offset;
 	}
 	else if((cmd & (CMD_SPARE |CMD_MAIN)) == (CMD_SPARE|CMD_MAIN))
 	{
 		addr = PAGE_ADDR(s) << s->chip->addr_shift;
 		offset =  COLUM_ADDR(s);
-		iolen = (1 << s->chip->page_shift) + (1 << s->chip->oob_shift) - offset;
+		iolen = (1 << s->chip->page_shift) + s->chip->oob_size - offset;
 	}
 	else
 	{
