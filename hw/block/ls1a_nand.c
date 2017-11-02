@@ -174,12 +174,12 @@ static int dma_next(NandState *s)
 
 
 
-#define PAGE_ADDR(s) (s->regs.addr_h&0xffff)
+#define PAGE_ADDR(s) ((uint64_t)(s->regs.addr_h&0x1ffffff))
 #define COLUM_ADDR(s) (s->regs.addr_l)
 
 static int nand_load_next(NandState *s)
 {
-	uint32_t offset,addr,iolen, oplen;
+	uint64_t offset,addr,iolen, oplen;
 	int cmd;
 	cmd = s->regs.cmd;
 
@@ -216,7 +216,7 @@ static int nand_load_next(NandState *s)
 
 static int nand_write_next(NandState *s)
 {
-	uint32_t offset,addr,iolen, oplen;
+	uint64_t offset,addr,iolen, oplen;
 	int cmd;
 	cmd = s->regs.cmd;
 
@@ -389,7 +389,7 @@ void ls1a_nand_set_dmaaddr(uint32_t val)
 static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 {
 	unsigned int i;
-	unsigned int  addr;
+	uint64_t  addr;
 	s->regs.cmd = cmd & 0x3ff;
 
 	if((cmd&CMD_VALID) == 0)
