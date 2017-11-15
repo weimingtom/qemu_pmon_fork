@@ -476,8 +476,18 @@ static void mips_ls1b_init (MachineState *args)
 			qdev_prop_set_uint32(dev1, "size", 0x100000);
 			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 			qdev_init_nofail(dev1);
+			cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
+			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
 		}
-		else dev1 = ssi_create_slave(bus, "ssi-sd");
+	}
+
+	{
+		DeviceState *dev,*dev1;
+		void *bus;
+		qemu_irq cs_line;
+		dev=sysbus_create_simple("ls1a_spi",0x1fec0000, ls1b_irq[9]);
+		bus = qdev_get_child_bus(dev, "ssi");
+		dev1 = ssi_create_slave(bus, "ssi-sd");
 		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
 	}
