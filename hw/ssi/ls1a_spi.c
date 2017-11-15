@@ -48,7 +48,7 @@ typedef struct {
     uint16_t tx_fifo[8];
     uint16_t rx_fifo[8];
     qemu_irq irq;
-    qemu_irq cs_line;
+    qemu_irq cs_line[4];
     SSIBus *ssi;
 } ls1a_spi_state;
 #define next_ptr(p) ((p+1)&7)
@@ -140,10 +140,16 @@ static void ls1a_spi_write(void *opaque, hwaddr offset, uint64_t value, unsigned
 	s->param = value;
 	break;
     case 0x5: /*softcs*/;
-	if((value&0x11)==0x11)
-	 qemu_irq_raise(s->cs_line);
-	else 
-	 qemu_irq_lower(s->cs_line);
+	{
+		int i;
+		for(i=0;i<4;i++)
+		{
+			if((value&(0x11<<i))==(0x11<<i))
+				qemu_irq_raise(s->cs_line[i]);
+			else if((value&(0x11<<i))==(0x01<<i))
+				qemu_irq_lower(s->cs_line[i]);
+		}
+	}
 	s->cs = value;
 	break;
     case 0x6:
@@ -214,11 +220,13 @@ static const MemoryRegionOps ls1a_spi_ops = {
 static int ls1a_spi_init(SysBusDevice *dev)
 {
     ls1a_spi_state *d = SYS_BUS_LS1ASPI(dev);
+    int i;
 
     memory_region_init_io(&d->iomem, NULL, &ls1a_spi_ops, (void *)d, "ls1a spi", 0x7);
 
     sysbus_init_irq(dev, &d->irq);
-    sysbus_init_irq(dev, &d->cs_line);
+    for(i=0;i<4;i++)
+    sysbus_init_irq(dev, &d->cs_line[i]);
     sysbus_init_mmio(dev, &d->iomem);
     d->ssi = ssi_create_bus(DEVICE(dev), "ssi");
     ls1a_spi_reset(d);
