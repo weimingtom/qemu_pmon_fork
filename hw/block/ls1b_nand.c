@@ -21,7 +21,11 @@ void nand_getpins(DeviceState *dev, int *rb);
 void nand_setio(DeviceState *dev, uint32_t value);
 uint32_t nand_getio(DeviceState *dev);
 uint32_t nand_getbuswidth(DeviceState *dev);
+#undef type_init
+#define type_init(...)
 #include "nand.c"
+#undef type_init
+#define type_init(function) module_init(function, MODULE_INIT_QOM)
 
 
 struct dma_desc{
@@ -569,5 +573,10 @@ static void ls1b_nand_register_types(void)
     type_register_static(&ls1b_nand_info);
 }
 
+void dummy_nand_register_types(void);
+void dummy_nand_register_types(void)
+{
+nand_register_types();
+}
 
 type_init(ls1b_nand_register_types)
