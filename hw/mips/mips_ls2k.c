@@ -829,7 +829,7 @@ static void mips_ls2k_init(MachineState *machine)
         loaderparams.kernel_filename = kernel_filename;
         loaderparams.kernel_cmdline = kernel_cmdline;
         loaderparams.initrd_filename = initrd_filename;
-        reset_info[0]->vector = load_kernel();
+        reset_info[0]->vector = load_kernel()?:reset_info[0]->vector;
     }
 
 
@@ -886,7 +886,7 @@ static void mips_ls2k_init(MachineState *machine)
 	  }
 #endif
 	}
-
+#if 0
 {
     PCIDevice *dev = pci_create_multifunction(pci_bus[1], -1, false, "pciram");
     qdev_prop_set_uint16(&dev->qdev, "vendor", 0x1002);
@@ -895,6 +895,7 @@ static void mips_ls2k_init(MachineState *machine)
     qdev_prop_set_uint32(&dev->qdev, "bar1", ~(0x04000-1));
     qdev_init_nofail(&dev->qdev);
 }
+#endif
 
 #if 0
 	{
