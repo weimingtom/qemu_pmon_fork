@@ -666,7 +666,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 
   gipiState * gipis =g_malloc0(sizeof(gipiState));
   gipi_iomem = g_new(MemoryRegion, 1);
-  memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x1000);
+  memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x100);
 
 
 	/* init CPUs */
@@ -1041,6 +1041,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls3a2h platform";
     mc->init = mips_ls3a2h_init;
+    mc->max_cpus = 16;
 }
 
 DEFINE_MACHINE("ls3a2h", mips_machine_init)
@@ -1420,10 +1421,14 @@ static IOMMUTLBEntry ls3a2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr 
 {
     //BonitoState *pcihost = container_of(iommu, BonitoState, iomem_mem);
     IOMMUTLBEntry ret;
+    hwaddr cpuaddr;
+
+	if(addr < 0x10000000) cpuaddr = addr;
+        else cpuaddr = addr - 0x80000000UL;
 
     ret = (IOMMUTLBEntry) {
         .target_as = &address_space_memory,
-        .translated_addr = addr|0x100000000ULL,
+        .translated_addr = cpuaddr,
         .addr_mask = -1ULL,
         .perm = IOMMU_RW,
     };
