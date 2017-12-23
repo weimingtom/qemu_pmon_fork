@@ -1489,5 +1489,5 @@ static void bonito_register_types(void)
 }
 
 type_init(bonito_register_types)
-#define LOONGSON_2H
+#define LOONGSON_3A2H
 #include "loongson_bootparam.c"

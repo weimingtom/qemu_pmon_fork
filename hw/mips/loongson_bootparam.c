@@ -239,33 +239,8 @@ struct efi_cpuinfo_loongson *init_cpu_info(void *g_cpuinfo_loongson)
 
   c->cpu_clock_freq = atoi(getenv("ENV_cpuclock")?:"200000000");
 
-#ifdef LOONGSON_3BSERVER
-  c->total_node = 4; // total node means what? why it can't be 8 ? // by xqch
-  c->nr_cpus = 16;
-#endif
-#ifdef LOONGSON_3ASERVER
-  c->total_node = 4;
-  c->nr_cpus = 8;
-#endif
-#ifdef LOONGSON_3BSINGLE
-  c->total_node = 4;
-  c->nr_cpus = 8;
-#endif
-
-#ifdef LOONGSON_3A2H
-  c->total_node = 1;
-  c->nr_cpus = 4;
-#endif
-
-#ifdef LOONGSON_2H
-  c->total_node = 1;
-  c->nr_cpus = 1;
-#endif
-
-#if defined(LOONGSON_3ASINGLE) || defined(LOONGSON_2K)
   c->total_node = 1;
   c->nr_cpus = smp_cpus;
-#endif
   c->cpu_startup_core_id = 0;
 
 return c;
@@ -349,7 +324,11 @@ struct interface_info *init_interface_info(void *g_interface)
   inter->size = flashsize/0x400;
   inter->flag = 1;
 
-  strcpy(inter->description,"PMON_Version_v2.1");
+#ifdef LOONGSON_3A2H
+  strcpy(inter->description,"Loongson-PMON-V3.3.1");
+#else
+  strcpy(inter->description,"Loongson-PMON-V3.3.0");
+#endif
  
   return inter;
 }
