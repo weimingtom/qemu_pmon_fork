@@ -74,6 +74,13 @@ do {} while (0)
 #define MAX_IDE_BUS 2
 #define TARGET_REALPAGE_MASK (TARGET_PAGE_MASK<<2)
 
+#define sysbus_mmio_map_iomem(iomem, busdev, n, devaddr) \
+{ \
+ SysBusDevice *s = busdev; \
+ s->mmio[n].addr = devaddr; \
+ memory_region_add_subregion(iomem, devaddr, s->mmio[n].memory); \
+}
+
 static const int ide_iobase[2] = { 0x1f0, 0x170 };
 static const int ide_iobase2[2] = { 0x3f6, 0x376 };
 static const int ide_irq[2] = { 14, 15 };
@@ -201,9 +208,9 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 			memory_region_transaction_commit();
 			break;
-		case 0x1bd00210:
+		case 0x1fd00210:
 		break;
-		case 0x1bd00220:
+		case 0x1fd00220:
 		break;
 	}
 }
@@ -215,9 +222,9 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 	{
 		case 0x1fe00180:
 		return reg180;
-		case 0x1bd00210:
+		case 0x1fd00210:
 		return 0x049bbf00;
-		case 0x1bd00220:
+		case 0x1fd00220:
 		return 0x08521120;
 		case 0x0ff00960:
 		return 0x100;
@@ -453,7 +460,7 @@ static void *ls1a_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq
 
 static const int sector_len = 32 * 1024;
 
-static PCIBus *pcibus_ls3a2h_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num));
+static PCIBus *pcibus_ls3a2h_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num),MemoryRegion *iomem_axi);
 
 
 
@@ -478,7 +485,7 @@ static void ls2h_set_irq(void *opaque, int irq, int level)
 	if(level) irqstatus |= 1<<irq;
 	else irqstatus &= ~(1<<irq);
 
-	qemu_set_irq(env->irq[2],!!irqstatus);
+	qemu_set_irq(env->irq[3],!!irqstatus);
 }
 
 #define MAX_CPUS 4
@@ -660,7 +667,9 @@ static void mips_ls3a2h_init(MachineState *machine)
 	PCIBus *pci_bus[4];
 	DriveInfo *flash_dinfo=NULL;
 	CPUClass *cc;
-	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
+	MemoryRegion *iomem_axi = g_new(MemoryRegion, 1);
+	MemoryRegion *iomem_axi1 = g_new(MemoryRegion, 1);
+	MemoryRegion *iomem_axi2 = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
 	int i;
 
@@ -717,19 +726,25 @@ static void mips_ls3a2h_init(MachineState *machine)
 	memory_region_add_subregion(address_space_mem, 0, ram1);
 	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
 
-
-        //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls3a2h axi", UINT32_MAX);
-        memory_region_init(iomem_root, NULL,  "ls3a2h axi", UINT32_MAX);
-        memory_region_init(iomem_root, NULL,  "ls3a2h axi", UINT32_MAX);
-	address_space_init(as,iomem_root, "ls3a2h axi memory");
+        memory_region_init(iomem_axi, NULL,  "ls3a2h axi", UINT64_MAX);
+	address_space_init(as,iomem_axi, "ls3a2h axi memory");
 
 	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram2, NULL, "lowmem", ram, 0, ram_size);
-        memory_region_add_subregion(iomem_root, 0, ram2);
+	MemoryRegion *ram3 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram2, NULL, "aximem", ram, 0, ram_size);
+	memory_region_init_alias(ram3, NULL, "axilowmem", ram, 0, 0x10000000);
+        memory_region_add_subregion(iomem_axi, 0, ram3);
+        memory_region_add_subregion(iomem_axi, 0x80000000, ram2);
+
+	memory_region_init_alias(iomem_axi1, NULL, "iosubmem", iomem_axi, 0x10000000, 0x09000000);
+	memory_region_init_alias(iomem_axi2, NULL, "iosubmem", iomem_axi, 0x1f000000, 0x01000000);
+	memory_region_add_subregion(address_space_mem, 0x10000000ULL, iomem_axi1);
+	memory_region_add_subregion(address_space_mem, 0x1b000000ULL, iomem_axi2);
 
 
-	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
-	//memory_region_add_subregion(address_space_mem, 0x1bbf0000, iomem);
+
+	//memory_region_init_iommu(address_space_mem,);
+        //memory_region_init_iommu(address_space_mem, OBJECT(dev), &ls3a2h_pciedma_iommu_ops, "iommu-ls3a2hpcie", UINT64_MAX);
 
     /* Try to load a BIOS image. If this fails, we continue regardless,
        but initialize the hardware ourselves. When a kernel gets
@@ -780,45 +795,41 @@ static void mips_ls3a2h_init(MachineState *machine)
 
 
 
-	/* Register 64 KB of IO space at 0x1b000000 */
-	//isa_mmio_init(0x1bf00000, 0x00010000);
+	/* Register 64 KB of IO space at 0x1f000000 */
+	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
 	ls2h_irq = qemu_allocate_irqs(ls2h_set_irq, env, 4);
-	ls3a2h_irq =ls1a_intctl_init(get_system_memory(), 0x1Fd00040, ls2h_irq[0]);
-	ls3a2h_irq1=ls1a_intctl_init(get_system_memory(), 0x1Fd00058, ls2h_irq[1]);
-	ls1a_intctl_init(get_system_memory(), 0x1Fd00070, ls2h_irq[2]);
-	ls1a_intctl_init(get_system_memory(), 0x1Fd00088, ls2h_irq[3]);
+	ls3a2h_irq =ls1a_intctl_init(iomem_axi, 0x1fd00040, ls2h_irq[0]);
+	ls3a2h_irq1=ls1a_intctl_init(iomem_axi, 0x1fd00058, ls2h_irq[1]);
+	ls1a_intctl_init(iomem_axi, 0x1fd00070, ls2h_irq[2]);
+	ls1a_intctl_init(iomem_axi, 0x1fd00088, ls2h_irq[3]);
 
     if (serial_hds[0])
             serial_mm_init(address_space_mem, 0x1fe001e0, 0,env->irq[2],115200,serial_hds[0], DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hds[1])
-		serial_mm_init(address_space_mem, 0x1be80000, 0,ls3a2h_irq[2],115200,serial_hds[1], DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(iomem_axi, 0x1fe80000, 0,ls3a2h_irq[2],115200,serial_hds[1], DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hds[2])
-		serial_mm_init(address_space_mem, 0x1be81000, 0,ls3a2h_irq[3],115200,serial_hds[2], DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(iomem_axi, 0x1fe81000, 0,ls3a2h_irq[3],115200,serial_hds[2], DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hds[3])
-		serial_mm_init(address_space_mem, 0x1be82000, 0,ls3a2h_irq[4],115200,serial_hds[3], DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(iomem_axi, 0x1fe82000, 0,ls3a2h_irq[4],115200,serial_hds[3], DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hds[4])
-		serial_mm_init(address_space_mem, 0x1be83000, 0,ls3a2h_irq[5],115200,serial_hds[4], DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(iomem_axi, 0x1fe83000, 0,ls3a2h_irq[5],115200,serial_hds[4], DEVICE_NATIVE_ENDIAN);
 
-	sysbus_create_simple("ls2h_fb", 0x1be50000, NULL);
-
-#if 0
-	{
-		MemoryRegion *i8042 = g_new(MemoryRegion, 1);
-		i8042_mm_init(ls3a2h_irq[12], ls3a2h_irq[11], i8042, 0x10, 0x4);
-		memory_region_add_subregion(address_space_mem, 0x1be60000, i8042);
-	}
-#endif
+	DeviceState *dev;
+	dev = sysbus_create_simple("ls2h_fb", -1, NULL);
+	sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fe50000);
+	qdev_prop_set_ptr(dev, "root", iomem_axi);
 
 
-	pci_bus[0]=pcibus_ls3a2h_init(0, &ls3a2h_irq1[20],pci_ls3a2h_map_irq);
-	pci_bus[1]=pcibus_ls3a2h_init(1, &ls3a2h_irq1[21],pci_ls3a2h_map_irq);
-	pci_bus[2]=pcibus_ls3a2h_init(2, &ls3a2h_irq1[22],pci_ls3a2h_map_irq);
-	pci_bus[3]=pcibus_ls3a2h_init(3, &ls3a2h_irq1[23],pci_ls3a2h_map_irq);
+
+	pci_bus[0]=pcibus_ls3a2h_init(0, &ls3a2h_irq1[20],pci_ls3a2h_map_irq, iomem_axi);
+	pci_bus[1]=pcibus_ls3a2h_init(1, &ls3a2h_irq1[21],pci_ls3a2h_map_irq, iomem_axi);
+	pci_bus[2]=pcibus_ls3a2h_init(2, &ls3a2h_irq1[22],pci_ls3a2h_map_irq, iomem_axi);
+	pci_bus[3]=pcibus_ls3a2h_init(3, &ls3a2h_irq1[23],pci_ls3a2h_map_irq, iomem_axi);
 
 
 	{
@@ -826,9 +837,10 @@ static void mips_ls3a2h_init(MachineState *machine)
 		dev = qdev_create(NULL, "exynos4210-ehci-usb");
 		qdev_prop_set_ptr(dev, "as", as);
 		qdev_init_nofail(dev);
-		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1be00000);
+
+		sysbus_mmio_map_iomem(iomem_axi,SYS_BUS_DEVICE(dev), 0, 0x1fe00000);
+
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls3a2h_irq1[0]);
-	//sysbus_create_simple("exynos4210-ehci-usb",0x1be00000, ls3a2h_irq1[0]);
 
 	}
 	{
@@ -838,10 +850,9 @@ static void mips_ls3a2h_init(MachineState *machine)
 		qdev_prop_set_uint64(dev, "dma-offset", 0);
 		qdev_prop_set_ptr(dev, "as", as);
 		qdev_init_nofail(dev);
-		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1be08000);
+		sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fe08000);
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls3a2h_irq1[1]);
 
-		//dev = sysbus_create_simple("sysbus-ohci", 0x1be08000, ls3a2h_irq1[1]);
 	}
 
 	{
@@ -852,7 +863,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 		qdev_prop_set_uint32(dev, "num-ports", 1);
 		qdev_prop_set_ptr(dev, "as", as);
 		qdev_init_nofail(dev);
-		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1be30000);
+		sysbus_mmio_map_iomem(iomem_axi,SYS_BUS_DEVICE(dev), 0, 0x1fe30000);
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls3a2h_irq1[5]);
 		hd=drive_get_next(IF_IDE);
 		if(hd)
@@ -869,14 +880,14 @@ static void mips_ls3a2h_init(MachineState *machine)
 
 
 #if 0
-	sysbus_create_simple("ls3a2h_acpi",0x1be7c000, ls3a2h_irq[0]);
+	sysbus_create_simple("ls3a2h_acpi",0x1fe7c000, ls3a2h_irq[0]);
 #endif
 
 	if (nb_nics) {
 #if 0
 	int i;
 	int devfn;
-		//gmac_sysbus_create(&nd_table[0], 0x1be10000, ls3a2h_irq1[3]);
+		//gmac_sysbus_create(&nd_table[0], 0x1fe10000, ls3a2h_irq1[3]);
 	   for(i=0,devfn=PCI_DEVFN(2, 0);i<nb_nics;i++,devfn += PCI_DEVFN(1, 0))
 	  {
 		PCIDevice *pci_dev;
@@ -903,7 +914,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 			qdev_prop_set_ptr(dev, "as", as);
 			qdev_prop_set_int32(dev, "enh_desc", 1);
 			qdev_init_nofail(dev);
-			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1be10000);
+			sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fe10000);
 			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls3a2h_irq1[3]);
 		}
 #endif
@@ -911,7 +922,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 
 #if 0
 	{
-		sysbus_create_simple("ls3a2h_wdt", 0x1be7c060, NULL);
+		sysbus_create_simple("ls3a2h_wdt", 0x1fe7c060, NULL);
 	}
 #endif
 
@@ -919,14 +930,14 @@ static void mips_ls3a2h_init(MachineState *machine)
 		DeviceState *dev,*dev1;
 		void *bus;
 		qemu_irq cs_line;
-		dev=sysbus_create_simple("ls1a_spi",0x1be70000, ls3a2h_irq[8]);
+		dev=sysbus_create_simple("ls1a_spi",0x1fe70000, ls3a2h_irq[8]);
 		bus = qdev_get_child_bus(dev, "ssi");
 		if(flash_dinfo)
 		{
 			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
 			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
 			qdev_prop_set_uint32(dev1, "size", 0x100000);
-			qdev_prop_set_uint64(dev1, "addr", 0x1bc00000);
+			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 			qdev_init_nofail(dev1);
 		}
 		else dev1 = ssi_create_slave(bus, "ssi-sd");
@@ -944,34 +955,37 @@ static void mips_ls3a2h_init(MachineState *machine)
 		printf("ac97 dev=%p\n",dev);
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1be74000);
+		sysbus_mmio_map(s, 0, 0x1fe74000);
 		sysbus_connect_irq(s, 0, ls3a2h_irq[14]);
 		sysbus_connect_irq(s, 1, ls3a2h_irq[15]);
 	}
 #endif
 
-		sysbus_create_simple("ls1a_dma",0x1bd00100, NULL);
-		sysbus_create_simple("ls1a_nand",0x1bee0000, ls3a2h_irq[13]);
+		dev = sysbus_create_simple("ls1a_dma", -1, NULL);
+		sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fd00100);
+
+		dev = sysbus_create_simple("ls1a_nand", -1, ls3a2h_irq[13]);
+		sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fee0000);
+		qdev_prop_set_ptr(dev, "as", as);
 
 
 #if 1
 	{
 		DeviceState *dev;
 		SysBusDevice *s;
-		dev = qdev_create(NULL, "ls1a_rtc");
-		qdev_init_nofail(dev);
-		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1bef8020);
-		sysbus_connect_irq(s, 0, ls3a2h_irq[14]);
-		sysbus_connect_irq(s, 1, ls3a2h_irq[15]);
-		sysbus_connect_irq(s, 2, ls3a2h_irq[16]);
+		hwaddr devaddr =  0x1fef8020;
+		dev=sysbus_create_varargs("ls1a_rtc", -1, ls3a2h_irq[14], ls3a2h_irq[15], ls3a2h_irq[16], NULL);
+		s =  SYS_BUS_DEVICE(dev);
+		s->mmio[0].addr = devaddr;
+		memory_region_add_subregion(iomem_axi, devaddr, s->mmio[0].memory);
 	}
 #endif
 
 	{
 		DeviceState *dev;
 		void *bus;
-		dev=sysbus_create_simple("ls1a_i2c",0x1be90000, ls3a2h_irq[7]);
+		dev=sysbus_create_simple("ls1a_i2c", -1, ls3a2h_irq[7]);
+		sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fe90000);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 	}
@@ -979,7 +993,8 @@ static void mips_ls3a2h_init(MachineState *machine)
 	{
 		DeviceState *dev;
 		void *bus;
-		dev=sysbus_create_simple("ls1a_i2c",0x1be91000, ls3a2h_irq[8]);
+		dev=sysbus_create_simple("ls1a_i2c", -1, ls3a2h_irq[8]);
+		sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fe91000);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 	}
@@ -988,12 +1003,12 @@ static void mips_ls3a2h_init(MachineState *machine)
 	{
 
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1bd00210, "0x1bd00210", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1bd00210, iomem);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00210, "0x1fd00210", 0x4);
+                memory_region_add_subregion(iomem_axi, 0x1fd00210, iomem);
 		/*ins*/
                 iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1bd00800, "0x1bd00800", 0x34);
-                memory_region_add_subregion(address_space_mem, 0x1bd00800, iomem);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00800, "0x1fd00800", 0x34);
+                memory_region_add_subregion(iomem_axi, 0x1fd00800, iomem);
 	}
 
 
@@ -1026,7 +1041,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 		dev = qdev_create(NULL, "intel-hda");
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1be20000);
+		sysbus_mmio_map(s, 0, 0x1fe20000);
 		sysbus_connect_irq(s, 0, ls3a2h_irq1[25]);
 		hdabus = QLIST_FIRST(&dev->child_bus);
 		codec = qdev_create(hdabus, "hda-duplex");
@@ -1360,7 +1375,7 @@ static const TypeInfo bonito_info = {
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 
-static PCIBus *pcibus_ls3a2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num))
+static PCIBus *pcibus_ls3a2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *iomem_axi)
 {
     DeviceState *dev;
     BonitoState *pcihost;
@@ -1393,15 +1408,14 @@ static PCIBus *pcibus_ls3a2h_init(int busno, qemu_irq *pic, int (*board_map_irq)
 
     sysbus = SYS_BUS_DEVICE(s->pcihost);
      /*local map*/
-    sysbus_mmio_map(sysbus, 0, LS2H_PCIE_REG_BASE_PORT(busno));
+    sysbus_mmio_map_iomem(iomem_axi, sysbus, 0, LS2H_PCIE_REG_BASE_PORT(busno));
      /*self header*/
-    sysbus_mmio_map(sysbus, 1, LS2H_PCIE_PORT_HEAD_BASE_PORT(busno));
+    sysbus_mmio_map_iomem(iomem_axi, sysbus, 1, LS2H_PCIE_PORT_HEAD_BASE_PORT(busno));
      /*devices header*/
-    sysbus_mmio_map(sysbus, 2, LS3H_PCIE_DEV_HEAD_BASE_PORT(busno));
+    sysbus_mmio_map_iomem(iomem_axi, sysbus, 2, LS3H_PCIE_DEV_HEAD_BASE_PORT(busno));
 
-    memory_region_add_subregion(get_system_memory(), 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
-    memory_region_add_subregion(get_system_memory(), 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
-
+    memory_region_add_subregion(iomem_axi, 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
+    memory_region_add_subregion(iomem_axi, 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
 
     return bus2;
 }
@@ -1446,11 +1460,11 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     BonitoState *pcihost;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
 
-    memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT32_MAX);
+    memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT64_MAX);
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls3a2h_pciedma_iommu_ops, "iommu-ls3a2hpcie", UINT64_MAX);
+//    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls3a2h_pciedma_iommu_ops, "iommu-ls3a2hpcie", UINT64_MAX);
 
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
 
