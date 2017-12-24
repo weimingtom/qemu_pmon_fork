@@ -1875,6 +1875,8 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	int once;
 	int first;
 	int last;
+	int lmask = s->enh_desc?0x1fff:0x7ff;
+	int lshift = s->enh_desc?16:11;
 
 	size=size_;
 	pos = 0;
@@ -1891,17 +1893,17 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	if(desc.status&DescOwnByDma)
 	{
 	  //printf("desc.length=0x%x\n", desc.length);
-	  if(desc.length&0x7ff)
+	  if(desc.length&lmask)
 	  {
-		  once=min(desc.length&0x7ff,size);
+		  once=min(desc.length&lmask,size);
 		  dma_memory_write(s->as,desc.buffer1,buf+pos,once);
 		  pos += once;
 		  size -= once;
 	  }
 
-	  if(!(desc.length & length_RxDescChain(s)) && size && ((desc.length>>11)&0x7ff))
+	  if(!(desc.length & length_RxDescChain(s)) && size && ((desc.length>>lshift)&lmask))
 	  {
-		  once=min((desc.length>>11)&0x7ff,size);
+		  once=min((desc.length>>lshift)&lmask,size);
 		  dma_memory_write(s->as,desc.buffer2,buf+pos,once);
 		  pos += once;
 		  size -= once;
