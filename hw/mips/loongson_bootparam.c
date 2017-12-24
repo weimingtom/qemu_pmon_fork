@@ -79,6 +79,53 @@ void init_loongson_params(struct loongson_params *lp)
 }
 
 
+
+#ifdef LOONGSON_3A2H
+struct efi_memory_map_loongson * init_memory_map(void *g_map)
+{
+	struct efi_memory_map_loongson *emap = g_map;
+	int i = 0;
+	unsigned long long size = atoi(getenv("highmemsize"))<<20;
+
+#define EMAP_ENTRY(entry, node, type, start, size) \
+	emap->map[(entry)].node_id = (node), \
+	emap->map[(entry)].mem_type = (type), \
+	emap->map[(entry)].mem_start = (start), \
+	emap->map[(entry)].mem_size = (size), \
+	(entry)++
+
+#ifndef UMA_VIDEO_RAM
+	EMAP_ENTRY(i, 0, SYSTEM_RAM_LOW, 0x00200000, 0x0ee);
+#else
+	EMAP_ENTRY(i, 0, SYSTEM_RAM_LOW, 0x00200000, 0x0ee);
+#endif
+
+	/* for entry with mem_size < 1M, we set bit31 to 1 to indicate
+	 * that the unit in mem_size is Byte not MBype */
+	EMAP_ENTRY(i, 0, SMBIOS_TABLE, (SMBIOS_PHYSICAL_ADDRESS & 0x0fffffff),
+			(SMBIOS_SIZE_LIMIT | 0x80000000));
+
+#ifndef UMA_VIDEO_RAM
+	EMAP_ENTRY(i, 0, SYSTEM_RAM_HIGH, 0x90000000, size >> 20);
+#else
+	/*add UMA_VIDEO_RAM area to reserved 0x100 MB memory for GPU vram*/
+
+	EMAP_ENTRY(i, 0, UMA_VIDEO_RAM, 0x90000000, 0x100);
+	EMAP_ENTRY(i, 0, SYSTEM_RAM_HIGH, 0xa0000000, (size >> 20) - 0x100);
+//	EMAP_ENTRY(i, 0, UMA_VIDEO_RAM, 0x110000000, 0x100);
+//	EMAP_ENTRY(i, 0, SYSTEM_RAM_HIGH, 0x120000000, (size >> 20) - 0x100);
+
+#endif
+	emap->vers = 1;
+	emap->nr_map = i;
+
+	return emap;
+#undef	EMAP_ENTRY
+}
+
+#else
+
+
 struct efi_memory_map_loongson * init_memory_map(void *g_map)
 {
   struct efi_memory_map_loongson *emap = g_map;
@@ -103,6 +150,11 @@ struct efi_memory_map_loongson * init_memory_map(void *g_map)
   emap->map[0].mem_type = 1;
   emap->map[0].mem_start = 0x01000000;
   emap->map[0].mem_size = atoi(getenv("memsize")) - 112;
+#elif defined(LOONGSON_3A2H) 
+  emap->map[0].node_id = 0;
+  emap->map[0].mem_type = 1;
+  emap->map[0].mem_start = 0x00200000;
+  emap->map[0].mem_size = atoi(getenv("memsize")) - 2;
 #else 
   emap->map[0].node_id = 0;
   //strcpy(emap->map[0].mem_name, "node0_low");
@@ -210,6 +262,7 @@ struct efi_memory_map_loongson * init_memory_map(void *g_map)
 
   return emap;
 }
+#endif
 
 #ifdef LOONGSON_3BSINGLE
 #ifdef LOONGSON_3B1500

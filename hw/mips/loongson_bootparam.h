@@ -3,17 +3,18 @@
 
 #define DMA64_SUPPORT 0x2
 
-#define SYSTEM_RAM_LOW 1
-#define SYSTEM_RAM_HIGH 2
-#define MEM_RESERVEI 3
-#define PCI_IO 4
-#define PCI_MEM 5
-#define LOONGSON_CFG_REG 6
-#define VIDEO_ROM 7
-#define DAPTER_ROM 8 
-#define ACPI_TABLE 9
-#define SMBIOS_TABLE 10
-#define MAX_MEMORY_TYPE 11
+#define SYSTEM_RAM_LOW		1
+#define SYSTEM_RAM_HIGH		2
+#define MEM_RESERVED		3
+#define PCI_IO			4
+#define PCI_MEM			5
+#define LOONGSON_CFG_REG	6
+#define VIDEO_ROM		7
+#define ADAPTER_ROM		8
+#define ACPI_TABLE		9
+#define SMBIOS_TABLE		10
+#define UMA_VIDEO_RAM		11
+#define MAX_MEMORY_TYPE		12
 
 typedef unsigned long long u64;
 typedef unsigned int u32;
