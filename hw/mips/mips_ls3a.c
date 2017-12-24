@@ -503,6 +503,43 @@ static void mips_ls3a_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
+
+static void mips_qemu_writel (void *opaque, hwaddr addr,
+		uint64_t val, unsigned size)
+{
+	static int t = 0;
+	addr=((hwaddr)(long)opaque) + addr;
+	switch(addr)
+	{
+		case 0x1ff00000:
+		t++;
+		if(t&1)
+		 do_raise_exception_err(mycpu[0], EXCP_CACHE, 0, 0);
+		break;
+	}
+}
+
+static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
+{
+	addr=((hwaddr)(long)opaque) + addr;
+	switch(addr)
+	{
+		case 0x1ff00000:
+		return random();
+		break;
+	}
+	return 0;
+}
+
+static const MemoryRegionOps mips_qemu_ops = {
+    .read = mips_qemu_readl,
+    .write = mips_qemu_writel,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
+
+
+
 static void mips_ls3a_init (MachineState *args)
 {
 	ram_addr_t ram_size = args->ram_size;
@@ -522,7 +559,9 @@ static void mips_ls3a_init (MachineState *args)
 	CPUMIPSState *env;
 	ResetData *reset_info[10];
 	qemu_irq *i8259,*ls3a_serial_irq ;
+#ifdef USE_IDE
 	DriveInfo *hd[MAX_IDE_BUS * MAX_IDE_DEVS];
+#endif
 	int be;
 	DriveInfo *dinfo=NULL;
 	int i;
@@ -613,7 +652,7 @@ static void mips_ls3a_init (MachineState *args)
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
         vmstate_register_ram_global(bios);
-        memory_region_set_readonly(bios, true);
+        memory_region_set_readonly(bios, false);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 
         load_image_targphys(filename, 0x1fc00000, BIOS_SIZE);
@@ -630,7 +669,7 @@ static void mips_ls3a_init (MachineState *args)
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
         vmstate_register_ram_global(bios);
-        memory_region_set_readonly(bios, true);
+        memory_region_set_readonly(bios, false);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 
 	bios_size = sizeof(aui_boot_code);
@@ -702,6 +741,7 @@ static void mips_ls3a_init (MachineState *args)
         exit(1);
     }
 
+#ifdef USE_IDE
     for(i = 0; i < MAX_IDE_BUS * MAX_IDE_DEVS; i++) {
          hd[i] = drive_get(IF_IDE, i / MAX_IDE_DEVS, i % MAX_IDE_DEVS);
     }
@@ -711,6 +751,7 @@ static void mips_ls3a_init (MachineState *args)
         isa_ide_init(isa_bus, ide_iobase[i], ide_iobase2[i], ide_irq[i],
                      hd[MAX_IDE_DEVS * i],
 		     hd[MAX_IDE_DEVS * i + 1]);
+#endif
 
     //isa_create_simple(isa_bus, "i8042");
 {
@@ -737,6 +778,13 @@ MemoryRegion *iomem;
   	p = memory_region_get_ram_ptr(iomem);
 	memset(p,0,0x800);
 }
+
+	{
+		MemoryRegion *iomem;
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1ff00000, "cachelock", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1ff00000, iomem);
+	}
 }
 
 static void mips_ls3a_reset(void)
