@@ -731,8 +731,10 @@ static void mips_ls3a2h_init(MachineState *machine)
 
 	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
 	MemoryRegion *ram3 = g_new(MemoryRegion, 1);
+	MemoryRegion *ram4 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram2, NULL, "aximem", ram, 0, ram_size);
 	memory_region_init_alias(ram3, NULL, "axilowmem", ram, 0, 0x10000000);
+	memory_region_init_alias(ram4, NULL, "aximem", ram, 0, ram_size);
         memory_region_add_subregion(iomem_axi, 0, ram3);
         memory_region_add_subregion(iomem_axi, 0x80000000, ram2);
 
@@ -740,6 +742,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 	memory_region_init_alias(iomem_axi2, NULL, "iosubmem", iomem_axi, 0x1f000000, 0x01000000);
 	memory_region_add_subregion(address_space_mem, 0x10000000ULL, iomem_axi1);
 	memory_region_add_subregion(address_space_mem, 0x1b000000ULL, iomem_axi2);
+	memory_region_add_subregion(address_space_mem, 0x00000e0000000000ULL, ram4);
 
 
 
