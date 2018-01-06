@@ -43,6 +43,7 @@
 #include "hw/ide.h"
 #include "hw/timer/mc146818rtc.h"
 #include "hw/pci/pci_host.h"
+#include "hw/ssi/ssi.h"
 #include "loongson_bootparam.h"
 
 #ifdef DEBUG_LS3A
@@ -609,11 +610,10 @@ static void mips_ls3a_init (MachineState *args)
 #ifdef USE_IDE
 	DriveInfo *hd[MAX_IDE_BUS * MAX_IDE_DEVS];
 #endif
-	int be;
-	DriveInfo *dinfo=NULL;
 	int i;
 	DeviceState *dev;
 	CPUClass *cc;
+	DriveInfo *flash_dinfo=NULL;
 
 
     /* init CPUs */
@@ -678,6 +678,7 @@ static void mips_ls3a_init (MachineState *args)
 	memory_region_add_subregion(address_space_mem, 0x80000000, ram);
 
 
+
     /* Try to load a BIOS image. If this fails, we continue regardless,
        but initialize the hardware ourselves. When a kernel gets
        preloaded we also initialize the hardware, since the BIOS wasn't
@@ -690,11 +691,6 @@ static void mips_ls3a_init (MachineState *args)
     } else {
         bios_size = -1;
     }
-#ifdef TARGET_WORDS_BIGENDIAN
-    be = 1;
-#else
-    be = 0;
-#endif
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
@@ -703,15 +699,8 @@ static void mips_ls3a_init (MachineState *args)
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 
         load_image_targphys(filename, 0x1fc00000, BIOS_SIZE);
-    } else if ((dinfo = drive_get(IF_PFLASH, 0, 0)) != NULL) {
-        uint32_t mips_rom = 0x00400000;
-        if (!pflash_cfi01_register(0x1fc00000, NULL, "mips_r4k.bios", mips_rom,
-                                   blk_by_legacy_dinfo(dinfo), sector_len,
-                                   mips_rom / sector_len,
-                                   4, 0, 0, 0, 0, be)) {
-            fprintf(stderr, "qemu: Error registering flash memory.\n");
-	}
-    }
+    } else if ((flash_dinfo = drive_get_next(IF_PFLASH))) {
+   }
     else {
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
@@ -838,6 +827,25 @@ MemoryRegion *iomem;
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x3ff00200, "cachelock", 0x100);
                 memory_region_add_subregion(address_space_mem, 0x3ff00200, iomem);
+	}
+
+	{
+		DeviceState *dev,*dev1;
+		void *bus;
+		qemu_irq cs_line;
+		dev=sysbus_create_simple("ls1a_spi",0x1fe00220, NULL);
+		bus = qdev_get_child_bus(dev, "ssi");
+		if(flash_dinfo)
+		{
+			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
+			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
+			qdev_prop_set_uint32(dev1, "size", 0x200000);
+			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
+			qdev_init_nofail(dev1);
+		}
+		else dev1 = ssi_create_slave(bus, "ssi-sd");
+		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
+		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
 	}
 }
 
