@@ -126,10 +126,12 @@ static void ls1a_spi_write(void *opaque, hwaddr offset, uint64_t value, unsigned
         break;
     case 0x02: /* DR */
         val = ssi_transfer(s->ssi, value);
+		s->spsr &= ~0x80;
 		if(!(s->spsr&R_FULL))
 		{
 		s->rx_fifo[s->rx_fifo_wptr]=val; 
 		s->rx_fifo_wptr=next_ptr(s->rx_fifo_wptr);
+		s->spsr |= 0x80;
 		}
 			ls1a_spi_update(s);
         break;
