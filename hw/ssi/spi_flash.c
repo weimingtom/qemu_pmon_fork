@@ -198,7 +198,6 @@ static uint32_t spi_flash_transfer(SSISlave *dev, uint32_t val)
 			  spi_addr = (spi_addr<<8)|val_data;
 			else if(state_count == 4) {
 				;//dummy
-			} else {
 				state_count = spi_addr;
 				s->mode = SPI_FLASH_READ_DATA;
 			}
