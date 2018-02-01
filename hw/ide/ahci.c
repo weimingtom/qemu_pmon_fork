@@ -1537,7 +1537,8 @@ void ahci_realize(AHCIState *s, DeviceState *qdev, AddressSpace *as, int ports)
     qemu_irq *irqs;
     int i;
 
-    s->as = as;
+    if(!s->as)
+	    s->as = as;
     s->ports = ports;
     s->dev = g_new0(AHCIDevice, ports);
     ahci_reg_init(s);
