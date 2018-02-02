@@ -2048,6 +2048,7 @@ static Property gmac_pci_properties[] = {
     DEFINE_NIC_PROPERTIES(gmac_pci_state, gmac.conf),
     DEFINE_PROP_PTR("as", gmac_pci_state, gmac.as_ptr),
     DEFINE_PROP_INT32("buswidth", gmac_pci_state, gmac.buswidth, 128),
+    DEFINE_PROP_INT32("enh_desc", gmac_pci_state, gmac.enh_desc, 1),
     DEFINE_PROP_END_OF_LIST(),
 };
 
