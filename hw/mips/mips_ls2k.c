@@ -864,11 +864,11 @@ static void mips_ls2k_init(MachineState *machine)
 	sysbus_create_simple("ls2k_acpi",0x1fe7c000, ls2k_irq[0]);
 #endif
 
-	if (nb_nics) {
+	if (nb_nics>2) {
 #if 1
 	int i;
 	int devfn;
-	   for(i=0,devfn=PCI_DEVFN(0, 0);i<nb_nics;i++,devfn += PCI_DEVFN(1, 0))
+	   for(i=2,devfn=PCI_DEVFN(0, 0);i<nb_nics;i++,devfn += PCI_DEVFN(1, 0))
 	  {
 		PCIDevice *pci_dev;
 		DeviceState *dev;
@@ -1429,12 +1429,18 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
     pci_bus[1] = bus2;
 
-    d = pci_create(pcihost->bus, PCI_DEVFN(3, 0), "pci-synopgmac");
+    d = pci_create(pcihost->bus, PCI_DEVFN(1, 0), "pci-synopgmac");
+    dev = DEVICE(d);
+    qdev_set_nic_properties(dev, &nd_table[0]);
+    qdev_prop_set_int32(dev, "enh_desc", 1);
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
 
-    d = pci_create(pcihost->bus, PCI_DEVFN(1, 0), "pci-synopgmac");
+    d = pci_create(pcihost->bus, PCI_DEVFN(3, 0), "pci-synopgmac");
+    dev = DEVICE(d);
+    qdev_set_nic_properties(dev, &nd_table[1]);
+    qdev_prop_set_int32(dev, "enh_desc", 1);
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
