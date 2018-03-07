@@ -724,7 +724,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
 	memory_region_add_subregion(address_space_mem, 0, ram1);
-	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
+	memory_region_add_subregion(address_space_mem, 0x80000000ULL, ram);
 
         memory_region_init(iomem_axi, NULL,  "ls3a2h axi", UINT64_MAX);
 	address_space_init(as,iomem_axi, "ls3a2h axi memory");
