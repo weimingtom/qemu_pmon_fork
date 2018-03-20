@@ -54,16 +54,20 @@ DescTxLast_ENH = 0x20000000,
 DescTxLast_NENH= 0x40000000,
 DescTxFirst_ENH = 0x10000000,
 DescTxFirst_NENH = 0x20000000,
+NewFun_En64 = 0x100,
 };
 
-#define desc_status(s,desc) (s->enh_desc?desc.status:desc.length)
-#define status_TxDescChain(s) (s->enh_desc?TxDescChain_ENH:TxDescChain_NENH)
-#define status_DescTxIntEnable(s) (s->enh_desc?DescTxIntEnable_ENH:DescTxIntEnable_NENH)
-#define status_TxDescEndOfRing(s) (s->enh_desc?TxDescEndOfRing_ENH:TxDescEndOfRing_NENH)
-#define length_RxDescChain(s) (s->enh_desc?RxDescChain_ENH:RxDescChain_NENH)
-#define length_RxDescEndOfRing(s) (s->enh_desc?RxDescEndOfRing_ENH:RxDescEndOfRing_NENH)
-#define status_TxFirst(s) (s->enh_desc?DescTxFirst_ENH:DescTxFirst_NENH)
-#define status_TxLast(s) (s->enh_desc?DescTxLast_ENH:DescTxLast_NENH)
+#define status_TxDescChain(s, desc) (s->enh_desc?(desc.status & TxDescChain_ENH):(desc.length & TxDescChain_NENH))
+#define status_DescTxIntEnable(s, desc) (s->enh_desc?(desc.status & DescTxIntEnable_ENH):(desc.length & DescTxIntEnable_NENH))
+#define status_TxDescEndOfRing(s, desc) (s->enh_desc?(desc.status & TxDescEndOfRing_ENH):(desc.length & TxDescEndOfRing_NENH))
+#define length_RxDescChain(s, desc) (s->enh_desc?(desc.length & RxDescChain_ENH):(desc.length & RxDescChain_NENH))
+#define length_RxDescEndOfRing(s, desc) (s->enh_desc?(desc.length & RxDescEndOfRing_ENH):(desc.length & RxDescEndOfRing_NENH))
+#define status_TxFirst(s, desc) (s->enh_desc?(desc.status&DescTxFirst_ENH):(desc.length&DescTxFirst_NENH))
+#define status_TxLast(s, desc) (s->enh_desc?(desc.status&DescTxLast_ENH):(desc.length&DescTxLast_NENH))
+#define desc_txlen(s, desc) ((s->dma.DmaNewFuncConfig&NewFun_En64)?(desc.length&0x3fff):(s->enh_desc?(desc.length&0x1fff):(desc.length&0x7ff)))
+#define desc_txlen1(s, desc) ((s->dma.DmaNewFuncConfig&NewFun_En64)?((desc.length>>15)&0x3fff):(s->enh_desc?((desc.length>>16)&0x1fff):((desc.length>>11)&0x7ff)))
+#define desc_rxlen(s, desc) ((s->dma.DmaNewFuncConfig&NewFun_En64)?(desc.length&0x3fff):(s->enh_desc?(desc.length&0x1fff):(desc.length&0x7ff)))
+#define desc_rxlen1(s, desc) ((s->dma.DmaNewFuncConfig&NewFun_En64)?((desc.length>>16)&0x3fff):(s->enh_desc?((desc.length>>16)&0x1fff):((desc.length>>11)&0x7ff)))
 
 
 #define DPRINTF(a...) //fprintf(stderr,a)
@@ -142,6 +146,17 @@ typedef struct DmaDescStruct
   uint32_t   buffer2;        /* Network Buffer 2 pointer or next descriptor pointer (Dma-able)in chain structure 	*/
   			/* This data below is used only by driver					*/
 } DmaDesc;
+
+typedef struct Dma64DescStruct    
+{                               
+  uint32_t   status;         /* Status 									*/
+  uint32_t   length;         /* Buffer 1  and Buffer 2 length 						*/
+  uint64_t   buffer1;        /* Network Buffer 1 pointer (Dma-able) 							*/
+  uint64_t   buffer2;        /* Network Buffer 2 pointer or next descriptor pointer (Dma-able)in chain structure 	*/
+  uint32_t   timestamplow;
+  uint32_t   timestamphigh;
+  			/* This data below is used only by driver					*/
+} Dma64Desc;
 #endif
 
 enum DescMode
@@ -561,6 +576,7 @@ enum GmacInterruptMaskBitDefinition
  * For any other system translation is done accordingly
  **********************************************************/
 
+
 enum DmaRegisters             
 {
   DmaBusMode        = 0x0000,    /* CSR0 - Bus Mode Register                          */
@@ -576,6 +592,19 @@ enum DmaRegisters
   DmaRxCurrDesc     = 0x004C,    /*      - Current host Rx Desc Register              */ 
   DmaTxCurrAddr     = 0x0050,    /* CSR20 - Current host transmit buffer address      */
   DmaRxCurrAddr     = 0x0054,    /* CSR21 - Current host receive buffer address       */
+  DmaNewFuncConfig  = 0x0080,    /*[0] Enables the Tx watchdog function [8] Enables the 64bit-width address function*/
+  DmaTxBaseAddr64Lo = 0x0098,    /*the start of the Receive Descriptor list*/
+  DmaTxBaseAddr64Hi = 0x009c,
+  DmaRcvBaseAddr64Lo= 0x0090,	/*the start of the Receive Descriptor list*/
+  DmaRcvBaseAddr64Hi= 0x0094,
+  DmaTxCurrDesc64Lo  = 0x00a0,
+  DmaTxCurrDesc64Hi  = 0x00a4,
+  DmaRxCurDesc64Lo  = 0x00a8,
+  DmaRxCurDesc64Hi  = 0x00ac,
+  DmaTxCurAddr64Lo  = 0x00b0,	/* Current Host Tx Buffer */
+  DmaTxCurAddr64Hi  = 0x00b4,	/* Current Host Tx Buffer */
+  DmaRxCurAddr64Lo  = 0x00b8,	/* Current Host Tx Buffer */
+  DmaRxCurAddr64Hi  = 0x00bc,	/* Current Host Tx Buffer */
 };
 
 /**********************************************************
@@ -1566,6 +1595,15 @@ typedef struct gmacDmaRegisters
  uint32_t DmaRxCurrDesc     ;    /*= 0x004C      - Current host Rx Desc Register              */ 
  uint32_t DmaTxCurrAddr     ;    /*= 0x0050 CSR20 - Current host transmit buffer address      */
  uint32_t DmaRxCurrAddr     ;    /*= 0x0054 CSR21 - Current host receive buffer address       */
+ uint32_t unused1[10]        ;    /*unused registers*/
+ uint32_t DmaNewFuncConfig; /*=0x0080*/
+ uint32_t unused2[3];
+ uint64_t Dma64RxBaseAddr;/*=0x90*/
+ uint64_t Dma64TxBaseAddr; /*=0x0098*/
+ uint64_t Dma64TxCurrDesc; /*=0x00a0*/
+ uint64_t Dma64RxCurrDesc; /*=0x00a8*/
+ uint64_t Dma64TxCurrAddr; /*=0x00b0*/
+ uint64_t Dma64RxCurrAddr; /*=0x00b8*/
 } gmacDmaRegisters;
 
 typedef struct GMACState{
@@ -1634,7 +1672,7 @@ static uint64_t gmac_mem_readl(void *ptr, hwaddr addr, unsigned size)
 		break;
 		}
 	}
-	else if(addr<0x1058) /*dma address*/
+	else if(addr<0x10c0) /*dma address*/
 	{
 		switch(addr)
 		{
@@ -1655,7 +1693,7 @@ static uint64_t gmac_mem_readl(void *ptr, hwaddr addr, unsigned size)
 	return val;
 }
 
-static void gmac_transmit_demand(GMACState *s)
+static void gmac32_transmit_demand(GMACState *s)
 {
 DmaDesc desc;
 uint8_t txbuffer[0x4000];
@@ -1670,32 +1708,32 @@ int unfinished = 0;
 	{
              //printf("desc.length=0x%08x\n", desc.length);
 
-		if(desc_status(s,desc) & status_TxFirst(s))
+		if(status_TxFirst(s, desc))
 		{
 			pos=0;
 			size=0;
                         unfinished = 1;
 		}
 
-	  if(desc.length&0x7ff)
+	  if(desc_txlen(s, desc))
 	  {
-		  dma_memory_read(s->as,desc.buffer1,txbuffer+pos,desc.length&0x7ff);
-		  pos += desc.length & 0x7ff;
-		  size += desc.length & 0x7ff;
+		  dma_memory_read(s->as,desc.buffer1,txbuffer+pos,desc_txlen(s, desc));
+		  pos += desc_txlen(s, desc);
+		  size += desc_txlen(s, desc);
 	  }
 
-	  if(!(desc_status(s,desc) & status_TxDescChain(s)) && ((desc.length>>11)&0x7ff))
+	  if(!status_TxDescChain(s, desc) && desc_txlen1(s, desc))
 	  {
-		  dma_memory_read(s->as,desc.buffer2,txbuffer+pos,(desc.length>>11)&0x7ff);
-		  pos += (desc.length>>11) & 0x7ff;
-		  size += (desc.length>>11) & 0x7ff;
+		  dma_memory_read(s->as,desc.buffer2,txbuffer+pos,desc_txlen1(s, desc));
+		  pos += desc_txlen1(s, desc);
+		  size += desc_txlen1(s, desc);
 	  }
 
-	  if(desc_status(s,desc) & status_TxLast(s))
+	  if(status_TxLast(s, desc))
 	  {
 		  qemu_send_packet(qemu_get_queue(s->nic),txbuffer,size);
 
-		  if(desc_status(s,desc) & status_DescTxIntEnable(s))
+		  if(status_DescTxIntEnable(s, desc))
 			  s->dma.DmaStatus |= DmaIntTxCompleted|DmaIntNormal;
 
 		  gmac_check_irq(s);
@@ -1708,11 +1746,11 @@ int unfinished = 0;
 	dma_memory_write(s->as,s->dma.DmaTxCurrDesc,&desc,sizeof(desc));
 
 
-	if(desc_status(s,desc) & status_TxDescChain(s))
+	if(status_TxDescChain(s, desc))
 	{
 	s->dma.DmaTxCurrDesc=desc.buffer2;
 	}
-	else if(desc_status(s,desc) & status_TxDescEndOfRing(s))
+	else if(status_TxDescEndOfRing(s, desc))
 	{
 	s->dma.DmaTxCurrDesc=s->dma.DmaTxBaseAddr;
 	}
@@ -1730,6 +1768,91 @@ int unfinished = 0;
 	}
  }while(1);
 
+}
+
+static void gmac64_transmit_demand(GMACState *s)
+{
+Dma64Desc desc;
+uint8_t txbuffer[0x4000];
+uint32_t size = 0;
+int pos = 0;
+int unfinished = 0;
+   if(!s->dma.Dma64TxCurrDesc) s->dma.Dma64TxCurrDesc=s->dma.Dma64TxBaseAddr;
+   do
+   {
+	dma_memory_read(s->as,s->dma.Dma64TxCurrDesc,&desc,sizeof(desc));
+	if(desc.status&DescOwnByDma)
+	{
+             //printf("desc.length=0x%08x\n", desc.length);
+
+		if(status_TxFirst(s, desc))
+		{
+			pos=0;
+			size=0;
+                        unfinished = 1;
+		}
+
+	  if(desc_txlen(s, desc))
+	  {
+		  dma_memory_read(s->as,desc.buffer1,txbuffer+pos,desc_txlen(s, desc));
+		  pos += desc_txlen(s, desc);
+		  size += desc_txlen(s, desc);
+	  }
+
+	  if(!status_TxDescChain(s, desc) && desc_txlen1(s, desc))
+	  {
+		  dma_memory_read(s->as,desc.buffer2,txbuffer+pos,desc_txlen1(s, desc));
+		  pos += desc_txlen1(s, desc);
+		  size += desc_txlen1(s, desc);
+	  }
+
+	  if(status_TxLast(s, desc))
+	  {
+		  qemu_send_packet(qemu_get_queue(s->nic),txbuffer,size);
+
+		  if(status_DescTxIntEnable(s, desc))
+			  s->dma.DmaStatus |= DmaIntTxCompleted|DmaIntNormal;
+
+		  gmac_check_irq(s);
+		  unfinished = 0;
+		 //printf("transmit size %d\n", size);
+	  }
+
+	desc.status &= ~DescOwnByDma;
+
+	dma_memory_write(s->as,s->dma.Dma64TxCurrDesc,&desc,sizeof(desc));
+
+
+	if(status_TxDescChain(s, desc))
+	{
+	s->dma.Dma64TxCurrDesc=desc.buffer2;
+	}
+	else if(status_TxDescEndOfRing(s, desc))
+	{
+	s->dma.Dma64TxCurrDesc=s->dma.Dma64TxBaseAddr;
+	}
+	else {
+	/*128bit bus*/
+	s->dma.Dma64TxCurrDesc += 32 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
+	}
+
+	}
+	else
+	{
+	 //s->dma.DmaStatus |= DmaIntTxNoBuffer; 
+	//gmac_check_irq(s);
+	  if(!unfinished) break;
+	}
+ }while(1);
+
+}
+
+static void gmac_transmit_demand(GMACState *s)
+{
+ if(s->dma.DmaNewFuncConfig&NewFun_En64)
+    gmac64_transmit_demand(s);
+ else
+    gmac32_transmit_demand(s);
 }
 
 static void gmac_receive_demand(GMACState *s)
@@ -1808,7 +1931,7 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		break;
 		}
 	}
-	else if(addr<0x1058) /*dma address*/
+	else if(addr<0x10c0) /*dma address*/
 	{
 		switch(addr)
 		{
@@ -1818,6 +1941,8 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		{
 			s->dma.DmaRxCurrDesc = s->dma.DmaRxBaseAddr = 0;
 			s->dma.DmaTxCurrDesc = s->dma.DmaTxBaseAddr = 0;
+			s->dma.Dma64RxCurrDesc = s->dma.Dma64RxBaseAddr = 0;
+			s->dma.Dma64TxCurrDesc = s->dma.Dma64TxBaseAddr = 0;
 			s->dma.DmaControl = 0;
 			s->dma.DmaStatus = 0;
 			s->dma.DmaInterrupt = 0;
@@ -1866,7 +1991,7 @@ static const MemoryRegionOps gmac_ops = {
 };
 
 
-static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t size_, int do_interrupt)
+static ssize_t gmac32_do_receive(NetClientState *nc, const uint8_t *buf, size_t size_, int do_interrupt)
 {
     GMACState *s = qemu_get_nic_opaque(nc);
 	uint32_t size;
@@ -1875,8 +2000,6 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	int once;
 	int first;
 	int last;
-	int lmask = s->enh_desc?0x1fff:0x7ff;
-	int lshift = s->enh_desc?16:11;
 
 	size=size_;
 	pos = 0;
@@ -1893,17 +2016,17 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	if(desc.status&DescOwnByDma)
 	{
 	  //printf("desc.length=0x%x\n", desc.length);
-	  if(desc.length&lmask)
+	  if(desc_rxlen(s, desc))
 	  {
-		  once=min(desc.length&lmask,size);
+		  once=min(desc_rxlen(s, desc),size);
 		  dma_memory_write(s->as,desc.buffer1,buf+pos,once);
 		  pos += once;
 		  size -= once;
 	  }
 
-	  if(!(desc.length & length_RxDescChain(s)) && size && ((desc.length>>lshift)&lmask))
+	  if(!length_RxDescChain(s, desc) && size && desc_rxlen1(s, desc))
 	  {
-		  once=min((desc.length>>lshift)&lmask,size);
+		  once=min(desc_rxlen1(s, desc),size);
 		  dma_memory_write(s->as,desc.buffer2,buf+pos,once);
 		  pos += once;
 		  size -= once;
@@ -1921,17 +2044,108 @@ static ssize_t gmac_do_receive(NetClientState *nc, const uint8_t *buf, size_t si
 	dma_memory_write(s->as,s->dma.DmaRxCurrDesc,&desc,sizeof(desc));
 
 
-	if(desc.length & length_RxDescChain(s))
+	if(length_RxDescChain(s, desc))
 	{
 	s->dma.DmaRxCurrDesc=desc.buffer2;
 	}
-	else if(desc.length & length_RxDescEndOfRing(s))
+	else if(desc.length & length_RxDescEndOfRing(s, desc))
 	{
 	s->dma.DmaRxCurrDesc=s->dma.DmaRxBaseAddr;
 	}
 	else {
 	/*128bit bus*/
 	s->dma.DmaRxCurrDesc += 16 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
+	}
+
+	if(last)
+	{
+	if((desc.length&RxDisIntCompl)==0)
+	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
+
+	gmac_check_irq(s);
+	break;
+	}
+	//printf("size: %d\n", size);
+
+	}
+	else
+	{
+	 //s->receive_stop = 1;
+	 s->dma.DmaStatus |= DmaIntRxNoBuffer; 
+	gmac_check_irq(s);
+	break;
+	}
+
+ }while(size);
+
+
+    return size_;
+}
+
+static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t size_, int do_interrupt)
+{
+    GMACState *s = qemu_get_nic_opaque(nc);
+	uint32_t size;
+	Dma64Desc desc;
+	int pos;
+	int once;
+	int first;
+	int last;
+
+	size=size_;
+	pos = 0;
+	first = DescRxFirst;
+	last = 0;
+
+	 if((s->dma.DmaControl & DmaRxStart) == 0 || s->receive_stop == 1) return size_; /*dma not start,ignore*/
+
+   do
+   {
+	if(!s->dma.Dma64RxCurrDesc) s->dma.Dma64RxCurrDesc=s->dma.Dma64RxBaseAddr;
+
+	dma_memory_read(s->as,s->dma.Dma64RxCurrDesc,&desc,sizeof(desc));
+	if(desc.status&DescOwnByDma)
+	{
+	  //printf("desc.length=0x%x\n", desc.length);
+	  if(desc_rxlen(s, desc))
+	  {
+		  once=min(desc_rxlen(s, desc),size);
+		  dma_memory_write(s->as,desc.buffer1,buf+pos,once);
+		  pos += once;
+		  size -= once;
+	  }
+
+	  if(!length_RxDescChain(s, desc) && size && desc_rxlen1(s, desc))
+	  {
+		  once=min(desc_rxlen1(s, desc),size);
+		  dma_memory_write(s->as,desc.buffer2,buf+pos,once);
+		  pos += once;
+		  size -= once;
+	  }
+
+
+	last = size?0:DescRxLast;
+
+	desc.status &= ~DescOwnByDma;
+	desc.status &= ~(0x3fff<<16);
+	desc.status |= ((size_-size+(last?4:0))&0x3fff)<<16;
+	desc.status |=(first|last);
+	first = 0;
+
+	dma_memory_write(s->as,s->dma.Dma64RxCurrDesc,&desc,sizeof(desc));
+
+
+	if(length_RxDescChain(s, desc))
+	{
+	s->dma.Dma64RxCurrDesc=desc.buffer2;
+	}
+	else if(length_RxDescEndOfRing(s, desc))
+	{
+	s->dma.Dma64RxCurrDesc=s->dma.Dma64RxBaseAddr;
+	}
+	else {
+	/*128bit bus*/
+	s->dma.Dma64RxCurrDesc += 32 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
 	}
 
 	if(last)
@@ -1968,7 +2182,12 @@ static int gmac_can_receive(NetClientState *nc)
 
 static ssize_t gmac_receive(NetClientState *nc, const uint8_t *buf, size_t size)
 {
-    return gmac_do_receive(nc, buf, size, 1);
+	GMACState *s = qemu_get_nic_opaque(nc);
+
+	if(s->dma.DmaNewFuncConfig&NewFun_En64)
+		return gmac64_do_receive(nc, buf, size, 1);
+	else
+		return gmac32_do_receive(nc, buf, size, 1);
 }
 
 static void gmac_cleanup(NetClientState *nc)
