@@ -2257,6 +2257,7 @@ static int pci_gmac_init(PCIDevice *pci_dev)
 
     gmac_new(&d->gmac,object_get_typename(OBJECT(d)),d->dev.qdev.id); 
     if(!d->gmac.as) d->gmac.as = pci_get_address_space(pci_dev);
+    d->gmac.irq = pci_allocate_irq(pci_dev);
 
     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->gmac.iomem);
 
