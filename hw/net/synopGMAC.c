@@ -2250,7 +2250,7 @@ static int pci_gmac_init(PCIDevice *pci_dev)
     pci_config_set_device_id(pci_conf, SYNOPGMAC_DEVICE_ID);
     pci_conf[0x04] = 0x07; /* command = I/O space, Bus Master */
     pci_config_set_class(pci_conf, PCI_CLASS_NETWORK_ETHERNET);
-    pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL; /* header_type */
+    pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL|0x80; /* header_type */
     pci_conf[PCI_INTERRUPT_PIN] = 1; /* interrupt pin A */
     pci_conf[0x34] = 0xdc;
 
