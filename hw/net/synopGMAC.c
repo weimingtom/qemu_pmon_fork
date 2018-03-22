@@ -1858,6 +1858,7 @@ static void gmac_transmit_demand(GMACState *s)
 static void gmac_receive_demand(GMACState *s)
 {
 	s->receive_stop = 0;
+	qemu_flush_queued_packets(qemu_get_queue(s->nic));
 }
 
 
@@ -2177,7 +2178,7 @@ static int gmac_can_receive(NetClientState *nc)
 {
     GMACState *s = qemu_get_nic_opaque(nc);
 
-    return ( s->dma.DmaControl & DmaRxStart ) == DmaRxStart && s->receive_stop == 0 ;
+    return 1;//( s->dma.DmaControl & DmaRxStart ) == DmaRxStart && s->receive_stop == 0 ;
 }
 
 static ssize_t gmac_receive(NetClientState *nc, const uint8_t *buf, size_t size)
