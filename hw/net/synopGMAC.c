@@ -1756,7 +1756,7 @@ int unfinished = 0;
 	}
 	else {
 	/*128bit bus*/
-	s->dma.DmaTxCurrDesc += 16 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
+	s->dma.DmaTxCurrDesc += ((s->dma.DmaBusMode & DmaDescriptor8Words)?32:16) + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
 	}
 
 	}
@@ -1833,7 +1833,7 @@ int unfinished = 0;
 	}
 	else {
 	/*128bit bus*/
-	s->dma.Dma64TxCurrDesc += 32 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
+	s->dma.Dma64TxCurrDesc += ((s->dma.DmaBusMode & DmaDescriptor8Words)?32:16) + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
 	}
 
 	}
@@ -2054,7 +2054,7 @@ static ssize_t gmac32_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	}
 	else {
 	/*128bit bus*/
-	s->dma.DmaRxCurrDesc += 16 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
+	s->dma.DmaRxCurrDesc += ((s->dma.DmaBusMode & DmaDescriptor8Words)?32:16) + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
 	}
 
 	if(last)
@@ -2145,7 +2145,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	}
 	else {
 	/*128bit bus*/
-	s->dma.Dma64RxCurrDesc += 32 + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
+	s->dma.Dma64RxCurrDesc += ((s->dma.DmaBusMode & DmaDescriptor8Words)?32:16) + ((s->dma.DmaBusMode&0x7c)>>2)*s->buswidth/8;
 	}
 
 	if(last)
