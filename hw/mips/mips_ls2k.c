@@ -887,13 +887,12 @@ static void mips_ls2k_init(MachineState *machine)
 	  }
 #endif
 	}
-#if 0
+#if 1
 {
     PCIDevice *dev = pci_create_multifunction(pci_bus[1], -1, false, "pciram");
     qdev_prop_set_uint16(&dev->qdev, "vendor", 0x1002);
     qdev_prop_set_uint16(&dev->qdev, "device", 0x9615);
-    qdev_prop_set_uint32(&dev->qdev, "bar0", ~(0x04000000-1));
-    qdev_prop_set_uint32(&dev->qdev, "bar1", ~(0x04000-1));
+    qdev_prop_set_uint32(&dev->qdev, "bar0", (~(0x04000-1))|1);
     qdev_init_nofail(&dev->qdev);
 }
 #endif
@@ -1448,7 +1447,8 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
 
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 0), true, "usb-ehci");
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 0), true, "pciram");
+    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00001000-1));
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a04);
@@ -1569,7 +1569,7 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     pcihost->bus = phb->bus = pci_register_bus(DEVICE(dev), "pci",
                                 pci_ls2k_set_irq, pcihost->pci_map_irq, pcihost->pic,
                                 &pcihost->iomem_mem, &pcihost->iomem_io,
-                                PCI_DEVFN(0, 0), 4, TYPE_PCI_BUS);
+                                PCI_DEVFN(0, 0), 64, TYPE_PCI_BUS);
 
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
