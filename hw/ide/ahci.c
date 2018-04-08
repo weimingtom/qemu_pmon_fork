@@ -1509,6 +1509,12 @@ static void ahci_cmd_done(IDEDMA *dma)
 
 static void ahci_irq_set(void *opaque, int n, int level)
 {
+	AHCIState *s = opaque;
+	AHCIDevice *d = &s->dev[n];
+	if(level)
+	{
+		ahci_trigger_irq(s, d, PORT_IRQ_PIOS_FIS);
+	}
 }
 
 static const IDEDMAOps ahci_dma_ops = {
