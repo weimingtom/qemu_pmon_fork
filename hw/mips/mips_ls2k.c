@@ -85,6 +85,7 @@ static struct _loaderparams {
 
 static void *boot_params_buf;
 static void *boot_params_p;
+static PCIBus *ls2k_pci_bus;
 #define align(x) (((x)+15)&~15)
 static int pci_ls2k_map_irq(PCIDevice *d, int irq_num);
 
@@ -856,7 +857,7 @@ static void mips_ls2k_init(MachineState *machine)
 
 
 
-	pci_bus=pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1);
+	pci_bus =pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1);
 
 
 
@@ -1081,6 +1082,9 @@ static int pci_ls2k_map_irq(PCIDevice *d, int pin)
 	int dev=(d->devfn>>3)&0x1f;
 	int fn=d->devfn& 7;
 
+	if(d->bus != ls2k_pci_bus)
+		return pin;
+
 	  switch(dev)
 	  {
 		case 2:
@@ -1123,28 +1127,32 @@ static int pci_ls2k_map_irq(PCIDevice *d, int pin)
 
 		case 9:
 		/*PCIE PORT 0*/
-		 return 32+pin-1;;
+		 return 32;;
 		break;
 
 		case 10:
 		/*PCIE PORT 1*/
-		 return 36+pin-1;
+		 return 33;
 		break;
 
 		case 11:
 		/*PCIE PORT 2*/
+		 return 34;
 		break;
 
 		case 12:
+		 return 35;
 		/*PCIE PORT 3*/
 		break;
 
 		case 13:
+		 return 36;
 		/*PCIE1 PORT 0*/
 		break;
 
 		case 14:
 		/*PCIE1 PORT 1*/
+		 return 37;
 		break;
 
 		case 15:
@@ -1497,6 +1505,8 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
 
     memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
     memory_region_add_subregion(&pcihost->iomem_mem, 0x100000000UL, ram);
+
+    ls2k_pci_bus = pcihost->bus;
 
     return pci_bus;
 }
