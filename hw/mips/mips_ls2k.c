@@ -864,27 +864,20 @@ static void mips_ls2k_init(MachineState *machine)
 	sysbus_create_simple("ls2k_acpi",0x1fe7c000, ls2k_irq[0]);
 #endif
 
-	if (nb_nics>2) {
+	{
 #if 1
-	int i;
-	int devfn;
-	   for(i=2,devfn=PCI_DEVFN(0, 0);i<nb_nics;i++,devfn += PCI_DEVFN(1, 0))
-	  {
-		PCIDevice *pci_dev;
-		DeviceState *dev;
-            //dev = pci_nic_init(&nd_table[i],nd_table[i].model?:"e1000","01:0b");
-		pci_dev = pci_create(pci_bus[0], devfn, "e1000");
-		dev = DEVICE(pci_dev);
-		if(nd_table[i].used)
-		qdev_set_nic_properties(dev, &nd_table[i]);
-    		DeviceClass *dc = DEVICE_GET_CLASS(dev);
-    		PCIDeviceClass *k = PCI_DEVICE_CLASS(DEVICE_CLASS(dc));
-    		k->romfile = NULL;
-    		dc->vmsd = NULL;
-		qdev_init_nofail(dev);
 
-	    	printf("nb_nics=%d dev=%p\n", nb_nics, pci_dev);
-	  }
+	PCIDevice *pci_dev = pci_create_multifunction(pci_bus[1], -1, false, "e1000e");
+	DeviceState *dev = DEVICE(pci_dev);
+	if(nd_table[2].used)
+		qdev_set_nic_properties(dev, &nd_table[2]);
+	DeviceClass *dc = DEVICE_GET_CLASS(dev);
+	PCIDeviceClass *k = PCI_DEVICE_CLASS(DEVICE_CLASS(dc));
+	k->romfile = NULL;
+	dc->vmsd = NULL;
+	qdev_init_nofail(dev);
+
+
 #endif
 	}
 #if 1
