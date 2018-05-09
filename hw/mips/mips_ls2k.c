@@ -287,7 +287,13 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		case 0x1fe104c0:
 		return 0x10000;
 		case 0x1fe10480:
-		return 0x10000;
+		return 0x50010c85;
+		case 0x1fe10484:
+		return 0x00000450;
+		case 0x1fe10488:
+		return 0x00000002;
+		case 0x1fe1048c:
+		return 0;
 		case 0x1fe10490:
 		return 0x10000;
 		case 0x1fe104a0:
@@ -464,10 +470,13 @@ static int64_t load_kernel(void)
 
 	if(getenv("BOOTROM"))
 	{
-            initrd_size = load_image_targphys(loaderparams.kernel_filename,
-                                     strtoul(getenv("BOOTROM"),0,0),ram_size); //qemu_get_ram_ptr
-	return 0;
+            kernel_size = load_image_targphys(loaderparams.kernel_filename,
+                                     (kernel_high = strtoul(getenv("BOOTROM"),0,0)),ram_size); //qemu_get_ram_ptr
+	   kernel_high +=   kernel_size;
+	   entry = 0;
 	}
+	else
+	{
 	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
                            (uint64_t *)&entry, (uint64_t *)&kernel_low,
                            (uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
@@ -479,6 +488,7 @@ static int64_t load_kernel(void)
                 loaderparams.kernel_filename);
         exit(1);
     }
+	}
 
     /* load initrd */
     initrd_size = 0;
@@ -768,6 +778,9 @@ static void mips_ls2k_init(MachineState *machine)
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
 	memory_region_add_subregion(address_space_mem, 0, ram1);
+	MemoryRegion *ram3 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram3, NULL, "lowmem2G", ram, 0, 0x80000000ULL);
+	memory_region_add_subregion(address_space_mem, 0x80000000ULL, ram3);
 	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
 	MemoryRegion *ram_pciram = g_new(MemoryRegion, 1);
 	MemoryRegion *ram_pciram1 = g_new(MemoryRegion, 1);
@@ -993,7 +1006,7 @@ static void mips_ls2k_init(MachineState *machine)
                 memory_region_add_subregion(address_space_mem, 0x1fe10c10, iomem);
 
                 iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10480, "0x1fe10480", 0x4);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10480, "0x1fe10480", 0x10);
                 memory_region_add_subregion(address_space_mem, 0x1fe10480, iomem);
 
                 iomem = g_new(MemoryRegion, 1);
