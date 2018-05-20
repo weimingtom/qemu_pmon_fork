@@ -91,6 +91,7 @@ typedef struct NandState{
 	void *as_ptr;
 	};
 	uint8_t manf_id, chip_id;
+	uint8_t cs;
 } NandState;
 
 typedef struct nand_sysbus_state {
@@ -174,8 +175,10 @@ static int dma_next(NandState *s)
 
 
 
-#define PAGE_ADDR(s) ((uint64_t)(s->regs.addr_h&0x1ffffff))
+#define PAGE_ADDR(s) ((uint64_t)((s->regs.addr_h-s->cs*(s->chip->size>>s->chip->page_shift))&0x1ffffff))
 #define COLUM_ADDR(s) (s->regs.addr_l)
+#define CUR_CS(s) (s->regs.addr_h/(s->chip->size>>s->chip->page_shift))
+#define ACCESS_ME(s) (s->cs == CUR_CS(s))
 
 static int nand_load_next(NandState *s)
 {
@@ -206,7 +209,8 @@ static int nand_load_next(NandState *s)
 	oplen = min(s->regs.op_num, iolen);
 
 	s->chip->addr = addr;
-	s->chip->blk_load(s->chip, addr, offset);
+	if(ACCESS_ME(s))
+		s->chip->blk_load(s->chip, addr, offset);
 	s->chip->iolen = oplen;
 	if(s->chip->iolen >= iolen)
 	 s->regs.addr_h += 0x1;
@@ -253,7 +257,8 @@ again:
 		s->chip->offset = offset;
 		s->chip->iolen = oplen;
 
-		s->chip->blk_write(s->chip);
+		if(ACCESS_ME(s))
+			s->chip->blk_write(s->chip);
 
 		s->chip->ioaddr = s->chip->io;
 		s->chip->iolen = 0;
@@ -410,14 +415,16 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 			for(i=0,addr = PAGE_ADDR(s)<<s->chip->addr_shift; i < s->regs.op_num; i++,addr += 1<<(s->chip->addr_shift+s->chip->erase_shift))
 			{
 				s->chip->addr = addr;
-				s->chip->blk_erase(s->chip);
+				if(ACCESS_ME(s))
+					s->chip->blk_erase(s->chip);
 			}
 
 		}
 		else
 		{
 			s->chip->addr = PAGE_ADDR(s)<<s->chip->addr_shift ;
-			s->chip->blk_erase(s->chip);
+			if(ACCESS_ME(s))
+				s->chip->blk_erase(s->chip);
 		}
 
 		s->regs.cmd |= CMD_DONE;
@@ -427,8 +434,13 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 	else if(cmd & CMD_READID)
 	{
 		s->chip->cmd = NAND_CMD_READID;
-		nand_command(s->chip);
-		memcpy(&s->regs.id_l,s->chip->io,4);
+		if(ACCESS_ME(s))
+		{
+			nand_command(s->chip);
+			memcpy(&s->regs.id_l,s->chip->io,4);
+		}
+		else
+			memset(s->chip->io,0xff,4);
 		s->regs.id_l = s->chip->io[4]|(s->chip->io[1]<<24)|(s->chip->io[2]<<16)|(s->chip->io[3]<<8);
 		s->regs.status_id_h = s->chip->io[0] | 0xe00000;
 		s->regs.cmd |= CMD_DONE;
@@ -522,8 +534,8 @@ static int ls1a_nand_init(SysBusDevice *dev)
     nand_sysbus_state *d = SYS_BUS_LS1ANAND(dev);
     //memset(&d->nand,0,sizeof(d->nand));
     nand = drive_get(IF_MTD, 0, 0);
-    //d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0xec, d->nand.chip_id?:0xa1);
-    d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0x2c, d->nand.chip_id?:0x48);
+    //d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0x2c, d->nand.chip_id?:0x64);
+    d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0xec, d->nand.chip_id?:0xa1);
     nand_setpins(DEVICE(d->nand.chip), 0, 0, 0, 0, 0);
 
     if(!d->nand.as)
@@ -542,6 +554,7 @@ static Property ls1a_nand_properties[] = {
     DEFINE_PROP_PTR("as", nand_sysbus_state, nand.as_ptr),
     DEFINE_PROP_UINT8("manufacturer_id", nand_sysbus_state, nand.manf_id, 0),
     DEFINE_PROP_UINT8("chip_id", nand_sysbus_state, nand.chip_id, 0),
+    DEFINE_PROP_UINT8("cs", nand_sysbus_state, nand.cs, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
