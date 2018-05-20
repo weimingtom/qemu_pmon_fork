@@ -133,7 +133,7 @@ static uint64_t ls1a_rtc_read(void *opaque, hwaddr offset, unsigned size)
 	break;
     case TOYREAD0:
 	qemu_get_timedate(&tm, s->offset);
-	val = ((0)%10)  | \
+	val = ((qemu_clock_get_ms(QEMU_CLOCK_HOST)/100)%10)  | \
 	((tm.tm_sec) << 4) | \
 	(((tm.tm_min)%60) << 10) | \
 	(((tm.tm_hour)%24) << 16) | \
