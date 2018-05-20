@@ -205,6 +205,7 @@ static const struct {
     [0xb5] = { 2048,	16,	0, 0, LP_OPTIONS16 },
     [0xc5] = { 2048,	16,	0, 0, LP_OPTIONS16 },
     [0x48] = { 2048,	8,	12, 7, 0, 224 },
+    [0x64] = { 8192,	8,	13, 8, 0, 224 },
 };
 
 # define NAND_IO
@@ -233,6 +234,11 @@ static const struct {
 # define PAGE_SIZE		4096
 # define PAGE_SHIFT		12
 # define PAGE_SECTORS		8
+# define ADDR_SHIFT		16
+# include "nand.c"
+# define PAGE_SIZE		8192
+# define PAGE_SHIFT		13
+# define PAGE_SECTORS		16
 # define ADDR_SHIFT		16
 # include "nand.c"
 
@@ -415,6 +421,9 @@ static void nand_realize(DeviceState *dev, Error **errp)
     case 4096:
         nand_init_4096(s);
         break;
+    case 8192:
+        nand_init_8192(s);
+        break;
     default:
         error_setg(errp, "Unsupported NAND block size %#x",
                    1 << s->page_shift);
@@ -442,6 +451,11 @@ static void nand_realize(DeviceState *dev, Error **errp)
         pagesize += 1 << s->page_shift;
     }
     if (pagesize) {
+	if(s->pages * pagesize > 0x40000000LL)
+	{
+            error_setg(errp, "nand size is large than 1G, chip id 0x%x size 0x%llx",s->chip_id, (long long)s->pages * pagesize);
+	    return;
+	}
         s->storage = (uint8_t *) memset(g_malloc(s->pages * pagesize),
                         0xff, s->pages * pagesize);
     }
