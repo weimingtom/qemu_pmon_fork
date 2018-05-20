@@ -295,7 +295,13 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		case 0x1fe1048c:
 		return 0;
 		case 0x1fe10490:
-		return 0x10000;
+		return 0x10010c87;
+		case 0x1fe10494:
+		return 0x00000440;
+		case 0x1fe10498:
+		return 0x01c00004;
+		case 0x1fe1049c:
+		return 00064000;
 		case 0x1fe104a0:
 		return 0x10000;
 		case 0x0ff00160:
@@ -946,7 +952,16 @@ static void mips_ls2k_init(MachineState *machine)
 #endif
 
 		sysbus_create_simple("ls1a_dma",0x1fe10c00, NULL);
-		sysbus_create_simple("ls1a_nand",0x1fe06000, ls2k_irq[12]);
+	{
+		DeviceState *dev;
+		SysBusDevice *s;
+		dev = qdev_create(NULL, "ls1a_nand");
+		qdev_prop_set_uint8(dev, "cs", 0x2);
+		qdev_init_nofail(dev);
+		s = SYS_BUS_DEVICE(dev);
+		sysbus_mmio_map(s, 0, 0x1fe06000);
+		sysbus_connect_irq(s, 0, ls2k_irq[12]);
+	}
 
 	{
 		DriveInfo *dinfo;
@@ -1006,11 +1021,11 @@ static void mips_ls2k_init(MachineState *machine)
                 memory_region_add_subregion(address_space_mem, 0x1fe10c10, iomem);
 
                 iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10480, "0x1fe10480", 0x10);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10480, "0x1fe10480", 0x20);
                 memory_region_add_subregion(address_space_mem, 0x1fe10480, iomem);
 
                 iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10490, "0x1fe10490", 0x4);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10490, "0x1fe10490", 0x10);
                 memory_region_add_subregion(address_space_mem, 0x1fe10490, iomem);
 
                 iomem = g_new(MemoryRegion, 1);
