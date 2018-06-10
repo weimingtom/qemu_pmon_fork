@@ -16,14 +16,15 @@ typedef struct GS232_INTCTLState {
 	//clr
 	uint32_t intreg_en;
 	uint32_t intreg_pending;
+	char irqroute[32];
 #ifdef DEBUG_IRQ_COUNT
 	uint64_t irq_count[32];
 #endif
-	qemu_irq cpu_irq;
-	uint32_t pil_out;
+	qemu_irq *cpu_irq;
+	uint32_t pil_out[4];
 } GS232_INTCTLState;
 
-#define INTCTL_SIZE 0x18
+#define INTCTL_SIZE 0x40
 #define INTCTLM_MAXADDR 0x13
 #define INTCTLM_SIZE (INTCTLM_MAXADDR + 1)
 #define INTCTLM_MASK 0x1f
@@ -40,26 +41,28 @@ static void ls2k_check_interrupts(void *opaque);
 static uint64_t ls2k_intctl_mem_readl(void *opaque, hwaddr addr, unsigned size)
 {
 	GS232_INTCTLState *s = opaque;
-	uint32_t saddr, ret;
+	uint32_t ret = 0;
 
-	saddr = addr >> 2;
-	switch (saddr) {
-		case 0: //isr
+	switch (addr) {
+		case 0 ... 0x1f:
+			memcpy(&ret, s->irqroute+addr, size);
+			break;
+		case 0x20: //isr
 			ret = s->intreg_pending & s->intreg_en;
 			break;
-		case 1:
+		case 0x24:
 			ret= s->intreg_en;
 			break;
-		case 2: //set
+		case 0x28: //set
 			ret=0;
 			break;
-		case 3: //clr
+		case 0x2c: //clr
 			ret=0;
 			break;
-		case 4:
+		case 0x30:
 			ret= s->intreg_pol;
 			break;
-		case 5:
+		case 0x34:
 			ret= s->intreg_edge;
 			break;
 		default:
@@ -76,31 +79,34 @@ static void ls2k_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 	GS232_INTCTLState *s = opaque;
 	uint32_t saddr;
 
-	saddr = addr >> 2;
 	//printf("write reg 0x" TARGET_FMT_plx " %x= %x\n", addr, saddr, (unsigned int)val);
-	switch (saddr) {
-		case 0: //isr
+	switch (addr) {
+		case 0 ... 0x1f:
+			memcpy(s->irqroute +addr, &val, size);
+			ls2k_check_interrupts(s);
+			break;
+		case 0x20: //isr
 			s->intreg_pending=val;
 			ls2k_check_interrupts(s);
 			break;
-		case 1:
+		case 0x24:
 			s->intreg_en=val;
 			ls2k_check_interrupts(s);
 			break;
-		case 2: //set
+		case 0x28: //set
 			s->intreg_en |= val;
 			ls2k_check_interrupts(s);
 			break;
-		case 3: //clr
+		case 0x2c: //clr
 			s->intreg_pending &= ~val;
 			s->intreg_en &= ~val;
 			ls2k_check_interrupts(s);
 			break;
-		case 4:
+		case 0x30:
 			s->intreg_pol=val;
 			ls2k_check_interrupts(s);
 			break;
-		case 5:
+		case 0x3c:
 			s->intreg_edge=val;
 			ls2k_check_interrupts(s);
 			break;
@@ -119,19 +125,40 @@ static const MemoryRegionOps ls2k_intctl_mem_ops = {
 static void ls2k_check_interrupts(void *opaque)
 {
 	GS232_INTCTLState *s = opaque;
-	uint32_t pil_pending;
+	uint32_t pil_pending[4] = {0,0,0,0};
+	int i, j, imask, jmask;
+	int irqs, maps;
+	irqs = s->intreg_pending & s->intreg_en;
+	
 
-
-	pil_pending = s->intreg_pending & s->intreg_en;
-
-	if (pil_pending ) {
-		qemu_irq_raise(s->cpu_irq);
-	} else {
-		if (s->pil_out)
-			qemu_irq_lower(s->cpu_irq);
+	for (i=0, imask=1;i<32 && irqs;i++,imask <<= 1)
+	{
+		if (irqs & imask)
+		{
+			maps = s->irqroute[i];
+			for(j=0, jmask=0x10;j<4 && maps;j++,jmask <<= 1)
+			{
+				if(maps & jmask)
+				{
+					pil_pending[j] = 1;
+					maps &= ~jmask;
+				}
+			}
+		  irqs &= ~imask;
+		}
 	}
-	s->pil_out = pil_pending;
-	DPRINTF("pending %x \n", pil_pending);
+
+	for(i=0;i<4;i++)
+	{
+		if (pil_pending[i]) {
+			qemu_irq_raise(s->cpu_irq[i+2]);
+		} else {
+			if (s->pil_out[i])
+				qemu_irq_lower(s->cpu_irq[i+2]);
+		}
+
+		s->pil_out[i] = pil_pending[i];
+	}
 }
 
 /*
@@ -182,7 +209,7 @@ static void ls2k_intctl_reset(void *opaque)
 }
 
 
-static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq)
+static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq)
 {
 	qemu_irq *irqs;
 	GS232_INTCTLState *s;

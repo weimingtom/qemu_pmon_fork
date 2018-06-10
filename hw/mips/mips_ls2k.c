@@ -694,7 +694,7 @@ static int godson_ipi_init(qemu_irq parent_irq , unsigned long index, gipiState 
 
 
 
-static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq);
+static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq);
 
 static const int sector_len = 32 * 1024;
 
@@ -858,8 +858,8 @@ static void mips_ls2k_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls2k_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11420, env->irq[2]);
-	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11460, env->irq[3]);
+	ls2k_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, env->irq);
+	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, env->irq);
 
 
 	if (serial_hds[0])
