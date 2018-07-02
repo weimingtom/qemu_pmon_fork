@@ -19,3 +19,4 @@ common-obj-$(CONFIG_PCI_GENERIC) += gpex.o
 common-obj-$(CONFIG_PCI_XILINX) += xilinx-pcie.o
 
 common-obj-$(CONFIG_PCI_DESIGNWARE) += designware.o
+obj-$(CONFIG_LS2F_BONITO) += ls2f_bonito.o
