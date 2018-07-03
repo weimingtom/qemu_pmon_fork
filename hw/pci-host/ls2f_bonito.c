@@ -41,6 +41,7 @@ struct bonito_regs {
 };
 
 
+#define TYPE_BONITO_IOMMU_MEMORY_REGION "bonito-iommu-memory-region"
 #define TYPE_BONITO_PCI_HOST_BRIDGE "ls2f-pcihost"
 typedef struct BonitoState BonitoState;
 
@@ -75,7 +76,7 @@ struct BonitoState {
     } addrcfg_reg;
     };
     AddressSpace as_mem;
-    MemoryRegion iomem_mem;
+    IOMMUMemoryRegion iommu;
     MemoryRegion *ram;
     MemoryRegion iomem_cpumap[4];
 };
@@ -628,7 +629,7 @@ static const MemoryRegionOps pci_ls2f_config_ops = {
 };
 
 
-static int bonito_initfn(PCIDevice *dev)
+static void bonito_initfn(PCIDevice *dev, Error **errp)
 {
     PCIBonitoState *s = DO_UPCAST(PCIBonitoState, dev, dev);
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
@@ -692,8 +693,6 @@ static int bonito_initfn(PCIDevice *dev)
     pci_set_byte(dev->config + PCI_MIN_GNT, 0x3c);
     pci_set_byte(dev->config + PCI_MAX_LAT, 0x00);
 
-
-    return 0;
 }
 
 
@@ -702,7 +701,7 @@ static void bonito_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = bonito_initfn;
+    k->realize = bonito_initfn;
     k->vendor_id = 0xdf53;
     k->device_id = 0x00d5;
     k->revision = 0x01;
@@ -721,9 +720,9 @@ static const TypeInfo bonito_info = {
 /* Handle PCI-to-system address translation.  */
 /* TODO: A translation failure here ought to set PCI error codes on the
    Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls2f_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr addr, bool is_write)
+static IOMMUTLBEntry ls2f_pcidma_translate_iommu(IOMMUMemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag)
 {
-    BonitoState *pcihost = container_of(iommu, BonitoState, iomem_mem);
+    BonitoState *pcihost = container_of(iommu, BonitoState, iommu);
     IOMMUTLBEntry ret;
 
     int i;
@@ -750,10 +749,6 @@ static IOMMUTLBEntry ls2f_pcidma_translate_iommu(MemoryRegion *iommu, hwaddr add
 
     return ret;
 }
-
-static const MemoryRegionIOMMUOps ls2f_pcidma_iommu_ops = {
-    .translate = ls2f_pcidma_translate_iommu,
-};
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
 {
@@ -803,11 +798,11 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
                                 &pcihost->iomem_pcimem, get_system_io(),
                                 12<<3, 4, TYPE_PCI_BUS);
 
-    memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT32_MAX);
-    address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
-
-    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2f_pcidma_iommu_ops, "iommu-ls2fpci", UINT64_MAX);
-
+    /* Host memory as seen from the PCI side, via the IOMMU.  */
+    memory_region_init_iommu(&pcihost->iommu, sizeof(&pcihost->iommu),
+                             TYPE_BONITO_IOMMU_MEMORY_REGION, OBJECT(pcihost),
+                             "iommu-typhoon", UINT64_MAX);
+    address_space_init(&pcihost->as_mem, MEMORY_REGION(&pcihost->iommu), "pcie memory");
     pci_setup_iommu(phb->bus, pci_dma_context_fn, pcihost);
     update_cpumap(pcihost);
 
@@ -828,34 +823,26 @@ static const TypeInfo bonito_pcihost_info = {
     .class_init    = bonito_pcihost_class_init,
 };
 
+static void bonito_iommu_memory_region_class_init(ObjectClass *klass,
+                                                   void *data)
+{
+    IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
+
+    imrc->translate = ls2f_pcidma_translate_iommu;
+}
+
+static const TypeInfo typhoon_iommu_memory_region_info = {
+    .parent = TYPE_IOMMU_MEMORY_REGION,
+    .name = TYPE_BONITO_IOMMU_MEMORY_REGION,
+    .class_init = bonito_iommu_memory_region_class_init,
+};
+
 static void bonito_register_types(void)
 {
     type_register_static(&bonito_pcihost_info);
     type_register_static(&bonito_info);
+    type_register_static(&typhoon_iommu_memory_region_info);
 }
 
 type_init(bonito_register_types)
 
-
-#if 0
-
-
-/*
- * PHB PCI device
- */
-hw/pci/pci.c
-    if (bus->dma_context_fn) {
-        pci_dev->dma = bus->dma_context_fn(bus, bus->dma_context_opaque, devfn);
-    } else {
-        /* FIXME: Make dma_context_fn use MemoryRegions instead, so this path is
-         * taken unconditionally */
-        /* FIXME: inherit memory region from bus creator */
-        memory_region_init_alias(&pci_dev->bus_master_enable_region, "bus master",
-                                 get_system_memory(), 0,
-                                 memory_region_size(get_system_memory()));
-        memory_region_set_enabled(&pci_dev->bus_master_enable_region, false);
-        address_space_init(&pci_dev->bus_master_as, &pci_dev->bus_master_enable_region);
-        pci_dev->dma = g_new(DMAContext, 1);
-        dma_context_init(pci_dev->dma, &pci_dev->bus_master_as, NULL, NULL, NULL);
-    }
-#endif
