@@ -610,6 +610,7 @@ struct CPUMIPSState {
     QEMUTimer *timer; /* Internal timer */
     MemoryRegion *itc_tag; /* ITC Configuration Tags */
     target_ulong exception_base; /* ExceptionBase input to the core */
+    bool is_asip;
 };
 
 /**

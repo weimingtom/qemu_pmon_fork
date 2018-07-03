@@ -199,6 +199,16 @@ static int get_segctl_physical_address(CPUMIPSState *env, hwaddr *physical,
                                     access_type, mmu_idx, am, eu, segmask,
                                     pa & ~(hwaddr)segmask);
 }
+static int get_physical_address_asip (CPUMIPSState *env, hwaddr *physical,
+                                int *prot, target_ulong real_address,
+                                int rw, int access_type)
+{
+    int ret = TLBRET_MATCH;
+    *physical = real_address&0xFFFFFFFF;
+    *prot = PAGE_READ | PAGE_WRITE;
+    return ret;
+}
+
 
 static int get_physical_address (CPUMIPSState *env, hwaddr *physical,
                                 int *prot, target_ulong real_address,
@@ -225,6 +235,10 @@ static int get_physical_address (CPUMIPSState *env, hwaddr *physical,
 
 #define KVM_KSEG0_BASE  ((target_ulong)(int32_t)0x40000000UL)
 #define KVM_KSEG2_BASE  ((target_ulong)(int32_t)0x60000000UL)
+
+/*ASIP*/
+   if (env->is_asip)
+	return get_physical_address_asip(env, physical, prot, real_address, rw, access_type);
 
     if (mips_um_ksegs_enabled()) {
         /* KVM T&E adds guest kernel segments in useg */
