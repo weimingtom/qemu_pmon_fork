@@ -41,7 +41,7 @@ struct bonito_regs {
 };
 
 
-#define TYPE_BONITO_IOMMU_MEMORY_REGION "bonito-iommu-memory-region"
+#define TYPE_BONITO_IOMMU_MEMORY_REGION "ls2f-bonito-iommu-memory-region"
 #define TYPE_BONITO_PCI_HOST_BRIDGE "ls2f-pcihost"
 typedef struct BonitoState BonitoState;
 
@@ -714,6 +714,10 @@ static const TypeInfo bonito_info = {
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(PCIBonitoState),
     .class_init    = bonito_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_CONVENTIONAL_PCI_DEVICE },
+        { }
+    },
 };
 
 
@@ -793,7 +797,7 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     pcihost->addrcfg_reg.pcidmamap[2] = 0xfffffffffff00000ULL;
     pcihost->addrcfg_reg.pcidmamap[3] = 0xfffffffffff00000ULL;
 
-    phb->bus = pci_register_bus(DEVICE(dev), "pci",
+    phb->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_bonito_set_irq, pci_bonito_map_irq, pcihost,
                                 &pcihost->iomem_pcimem, get_system_io(),
                                 12<<3, 4, TYPE_PCI_BUS);

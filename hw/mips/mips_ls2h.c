@@ -36,7 +36,6 @@
 #include "hw/mips/cpudevs.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bridge.h"
-#include "sysemu/char.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/arch_init.h"
 #include "qemu/log.h"
@@ -549,22 +548,9 @@ static PCIBus *pcibus_ls2h_init(int busno,qemu_irq *pic, int (*board_map_irq)(PC
 
 static int ddr2config = 0;
 
-static CPUUnassignedAccess real_do_unassigned_access;
-static void mips_ls2h_do_unassigned_access(CPUState *cpu, hwaddr addr,
-                                           bool is_write, bool is_exec,
-                                           int opaque, unsigned size)
-{
-    if (!is_exec) {
-        /* ignore invalid access (ie do not raise exception) */
-        return;
-    }
-    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
-}
-
 static void mips_ls2h_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
-	const char *cpu_model = machine->cpu_model;
 	const char *kernel_filename = machine->kernel_filename;
 	const char *kernel_cmdline = machine->kernel_cmdline;
 	const char *initrd_filename = machine->initrd_filename;
@@ -579,31 +565,14 @@ static void mips_ls2h_init(MachineState *machine)
 	qemu_irq *ls2h_irq,*ls2h_irq1;
 	PCIBus *pci_bus[4];
 	DriveInfo *flash_dinfo=NULL;
-	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
 
 
 	/* init CPUs */
-	if (cpu_model == NULL) {
-#ifdef TARGET_MIPS64
-		cpu_model = "godson2h";
-#else
-		cpu_model = "godson2h";
-#endif
-	}
 
-		cpu = cpu_mips_init(cpu_model);
-		if (cpu == NULL) {
-			fprintf(stderr, "Unable to find CPU definition\n");
-			exit(1);
-		}
+	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
-
-		cc = CPU_GET_CLASS(cpu);
-		real_do_unassigned_access = cc->do_unassigned_access;
-		cc->do_unassigned_access = mips_ls2h_do_unassigned_access;
-
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
 		reset_info->vector = env->active_tc.PC;
@@ -935,6 +904,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls2h platform";
     mc->init = mips_ls2h_init;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("godson2h");
 }
 
 DEFINE_MACHINE("ls2h", mips_machine_init)
@@ -986,6 +956,7 @@ qemu_irq *pic = opaque;
 #define LS2H_PCIE_PORT_REG_CTR_STAT		0x28
 
 
+#define TYPE_BONITO_IOMMU_MEMORY_REGION "ls2h-bonito-iommu-memory-region"
 #define TYPE_BONITO_PCI_HOST_BRIDGE "ls2h-pcihost"
 typedef struct BonitoState BonitoState;
 
@@ -1044,9 +1015,9 @@ struct BonitoState {
     PCIBus *bus;
     qemu_irq *pic;
     PCIBonitoState *pci_dev;
-    MemoryRegion iomem_mem;
     MemoryRegion iomem_submem;
     MemoryRegion iomem_io;
+    IOMMUMemoryRegion iommu;
     AddressSpace as_mem;
     AddressSpace as_io;
    int (*pci_map_irq)(PCIDevice *d, int irq_num);
@@ -1184,7 +1155,7 @@ static const MemoryRegionOps bonito_pciconf_ops = {
     },
 };
 
-static int bonito_initfn(PCIDevice *dev)
+static void bonito_initfn(PCIDevice *dev, Error **errp)
 {
     PCIBonitoState *s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, dev);
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
@@ -1221,8 +1192,6 @@ static int bonito_initfn(PCIDevice *dev)
     pci_set_byte(dev->config + PCI_MIN_GNT, 0x3c);
     pci_set_byte(dev->config + PCI_MAX_LAT, 0x00);
 
-
-    return 0;
 }
 
 
@@ -1231,7 +1200,7 @@ static void bonito_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = bonito_initfn;
+    k->realize = bonito_initfn;
     k->exit = pci_bridge_exitfn;
     k->vendor_id = 0xdf53;
     k->device_id = 0x00d5;
@@ -1249,6 +1218,10 @@ static const TypeInfo bonito_info = {
     .parent        = TYPE_PCI_BRIDGE,
     .instance_size = sizeof(PCIBonitoState),
     .class_init    = bonito_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_PCIE_DEVICE },
+        { }
+    },
 };
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
@@ -1310,9 +1283,8 @@ static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
 /* Handle PCI-to-system address translation.  */
 /* TODO: A translation failure here ought to set PCI error codes on the
    Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr addr, bool is_write)
+static IOMMUTLBEntry ls2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag)
 {
-    //BonitoState *pcihost = container_of(iommu, BonitoState, iomem_mem);
     IOMMUTLBEntry ret;
 
     ret = (IOMMUTLBEntry) {
@@ -1326,29 +1298,25 @@ static IOMMUTLBEntry ls2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr ad
     return ret;
 }
 
-static const MemoryRegionIOMMUOps ls2h_pciedma_iommu_ops = {
-    .translate = ls2h_pciedma_translate_iommu,
-};
-
 static int bonito_pcihost_initfn(SysBusDevice *dev)
 {
     BonitoState *pcihost;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
 
-    memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT32_MAX);
-    address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
-
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2h_pciedma_iommu_ops, "iommu-ls2hpcie", UINT64_MAX);
+    memory_region_init_iommu(&pcihost->iommu, sizeof(&pcihost->iommu),
+                             TYPE_BONITO_IOMMU_MEMORY_REGION, OBJECT(dev),
+                             "iommu-ls2hpcie", UINT64_MAX);
+    address_space_init(&pcihost->as_mem, MEMORY_REGION(&pcihost->iommu), "pcie memory");
 
-    memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
+    memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", MEMORY_REGION(&pcihost->iommu), 0x10000000, 0x2000000);
 
     memory_region_init(&pcihost->iomem_io, OBJECT(pcihost), "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
-    pcihost->bus = pci_register_bus(DEVICE(dev), "pci",
+    pcihost->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_ls2h_set_irq, pcihost->pci_map_irq, pcihost->pic,
-                                &pcihost->iomem_mem, &pcihost->iomem_io,
+                                MEMORY_REGION(&pcihost->iommu), &pcihost->iomem_io,
                                 PCI_DEVFN(10, 0), 4, TYPE_PCI_BUS);
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
@@ -1369,12 +1337,31 @@ static const TypeInfo bonito_pcihost_info = {
     .parent        = TYPE_PCI_HOST_BRIDGE,
     .instance_size = sizeof(BonitoState),
     .class_init    = bonito_pcihost_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_PCIE_DEVICE },
+        { }
+    },
+};
+
+static void bonito_iommu_memory_region_class_init(ObjectClass *klass,
+                                                   void *data)
+{
+    IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
+
+    imrc->translate = ls2h_pciedma_translate_iommu;
+}
+
+static const TypeInfo typhoon_iommu_memory_region_info = {
+    .parent = TYPE_IOMMU_MEMORY_REGION,
+    .name = TYPE_BONITO_IOMMU_MEMORY_REGION,
+    .class_init = bonito_iommu_memory_region_class_init,
 };
 
 static void bonito_register_types(void)
 {
     type_register_static(&bonito_pcihost_info);
     type_register_static(&bonito_info);
+    type_register_static(&typhoon_iommu_memory_region_info);
 }
 
 type_init(bonito_register_types)
