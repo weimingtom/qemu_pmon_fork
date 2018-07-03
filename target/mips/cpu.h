@@ -241,6 +241,9 @@ struct CPUMIPSState {
 #define CP0VPEOpt_DWX0	0
     uint64_t CP0_EntryLo0;
     uint64_t CP0_EntryLo1;
+    target_ulong CP0_PWBase;
+    target_ulong CP0_PWField;
+    target_ulong CP0_PWSize;
 #if defined(TARGET_MIPS64)
 # define CP0EnLo_RI 63
 # define CP0EnLo_XI 62

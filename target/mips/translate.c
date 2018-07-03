@@ -6610,6 +6610,18 @@ static void gen_dmfc0(DisasContext *ctx, TCGv arg, int reg, int sel)
             tcg_gen_ld_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_SegCtl2));
             rn = "SegCtl2";
             break;
+	case 5:
+            tcg_gen_ld_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_PWBase));
+            rn = "PWBase";
+	    break;
+	case 6:
+            tcg_gen_ld_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_PWField));
+            rn = "PWField";
+	    break;
+	case 7:
+            tcg_gen_ld_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_PWSize));
+            rn = "PWSize";
+	    break;
         default:
             goto cp0_unimplemented;
         }
@@ -6699,6 +6711,10 @@ static void gen_dmfc0(DisasContext *ctx, TCGv arg, int reg, int sel)
             rn = "Count";
             break;
         /* 6,7 are implementation dependent */
+        case 7:
+            tcg_gen_ld_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_PWBase));
+            rn = "PGD";
+	    break;
         default:
             goto cp0_unimplemented;
         }
@@ -7263,6 +7279,18 @@ static void gen_dmtc0(DisasContext *ctx, TCGv arg, int reg, int sel)
             gen_helper_mtc0_segctl2(cpu_env, arg);
             rn = "SegCtl2";
             break;
+	case 5:
+            tcg_gen_st_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_PWBase));
+            rn = "PWBase";
+	    break;
+	case 6:
+            tcg_gen_st_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_PWField));
+            rn = "PWField";
+	    break;
+	case 7:
+            tcg_gen_st_tl(arg, cpu_env, offsetof(CPUMIPSState, CP0_PWSize));
+            rn = "PWSize";
+	    break;
         default:
             goto cp0_unimplemented;
         }
@@ -20073,7 +20101,25 @@ static void decode_opc(CPUMIPSState *env, DisasContext *ctx)
         } else {
             /* OPC_LWC2, OPC_SWC2 */
             /* COP2: Not implemented. */
-            generate_exception_err(ctx, EXCP_CpU, 2);
+            if(op == OPC_LDC2)
+            {
+		    int offset = ((ctx->opcode >> 6)&0x1ff)<<4;
+		    int rq =  ctx->opcode & 0x1f;
+		    int rs = (ctx->opcode >> 21) & 0x1f;
+		    int rt = (ctx->opcode >> 16) & 0x1f;
+		    gen_ld(ctx, OPC_LD, rt, rs, offset);
+		    gen_ld(ctx, OPC_LD, rq, rs, offset+8);
+            }
+            else
+            {
+		    int offset = ((ctx->opcode >> 6)&0x1ff)<<4;
+		    int rq =  ctx->opcode & 0x1f;
+		    int rs = (ctx->opcode >> 21) & 0x1f;
+		    int rt = (ctx->opcode >> 16) & 0x1f;
+		    gen_st(ctx, OPC_SD, rt, rs, offset);
+		    gen_st(ctx, OPC_SD, rq, rs, offset+8);
+            }
+            //generate_exception_err(ctx, EXCP_CpU, 2);
         }
         break;
     case OPC_CP2:
