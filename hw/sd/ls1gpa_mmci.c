@@ -18,13 +18,13 @@
 #include "hw/qdev.h"
 #include "hw/qdev-properties.h"
 #include "qemu/error-report.h"
+#include <sysemu/dma.h>
 
 # define REG_FMT		"0x" TARGET_FMT_plx
 typedef struct LS1GPA_MMCIState LS1GPA_MMCIState;
 LS1GPA_MMCIState *ls1gpa_mmci_init(MemoryRegion *sysmem,
                 hwaddr base,
-                BlockBackend *blk, qemu_irq irq,
-                qemu_irq rx_dma, qemu_irq tx_dma);
+                BlockBackend *blk, qemu_irq irq);
 
 void ls1gpa_mmci_handlers(LS1GPA_MMCIState *s, qemu_irq readonly,
                           qemu_irq coverswitch);
@@ -63,6 +63,99 @@ void ls1gpa_mmci_handlers(LS1GPA_MMCIState *s, qemu_irq readonly,
 #define SDISTAADD7 0x60
 #define SDIINTEN   0x64
 
+#define SDICON_SDRESET        (1<<8)
+#define SDICON_MMCCLOCK       (1<<5)
+#define SDICON_BYTEORDER      (1<<4)
+#define SDICON_SDIOIRQ        (1<<3)
+#define SDICON_RWAITEN        (1<<2)
+#define SDICON_FIFORESET      (1<<1)
+#define SDICON_CLOCKTYPE      (1<<0)
+
+#define SDICMDCON_ABORT       (1<<12)
+#define SDICMDCON_WITHDATA    (1<<11)
+#define SDICMDCON_LONGRSP     (1<<10)
+#define SDICMDCON_WAITRSP     (1<<9)
+#define SDICMDCON_CMDSTART    (1<<8)
+#define SDICMDCON_SENDERHOST  (1<<6)
+#define SDICMDCON_INDEX       (0x3f)
+
+#define SDICMDSTAT_CRCFAIL    (1<<12)
+#define SDICMDSTAT_CMDSENT    (1<<11)
+#define SDICMDSTAT_CMDTIMEOUT (1<<10)
+#define SDICMDSTAT_RSPFIN     (1<<9)
+#define SDICMDSTAT_XFERING    (1<<8)
+#define SDICMDSTAT_INDEX      (0xff)
+
+#define S3C2440_SDIDCON_DS_BYTE       (0<<22)
+#define S3C2440_SDIDCON_DS_HALFWORD   (1<<22)
+#define S3C2440_SDIDCON_DS_WORD       (2<<22)
+#define SDIDCON_IRQPERIOD     (1<<21)
+#define SDIDCON_TXAFTERRESP   (1<<20)
+#define SDIDCON_RXAFTERCMD    (1<<19)
+#define SDIDCON_BUSYAFTERCMD  (1<<18)
+#define SDIDCON_BLOCKMODE     (1<<17)
+#define SDIDCON_WIDEBUS       (1<<16)
+#define MISC_CTRL_SDIO_DMAEN         (1<<15)
+#define SDIDCON_STOP          (1<<14)
+#define S3C2440_SDIDCON_DATSTART      (1<<14)
+#define SDIDCON_DATMODE	      (3<<12)
+#define SDIDCON_BLKNUM        (0x7ff)
+
+/* constants for SDIDCON_DATMODE */
+#define SDIDCON_XFER_READY    (0<<12)
+#define SDIDCON_XFER_CHKSTART (1<<12)
+#define SDIDCON_XFER_RXSTART  (2<<12)
+#define SDIDCON_XFER_TXSTART  (3<<12)
+
+#define SDIDCON_BLKNUM_MASK   (0xFFF)
+#define SDIDCNT_BLKNUM_SHIFT  (12)
+
+#define SDIDSTA_RDYWAITREQ    (1<<10)
+#define SDIDSTA_SDIOIRQDETECT (1<<9)
+#define SDIDSTA_FIFOFAIL      (1<<8)	/* reserved on 2440 */
+#define SDIDSTA_CRCFAIL       (1<<7)
+#define SDIDSTA_RXCRCFAIL     (1<<6)
+#define SDIDSTA_DATATIMEOUT   (1<<5)
+#define SDIDSTA_XFERFINISH    (1<<4)
+#define SDIDSTA_BUSYFINISH    (1<<3)
+#define SDIDSTA_SBITERR       (1<<2)	/* reserved on 2410a/2440 */
+#define SDIDSTA_TXDATAON      (1<<1)
+#define SDIDSTA_RXDATAON      (1<<0)
+
+#define S3C2440_SDIFSTA_FIFORESET      (1<<16)
+#define S3C2440_SDIFSTA_FIFOFAIL       (3<<14)  /* 3 is correct (2 bits) */
+#define SDIFSTA_TFDET          (1<<13)
+#define SDIFSTA_RFDET          (1<<12)
+#define SDIFSTA_TFHALF         (1<<11)
+#define SDIFSTA_TFEMPTY        (1<<10)
+#define SDIFSTA_RFLAST         (1<<9)
+#define SDIFSTA_RFFULL         (1<<8)
+#define SDIFSTA_RFHALF         (1<<7)
+#define SDIFSTA_COUNTMASK      (0x7f)
+
+//#define SDIIMSK_RESPONSECRC    (1<<17)
+#define SDIIMSK_RESPONSEND     (1<<14)
+#define SDIIMSK_READWAIT       (1<<13)
+#define SDIIMSK_SDIOIRQ        (1<<12)
+#define SDIIMSK_FIFOFAIL       (1<<11)
+
+
+#define SDIIMSK_RESPONSECRC    (1<<8)
+#define SDIIMSK_CMDTIMEOUT     (1<<7)
+#define SDIIMSK_CMDSENT        (1<<6)	//dbg-yg
+#define SDIIMSK_PROGERR        (1<<4)	//dbg-yg
+#define SDIIMSK_TXCRCFAIL      (1<<3)
+#define SDIIMSK_RXCRCFAIL      (1<<2)
+#define SDIIMSK_DATATIMEOUT    (1<<1)
+#define SDIIMSK_DATAFINISH     (1<<0)   //dbg-yg
+
+#define SDIIMSK_BUSYFINISH     (1<<6)
+#define SDIIMSK_SBITERR        (1<<5)	/* reserved 2440/2410a */
+#define SDIIMSK_TXFIFOHALF     (1<<4)
+#define SDIIMSK_TXFIFOEMPTY    (1<<3)
+#define SDIIMSK_RXFIFOLAST     (1<<2)
+#define SDIIMSK_RXFIFOFULL     (1<<1)
+#define SDIIMSK_RXFIFOHALF     (1<<0)  
 typedef struct ls1gpa_sdio_regs {
     int sdicon;
     int sdipre;
@@ -92,44 +185,59 @@ typedef struct ls1gpa_sdio_regs {
     int sdiinten;
 } ls1gpa_sdio_regs_t;
 
+struct dma_desc{
+	uint32_t ordered;
+	uint32_t saddr;
+	uint32_t daddr;
+	uint32_t length;
+	uint32_t step_length;
+	uint32_t step_times;
+	uint32_t cmd;
+	/*used by logic only*/
+	uint32_t left;
+	uint32_t active;
+	uint32_t nextaddr;
+};
+
+enum {
+DMA_INT_MASK =  1,
+DMA_INT = 2,
+DMA_SINGLE_TRANS_OVER = 4,
+DMA_TRANS_OVER = 8,
+DMA_ORDER_EN = 1,
+DMA_READ_DDR = 0x1,
+};
+
 struct LS1GPA_MMCIState {
     SysBusDevice parent_obj;
 
     MemoryRegion iomem;
     qemu_irq irq;
-    qemu_irq rx_dma;
-    qemu_irq tx_dma;
     qemu_irq inserted;
     qemu_irq readonly;
 
     BlockBackend *blk;
     SDBus sdbus;
 
-    uint32_t status;
-    uint32_t clkrt;
-    uint32_t spi;
-    uint32_t cmdat;
-    uint32_t resp_tout;
-    uint32_t read_tout;
-    int32_t blklen;
-    int32_t numblk;
+    int32_t blksize;
+    int32_t blknum;
     uint32_t intmask;
     uint32_t intreq;
+    int dma_int_status;
+    int iolen;
     int32_t cmd;
     uint32_t arg;
+    uint8_t *ioaddr;
 
-    int32_t active;
-    int32_t bytesleft;
-    uint8_t tx_fifo[64];
-    uint32_t tx_start;
-    uint32_t tx_len;
-    uint8_t rx_fifo[32];
-    uint32_t rx_start;
-    uint32_t rx_len;
-    uint16_t resp_fifo[9];
-    uint32_t resp_len;
+    struct dma_desc dma_desc;
+    uint8_t fifo_buffer[0x1000];
 
     int32_t cmdreq;
+
+    union{
+	    AddressSpace *as;
+	    void *as_ptr;
+    };
 
     union{
     ls1gpa_sdio_regs_t sdioregs;
@@ -137,214 +245,293 @@ struct LS1GPA_MMCIState {
     };
 };
 
-static bool ls1gpa_mmci_vmstate_validate(void *opaque, int version_id)
-{
-    LS1GPA_MMCIState *s = opaque;
-
-    return s->tx_start < ARRAY_SIZE(s->tx_fifo)
-        && s->rx_start < ARRAY_SIZE(s->rx_fifo)
-        && s->tx_len <= ARRAY_SIZE(s->tx_fifo)
-        && s->rx_len <= ARRAY_SIZE(s->rx_fifo)
-        && s->resp_len <= ARRAY_SIZE(s->resp_fifo);
-}
-
 
 static const VMStateDescription vmstate_ls1gpa_mmci = {
     .name = "ls1gpa-mmci",
     .version_id = 2,
     .minimum_version_id = 2,
     .fields = (VMStateField[]) {
-        VMSTATE_UINT32(status, LS1GPA_MMCIState),
-        VMSTATE_UINT32(clkrt, LS1GPA_MMCIState),
-        VMSTATE_UINT32(spi, LS1GPA_MMCIState),
-        VMSTATE_UINT32(cmdat, LS1GPA_MMCIState),
-        VMSTATE_UINT32(resp_tout, LS1GPA_MMCIState),
-        VMSTATE_UINT32(read_tout, LS1GPA_MMCIState),
-        VMSTATE_INT32(blklen, LS1GPA_MMCIState),
-        VMSTATE_INT32(numblk, LS1GPA_MMCIState),
-        VMSTATE_UINT32(intmask, LS1GPA_MMCIState),
-        VMSTATE_UINT32(intreq, LS1GPA_MMCIState),
-        VMSTATE_INT32(cmd, LS1GPA_MMCIState),
-        VMSTATE_UINT32(arg, LS1GPA_MMCIState),
-        VMSTATE_INT32(cmdreq, LS1GPA_MMCIState),
-        VMSTATE_INT32(active, LS1GPA_MMCIState),
-        VMSTATE_INT32(bytesleft, LS1GPA_MMCIState),
-        VMSTATE_UINT32(tx_start, LS1GPA_MMCIState),
-        VMSTATE_UINT32(tx_len, LS1GPA_MMCIState),
-        VMSTATE_UINT32(rx_start, LS1GPA_MMCIState),
-        VMSTATE_UINT32(rx_len, LS1GPA_MMCIState),
-        VMSTATE_UINT32(resp_len, LS1GPA_MMCIState),
-        VMSTATE_VALIDATE("fifo size incorrect", ls1gpa_mmci_vmstate_validate),
-        VMSTATE_UINT8_ARRAY(tx_fifo, LS1GPA_MMCIState, 64),
-        VMSTATE_UINT8_ARRAY(rx_fifo, LS1GPA_MMCIState, 32),
-        VMSTATE_UINT16_ARRAY(resp_fifo, LS1GPA_MMCIState, 9),
         VMSTATE_END_OF_LIST()
     }
 };
 
-#define MMC_STRPCL	0x00	/* MMC Clock Start/Stop register */
-#define MMC_STAT	0x04	/* MMC Status register */
-#define MMC_CLKRT	0x08	/* MMC Clock Rate register */
-#define MMC_SPI		0x0c	/* MMC SPI Mode register */
-#define MMC_CMDAT	0x10	/* MMC Command/Data register */
-#define MMC_RESTO	0x14	/* MMC Response Time-Out register */
-#define MMC_RDTO	0x18	/* MMC Read Time-Out register */
-#define MMC_BLKLEN	0x1c	/* MMC Block Length register */
-#define MMC_NUMBLK	0x20	/* MMC Number of Blocks register */
-#define MMC_PRTBUF	0x24	/* MMC Buffer Partly Full register */
-#define MMC_I_MASK	0x28	/* MMC Interrupt Mask register */
-#define MMC_I_REG	0x2c	/* MMC Interrupt Request register */
-#define MMC_CMD		0x30	/* MMC Command register */
-#define MMC_ARGH	0x34	/* MMC Argument High register */
-#define MMC_ARGL	0x38	/* MMC Argument Low register */
-#define MMC_RES		0x3c	/* MMC Response FIFO */
-#define MMC_RXFIFO	0x40	/* MMC Receive FIFO */
-#define MMC_TXFIFO	0x44	/* MMC Transmit FIFO */
-#define MMC_RDWAIT	0x48	/* MMC RD_WAIT register */
-#define MMC_BLKS_REM	0x4c	/* MMC Blocks Remaining register */
+LS1GPA_MMCIState *ls1gp_sdio;
+static int dma_readsdio(LS1GPA_MMCIState *s);
+static int dma_writesdio(LS1GPA_MMCIState *s);
+static void ls1gpa_mmci_end_transfer(LS1GPA_MMCIState *s);
 
-/* Bitfield masks */
-#define STRPCL_STOP_CLK	(1 << 0)
-#define STRPCL_STRT_CLK	(1 << 1)
-#define STAT_TOUT_RES	(1 << 1)
-#define STAT_CLK_EN	(1 << 8)
-#define STAT_DATA_DONE	(1 << 11)
-#define STAT_PRG_DONE	(1 << 12)
-#define STAT_END_CMDRES	(1 << 13)
-#define SPI_SPI_MODE	(1 << 0)
-#define CMDAT_RES_TYPE	(3 << 0)
-#define CMDAT_DATA_EN	(1 << 2)
-#define CMDAT_WR_RD	(1 << 3)
-#define CMDAT_DMA_EN	(1 << 7)
-#define CMDAT_STOP_TRAN	(1 << 10)
-#define INT_DATA_DONE	(1 << 0)
-#define INT_PRG_DONE	(1 << 1)
-#define INT_END_CMD	(1 << 2)
-#define INT_STOP_CMD	(1 << 3)
-#define INT_CLK_OFF	(1 << 4)
-#define INT_RXFIFO_REQ	(1 << 5)
-#define INT_TXFIFO_REQ	(1 << 6)
-#define INT_TINT	(1 << 7)
-#define INT_DAT_ERR	(1 << 8)
-#define INT_RES_ERR	(1 << 9)
-#define INT_RD_STALLED	(1 << 10)
-#define INT_SDIO_INT	(1 << 11)
-#define INT_SDIO_SACK	(1 << 12)
-#define PRTBUF_PRT_BUF	(1 << 0)
+static void ls1gpa_mmci_data_transfer(LS1GPA_MMCIState *s);
 
-/* Route internal interrupt lines to the global IC and DMA */
-static void ls1gpa_mmci_int_update(LS1GPA_MMCIState *s)
+#define DPRINT_L1 printf
+#define ERRPRINT printf
+#define min(x,y) ((x)<(y)?(x):(y))
+static void ls1gpa_mmci_update_irq(LS1GPA_MMCIState *s)
 {
-    uint32_t mask = s->intmask;
-    if (s->cmdat & CMDAT_DMA_EN) {
-        mask |= INT_RXFIFO_REQ | INT_TXFIFO_REQ;
-
-        qemu_set_irq(s->rx_dma, !!(s->intreq & INT_RXFIFO_REQ));
-        qemu_set_irq(s->tx_dma, !!(s->intreq & INT_TXFIFO_REQ));
-    }
-
-    qemu_set_irq(s->irq, !!(s->intreq & ~mask));
+	/* edge interrupt */
+	if(s->dma_int_status & 1)
+	{
+		qemu_irq_raise(s->irq);
+		qemu_irq_lower(s->irq);
+	}
+	
+	
+	s->dma_int_status = 0;
 }
 
-static void ls1gpa_mmci_fifo_update(LS1GPA_MMCIState *s)
+static void ls1gpa_mmci_send_command(LS1GPA_MMCIState *s)
 {
-    if (!s->active)
-        return;
-
-    if (s->cmdat & CMDAT_WR_RD) {
-        while (s->bytesleft && s->tx_len) {
-            sdbus_write_data(&s->sdbus, s->tx_fifo[s->tx_start++]);
-            s->tx_start &= 0x1f;
-            s->tx_len --;
-            s->bytesleft --;
-        }
-        if (s->bytesleft)
-            s->intreq |= INT_TXFIFO_REQ;
-    } else
-        while (s->bytesleft && s->rx_len < 32) {
-            s->rx_fifo[(s->rx_start + (s->rx_len ++)) & 0x1f] =
-                sdbus_read_data(&s->sdbus);
-            s->bytesleft --;
-            s->intreq |= INT_RXFIFO_REQ;
-        }
-
-    if (!s->bytesleft) {
-        s->active = 0;
-        s->intreq |= INT_DATA_DONE;
-        s->status |= STAT_DATA_DONE;
-
-        if (s->cmdat & CMDAT_WR_RD) {
-            s->intreq |= INT_PRG_DONE;
-            s->status |= STAT_PRG_DONE;
-        }
-    }
-
-    ls1gpa_mmci_int_update(s);
-}
-
-static void ls1gpa_mmci_wakequeues(LS1GPA_MMCIState *s)
-{
-    int rsplen, i;
     SDRequest request;
     uint8_t response[16];
+    int rlen;
 
-    s->active = 1;
-    s->rx_len = 0;
-    s->tx_len = 0;
-    s->cmdreq = 0;
+    s->sdioregs.sdicmdsta = 0;
+    s->sdioregs.sdiintmsk = 0;
+    request.cmd = s->sdioregs.sdicmdcon & SDICMDCON_INDEX;
+    request.arg = s->sdioregs.sdicmdarg;
+    DPRINT_L1("sending CMD%u ARG[0x%08x]\n", request.cmd, request.arg);
+    rlen = sdbus_do_command(&s->sdbus, &request, response);
 
-    request.cmd = s->cmd;
-    request.arg = s->arg;
-    request.crc = 0;	/* FIXME */
-
-    rsplen = sdbus_do_command(&s->sdbus, &request, response);
-    s->intreq |= INT_END_CMD;
-
-    memset(s->resp_fifo, 0, sizeof(s->resp_fifo));
-    switch (s->cmdat & CMDAT_RES_TYPE) {
-#define LS1GPA_MMCI_RESP(wd, value0, value1)	\
-        s->resp_fifo[(wd) + 0] |= (value0);	\
-        s->resp_fifo[(wd) + 1] |= (value1) << 8;
-    case 0:	/* No response */
-        goto complete;
-
-    case 1:	/* R1, R4, R5 or R6 */
-        if (rsplen < 4)
-            goto timeout;
-        goto complete;
-
-    case 2:	/* R2 */
-        if (rsplen < 16)
-            goto timeout;
-        goto complete;
-
-    case 3:	/* R3 */
-        if (rsplen < 4)
-            goto timeout;
-        goto complete;
-
-    complete:
-        for (i = 0; rsplen > 0; i ++, rsplen -= 2) {
-            LS1GPA_MMCI_RESP(i, response[i * 2], response[i * 2 + 1]);
+    if (s->sdioregs.sdicmdcon  & SDICMDCON_WAITRSP ) {
+        if (rlen == 4) {
+            s->sdioregs.sdirsp0 = (response[0] << 24) | (response[1] << 16) |
+                           (response[2] << 8)  |  response[3];
+             s->sdioregs.sdirsp1 = s->sdioregs.sdirsp2 = s->sdioregs.sdirsp3 = 0;
+            DPRINT_L1("Response: RSPREG[31..0]=0x%08x\n", s->sdioregs.sdirsp0);
+        } else if (rlen == 16) {
+            s->sdioregs.sdirsp0 = (response[11] << 24) | (response[12] << 16) |
+                           (response[13] << 8) |  response[14];
+            s->sdioregs.sdirsp1 = (response[7] << 24) | (response[8] << 16) |
+                           (response[9] << 8)  |  response[10];
+            s->sdioregs.sdirsp2 = (response[3] << 24) | (response[4] << 16) |
+                           (response[5] << 8)  |  response[6];
+            s->sdioregs.sdirsp3 = (response[0] << 16) | (response[1] << 8) |
+                            response[2];
+            DPRINT_L1("Response received:\n RSPREG[127..96]=0x%08x, RSPREG[95.."
+                  "64]=0x%08x,\n RSPREG[63..32]=0x%08x, RSPREG[31..0]=0x%08x\n",
+                  s->sdioregs.sdirsp3, s->sdioregs.sdirsp2, s->sdioregs.sdirsp1, s->sdioregs.sdirsp0);
+	s->sdioregs.sdicmdsta |= SDICMDSTAT_RSPFIN;
+        s->sdioregs.sdiintmsk |= SDIIMSK_CMDSENT;
+        } else {
+            ERRPRINT("Timeout waiting for command response\n");
+	    s->sdioregs.sdicmdsta |= SDICMDSTAT_CMDTIMEOUT;
+            s->sdioregs.sdiintmsk |= SDIIMSK_CMDTIMEOUT;
         }
-        s->status |= STAT_END_CMDRES;
 
-        if (!(s->cmdat & CMDAT_DATA_EN))
-            s->active = 0;
-        else
-            s->bytesleft = s->numblk * s->blklen;
-
-        s->resp_len = 0;
-        break;
-
-    timeout:
-        s->active = 0;
-        s->status |= STAT_TOUT_RES;
-        break;
     }
 
-    ls1gpa_mmci_fifo_update(s);
+
+    s->sdioregs.sdicmdsta |= SDICMDSTAT_CMDSENT;
+
+    if (s->sdioregs.sdibsize && (s->sdioregs.sdidatcon & SDIDCON_BLKNUM )) {
+        s->blknum = s->sdioregs.sdidatcon & SDIDCON_BLKNUM;
+        s->blksize = s->sdioregs.sdibsize;
+        ls1gpa_mmci_data_transfer(s);
+    }
+
+    ls1gpa_mmci_update_irq(s);
 }
+
+void ls1gpa_sdio_set_dmaaddr(uint32_t val);
+
+void ls1gpa_sdio_set_dmaaddr(uint32_t val)
+{
+	LS1GPA_MMCIState *s = ls1gp_sdio;
+	uint32_t dmaaddr;
+	dmaaddr = val & ~0xf;
+
+	if(val & 0x8)
+	{
+		if(s->dma_desc.active)
+		{
+		s->dma_desc.nextaddr = dmaaddr;
+		}
+		else
+		{
+		dma_memory_read(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
+		s->dma_desc.left = s->dma_desc.length * 4;
+		s->dma_desc.step_times--;
+		s->dma_desc.active = 1;
+		s->dma_desc.nextaddr = 0;
+		if(s->dma_desc.cmd & DMA_READ_DDR)
+			dma_writesdio(s);
+		else
+			dma_readsdio(s);
+		}
+	}
+
+	if(val & 0x4)
+	{
+		dma_memory_write(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
+	}
+
+}
+
+static int dma_next(LS1GPA_MMCIState *s)
+{
+
+	if(!s->dma_desc.step_times)
+	{
+		if(s->dma_desc.cmd & DMA_INT_MASK)
+		{
+			s->dma_desc.cmd |= DMA_INT;
+			s->dma_int_status = 1;
+			ls1gpa_mmci_update_irq(s);
+		}
+
+
+		if(s->dma_desc.ordered & DMA_ORDER_EN)
+		{
+			dma_memory_read(s->as, s->dma_desc.ordered & ~DMA_ORDER_EN,(uint8_t *)&s->dma_desc,4*7);
+			s->dma_desc.left = s->dma_desc.length * 4;
+			s->dma_desc.step_times--;
+		}
+		else if(s->dma_desc.nextaddr)
+		{
+			dma_memory_read(s->as, s->dma_desc.nextaddr, (uint8_t *)&s->dma_desc,4*7);
+			s->dma_desc.nextaddr = 0;
+			s->dma_desc.left = s->dma_desc.length * 4;
+		}
+		else {
+			s->dma_desc.cmd |= DMA_TRANS_OVER;
+			s->dma_desc.active = 0;
+		}
+	}
+	else
+	{
+		s->dma_desc.step_times--;
+		s->dma_desc.saddr += s->dma_desc.step_length * 4;
+		s->dma_desc.left = s->dma_desc.length * 4;
+	}
+	return s->dma_desc.active;
+}
+
+static int dma_readsdio(LS1GPA_MMCIState *s)
+{
+	uint32_t copied;
+
+	while(s->dma_desc.active && (s->blknum || s->iolen) && !(s->dma_desc.cmd & DMA_READ_DDR) && (s->sdioregs.sdicmdcon & SDICMDCON_CMDSTART))
+	{
+		if(!s->iolen)
+		{
+		 int i;
+		 for(i=0;i<s->blksize;i++)
+                 s->fifo_buffer[i] = sdbus_read_data(&s->sdbus);
+                 s->ioaddr = s->fifo_buffer;
+		 s->blknum--;
+		}
+
+		if(!s->dma_desc.left && !dma_next(s))
+		 break;
+
+		copied = min(s->dma_desc.left,s->iolen);
+
+		if(!copied) break;
+
+		dma_memory_write(s->as, s->dma_desc.saddr,s->ioaddr,copied);
+
+		s->ioaddr += copied;
+		s->iolen -= copied;
+		s->dma_desc.saddr += copied;
+		s->dma_desc.left -= copied;
+
+
+		if(!s->blknum && !s->iolen)
+		{
+			s->sdioregs.sdicmdcon &= ~SDICMDCON_CMDSTART;
+        		ls1gpa_mmci_end_transfer(s);
+			break;
+		}
+
+	}
+
+	return s->dma_desc.active;
+}
+
+
+static int dma_writesdio(LS1GPA_MMCIState *s)
+{
+	uint32_t wantsize,copied;
+	wantsize = 0;
+
+	while(s->dma_desc.active && (s->blknum || s->iolen) && (s->dma_desc.cmd & DMA_READ_DDR) && (s->sdioregs.sdicmdcon & SDICMDCON_CMDSTART))
+	{
+		if(!s->dma_desc.left && !dma_next(s))
+		 break;
+
+		wantsize = s->blksize - s->iolen;
+		copied = min(s->dma_desc.left,wantsize);
+
+		if(!copied) break;
+
+		dma_memory_read(s->as, s->dma_desc.saddr,s->ioaddr,copied);
+
+		s->ioaddr += copied;
+		s->iolen += copied;
+		s->dma_desc.saddr += copied;
+		s->dma_desc.left -= copied;
+
+		if(!s->dma_desc.left)
+		 dma_next(s);
+
+		if(s->iolen == s->blksize)
+		{
+		 int i;
+		 for(i=0;i<s->blksize;i++)
+            	 sdbus_write_data(&s->sdbus, s->fifo_buffer[i]);
+		 s->iolen = 0;
+		 s->ioaddr = s->fifo_buffer;
+		 s->blknum--;
+		}
+
+		if(!s->blknum && !s->iolen)
+		{
+			s->sdioregs.sdicmdcon &= ~SDICMDCON_CMDSTART;
+        		ls1gpa_mmci_end_transfer(s);
+			break;
+		}
+	}
+
+	return s->dma_desc.active;
+}
+
+
+static void ls1gpa_mmci_end_transfer(LS1GPA_MMCIState *s)
+{
+    /* Automatically send CMD12 to stop transfer if AutoCMD12 enabled */
+    if ((s->sdioregs.sdidatcon & SDIDCON_BLKNUM) && (s->sdioregs.sdicmdcon & SDICMDCON_ABORT)) {
+        SDRequest request;
+        uint8_t response[16];
+
+        request.cmd = 0x0C;
+        request.arg = 0;
+        DPRINT_L1("Automatically issue CMD%d %08x\n", request.cmd, request.arg);
+        sdbus_do_command(&s->sdbus, &request, response);
+        /* Auto CMD12 response goes to the upper Response register */
+        s->sdioregs.sdirsp3 = (response[0] << 24) | (response[1] << 16) |
+                (response[2] << 8) | response[3];
+    }
+
+
+    s->sdioregs.sdiintmsk |= SDIIMSK_DATAFINISH;
+    ls1gpa_mmci_update_irq(s);
+}
+
+static void ls1gpa_mmci_data_transfer(LS1GPA_MMCIState *s)
+{
+
+	if (s->sdioregs.sdidatcon  & MISC_CTRL_SDIO_DMAEN) {
+	if(s->dma_desc.active && (s->blknum || s->iolen)  && (s->sdioregs.sdicmdcon & SDICMDCON_CMDSTART))
+        {
+		if (s->dma_desc.cmd & DMA_READ_DDR) {
+			dma_writesdio(s);
+		} else {
+			dma_readsdio(s);
+		}
+        }
+	}
+
+}
+
 
 static uint64_t ls1gpa_mmci_read(void *opaque, hwaddr offset, unsigned size)
 {
@@ -352,56 +539,10 @@ static uint64_t ls1gpa_mmci_read(void *opaque, hwaddr offset, unsigned size)
     uint32_t ret;
 
     switch (offset) {
-    case MMC_STRPCL:
-        return 0;
-    case MMC_STAT:
-        return s->status;
-    case MMC_CLKRT:
-        return s->clkrt;
-    case MMC_SPI:
-        return s->spi;
-    case MMC_CMDAT:
-        return s->cmdat;
-    case MMC_RESTO:
-        return s->resp_tout;
-    case MMC_RDTO:
-        return s->read_tout;
-    case MMC_BLKLEN:
-        return s->blklen;
-    case MMC_NUMBLK:
-        return s->numblk;
-    case MMC_PRTBUF:
-        return 0;
-    case MMC_I_MASK:
-        return s->intmask;
-    case MMC_I_REG:
-        return s->intreq;
-    case MMC_CMD:
-        return s->cmd | 0x40;
-    case MMC_ARGH:
-        return s->arg >> 16;
-    case MMC_ARGL:
-        return s->arg & 0xffff;
-    case MMC_RES:
-        if (s->resp_len < 9)
-            return s->resp_fifo[s->resp_len ++];
-        return 0;
-    case MMC_RXFIFO:
-        ret = 0;
-        while (size-- && s->rx_len) {
-            ret |= s->rx_fifo[s->rx_start++] << (size << 3);
-            s->rx_start &= 0x1f;
-            s->rx_len --;
-        }
-        s->intreq &= ~INT_RXFIFO_REQ;
-        ls1gpa_mmci_fifo_update(s);
-        return ret;
-    case MMC_RDWAIT:
-        return 0;
-    case MMC_BLKS_REM:
-        return s->numblk;
+       case SDIINTMSK:
+	return s->sdioregs.sdiintmsk;
     default:
-        hw_error("%s: Bad offset " REG_FMT "\n", __FUNCTION__, offset);
+	return s->regdata[offset/4];
     }
 
     return 0;
@@ -413,107 +554,15 @@ static void ls1gpa_mmci_write(void *opaque,
     LS1GPA_MMCIState *s = (LS1GPA_MMCIState *) opaque;
 
     switch (offset) {
-    case MMC_STRPCL:
-        if (value & STRPCL_STRT_CLK) {
-            s->status |= STAT_CLK_EN;
-            s->intreq &= ~INT_CLK_OFF;
-
-            if (s->cmdreq && !(s->cmdat & CMDAT_STOP_TRAN)) {
-                s->status &= STAT_CLK_EN;
-                ls1gpa_mmci_wakequeues(s);
-            }
-        }
-
-        if (value & STRPCL_STOP_CLK) {
-            s->status &= ~STAT_CLK_EN;
-            s->intreq |= INT_CLK_OFF;
-            s->active = 0;
-        }
-
-        ls1gpa_mmci_int_update(s);
-        break;
-
-    case MMC_CLKRT:
-        s->clkrt = value & 7;
-        break;
-
-    case MMC_SPI:
-        s->spi = value & 0xf;
-        if (value & SPI_SPI_MODE)
-            printf("%s: attempted to use card in SPI mode\n", __FUNCTION__);
-        break;
-
-    case MMC_CMDAT:
-        s->cmdat = value & 0x3dff;
-        s->active = 0;
-        s->cmdreq = 1;
-        if (!(value & CMDAT_STOP_TRAN)) {
-            s->status &= STAT_CLK_EN;
-
-            if (s->status & STAT_CLK_EN)
-                ls1gpa_mmci_wakequeues(s);
-        }
-
-        ls1gpa_mmci_int_update(s);
-        break;
-
-    case MMC_RESTO:
-        s->resp_tout = value & 0x7f;
-        break;
-
-    case MMC_RDTO:
-        s->read_tout = value & 0xffff;
-        break;
-
-    case MMC_BLKLEN:
-        s->blklen = value & 0xfff;
-        break;
-
-    case MMC_NUMBLK:
-        s->numblk = value & 0xffff;
-        break;
-
-    case MMC_PRTBUF:
-        if (value & PRTBUF_PRT_BUF) {
-            s->tx_start ^= 32;
-            s->tx_len = 0;
-        }
-        ls1gpa_mmci_fifo_update(s);
-        break;
-
-    case MMC_I_MASK:
-        s->intmask = value & 0x1fff;
-        ls1gpa_mmci_int_update(s);
-        break;
-
-    case MMC_CMD:
-        s->cmd = value & 0x3f;
-        break;
-
-    case MMC_ARGH:
-        s->arg &= 0x0000ffff;
-        s->arg |= value << 16;
-        break;
-
-    case MMC_ARGL:
-        s->arg &= 0xffff0000;
-        s->arg |= value & 0x0000ffff;
-        break;
-
-    case MMC_TXFIFO:
-        while (size-- && s->tx_len < 0x20)
-            s->tx_fifo[(s->tx_start + (s->tx_len ++)) & 0x1f] =
-                    (value >> (size << 3)) & 0xff;
-        s->intreq &= ~INT_TXFIFO_REQ;
-        ls1gpa_mmci_fifo_update(s);
-        break;
-
-    case MMC_RDWAIT:
-    case MMC_BLKS_REM:
-        break;
-
+    case SDIINTMSK:
+	s->sdioregs.sdiintmsk &= ~value;
+	break;
+    case SDICMDCON:
+	s->regdata[offset/4] = value;
+	ls1gpa_mmci_send_command(s);
+	break;
     default:
-        hw_error("%s: Bad offset " REG_FMT "\n", __FUNCTION__, offset);
+	s->regdata[offset/4] = value;
     }
 }
 
@@ -525,8 +574,7 @@ static const MemoryRegionOps ls1gpa_mmci_ops = {
 
 LS1GPA_MMCIState *ls1gpa_mmci_init(MemoryRegion *sysmem,
                 hwaddr base,
-                BlockBackend *blk, qemu_irq irq,
-                qemu_irq rx_dma, qemu_irq tx_dma)
+                BlockBackend *blk, qemu_irq irq)
 {
     DeviceState *dev, *carddev;
     SysBusDevice *sbd;
@@ -536,10 +584,8 @@ LS1GPA_MMCIState *ls1gpa_mmci_init(MemoryRegion *sysmem,
     dev = qdev_create(NULL, TYPE_LS1GPA_MMCI);
     s = LS1GPA_MMCI(dev);
     sbd = SYS_BUS_DEVICE(dev);
-    sysbus_mmio_map(sbd, 0, base);
     sysbus_connect_irq(sbd, 0, irq);
-    qdev_connect_gpio_out_named(dev, "rx-dma", 0, rx_dma);
-    qdev_connect_gpio_out_named(dev, "tx-dma", 0, tx_dma);
+    memory_region_add_subregion(system, base, sbd->mmio[0].memory);
 
     /* Create and plug in the sd card */
     carddev = qdev_create(qdev_get_child_bus(dev, "sd-bus"), TYPE_SD_CARD);
@@ -587,29 +633,6 @@ static void ls1gpa_mmci_reset(DeviceState *d)
 {
     LS1GPA_MMCIState *s = LS1GPA_MMCI(d);
 
-    s->status = 0;
-    s->clkrt = 0;
-    s->spi = 0;
-    s->cmdat = 0;
-    s->resp_tout = 0;
-    s->read_tout = 0;
-    s->blklen = 0;
-    s->numblk = 0;
-    s->intmask = 0;
-    s->intreq = 0;
-    s->cmd = 0;
-    s->arg = 0;
-    s->active = 0;
-    s->bytesleft = 0;
-    s->tx_start = 0;
-    s->tx_len = 0;
-    s->rx_start = 0;
-    s->rx_len = 0;
-    s->resp_len = 0;
-    s->cmdreq = 0;
-    memset(s->tx_fifo, 0, sizeof(s->tx_fifo));
-    memset(s->rx_fifo, 0, sizeof(s->rx_fifo));
-    memset(s->resp_fifo, 0, sizeof(s->resp_fifo));
 }
 
 static void ls1gpa_mmci_instance_init(Object *obj)
@@ -618,12 +641,12 @@ static void ls1gpa_mmci_instance_init(Object *obj)
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
     DeviceState *dev = DEVICE(obj);
 
+    ls1gp_sdio = s;
+
     memory_region_init_io(&s->iomem, obj, &ls1gpa_mmci_ops, s,
                           "ls1gpa-mmci", 0x00100000);
     sysbus_init_mmio(sbd, &s->iomem);
     sysbus_init_irq(sbd, &s->irq);
-    qdev_init_gpio_out_named(dev, &s->rx_dma, "rx-dma", 1);
-    qdev_init_gpio_out_named(dev, &s->tx_dma, "tx-dma", 1);
 
     qbus_create_inplace(&s->sdbus, sizeof(s->sdbus),
                         TYPE_LS1GPA_MMCI_BUS, DEVICE(obj), "sd-bus");
