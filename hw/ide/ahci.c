@@ -1838,3 +1838,18 @@ void ahci_ide_create_devs(PCIDevice *dev, DriveInfo **hd)
     }
 
 }
+
+void ls2k_ahci_ide_create_devs(PCIDevice *dev, DriveInfo **hd)
+{
+    AHCIPCIState *d = LS2K_AHCI(dev);
+    AHCIState *ahci = &d->ahci;
+    int i;
+
+    for (i = 0; i < ahci->ports; i++) {
+        if (hd[i] == NULL) {
+            continue;
+        }
+        ide_create_drive(&ahci->dev[i].port, 0, hd[i]);
+    }
+
+}
