@@ -957,3 +957,4 @@ MSALDST_PROTO(d)
 
 DEF_HELPER_3(cache, void, env, tl, i32)
 DEF_HELPER_2(mypc, void, tl, i32)
+DEF_HELPER_2(mysp, void, tl, env)

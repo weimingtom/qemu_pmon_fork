@@ -27,16 +27,27 @@
 #include "sysemu/kvm.h"
 
 #define MAX_CPUS 16
-target_ulong mypc;
+target_ulong mypc, mypc0;
 target_ulong mypcs[MAX_CPUS];
 void (*mypc_callback)( target_ulong pc, uint32_t opcode);
 void helper_mypc( target_ulong pc, uint32_t opcode)
 {
+mypc0 = mypc;
 mypc = pc;
 if(current_cpu->cpu_index<MAX_CPUS)
 	mypcs[current_cpu->cpu_index] = pc;
 if(mypc_callback)
 mypc_callback(pc, opcode);
+}
+
+void helper_mysp( target_ulong newsp,CPUMIPSState *env)
+{
+	if(newsp>0x40000000 && newsp<0x100000000ULL)
+	{
+	printf("new sp is 0x%llx, mypc=0x%llx\n",(unsigned long long)newsp,(unsigned long long)mypc);
+	env->active_tc.PC = mypc;
+	do_raise_exception(env, EXCP_DEBUG, mypc);
+	}
 }
 
 /*****************************************************************************/
@@ -1452,6 +1463,9 @@ void helper_mtc0_entryhi(CPUMIPSState *env, target_ulong arg1)
     old = env->CP0_EntryHi;
     val = (arg1 & mask) | (old & ~mask);
     env->CP0_EntryHi = val;
+
+//printf("mypc=0x%llx entryhi=0x%llx\n", (long long)mypc, (long long)val  );
+
     if (env->CP0_Config3 & (1 << CP0C3_MT)) {
         sync_c0_entryhi(env, env->current_tc);
     }
@@ -1486,6 +1500,7 @@ void helper_mtc0_status(CPUMIPSState *env, target_ulong arg1)
     old = env->CP0_Status;
     cpu_mips_store_status(env, arg1);
     val = env->CP0_Status;
+//    if(old ^ arg1) printf("status change form 0x%llx to 0x%llx pc=0x%llx\n",(long long)old, (long long)arg1, (long long)mypc);
 
     if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
         qemu_log("Status %08x (%08x) => %08x (%08x) Cause %08x",
@@ -2050,6 +2065,8 @@ static void r4k_fill_tlb(CPUMIPSState *env, int idx)
     tlb->XI1 = (env->CP0_EntryLo1 >> CP0EnLo_XI) & 1;
     tlb->RI1 = (env->CP0_EntryLo1 >> CP0EnLo_RI) & 1;
     tlb->PFN[1] = (get_tlb_pfn_from_entrylo(env->CP0_EntryLo1) & ~mask) << 12;
+
+//    printf("vaddr 0x%llx lo0 0x%llx lo1 0x%llx\n", (long long)env->CP0_EntryHi&~0x1fffULL,(env->CP0_EntryLo0&~0x3fULL)<<6, (env->CP0_EntryLo1&~0x3fULL)<<6);
 }
 
 void r4k_helper_tlbinv(CPUMIPSState *env)
