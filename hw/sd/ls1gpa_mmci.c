@@ -18,7 +18,7 @@
 #include "hw/qdev.h"
 #include "hw/qdev-properties.h"
 #include "qemu/error-report.h"
-#include <sysemu/dma.h>
+#include "sysemu/dma.h"
 #include "cpu.h"
 
 # define REG_FMT		"0x" TARGET_FMT_plx
