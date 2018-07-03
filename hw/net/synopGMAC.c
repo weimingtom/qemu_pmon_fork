@@ -2240,7 +2240,7 @@ pci_gmac_uninit(PCIDevice *dev)
     qemu_del_nic(d->gmac.nic);
 }
 
-static int pci_gmac_init(PCIDevice *pci_dev)
+static void pci_gmac_init(PCIDevice *pci_dev, Error **errp)
 {
     gmac_pci_state *d = DO_UPCAST(gmac_pci_state, dev, pci_dev);
     uint8_t *pci_conf;
@@ -2262,7 +2262,6 @@ static int pci_gmac_init(PCIDevice *pci_dev)
 
     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->gmac.iomem);
 
-    return 0;
 }
 
 static Property gmac_pci_properties[] = {
@@ -2278,7 +2277,7 @@ static void gmac_pci_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = pci_gmac_init;
+    k->realize = pci_gmac_init;
     k->exit = pci_gmac_uninit;
     k->vendor_id = SYNOPGMAC_VENDOR_ID;
     k->device_id = SYNOPGMAC_DEVICE_ID;
@@ -2293,6 +2292,10 @@ static const TypeInfo gmac_pci_info = {
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(gmac_pci_state),
     .class_init    = gmac_pci_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_PCIE_DEVICE },
+        { }
+    },
 };
 
 static void gmac_pci_register_types(void)
