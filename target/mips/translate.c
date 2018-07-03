@@ -1540,10 +1540,15 @@ static inline void gen_load_gpr (TCGv t, int reg)
         tcg_gen_mov_tl(t, cpu_gpr[reg]);
 }
 
+int check_sp;
+
 static inline void gen_store_gpr (TCGv t, int reg)
+{
+if(check_sp)
 {
     if(reg == 29)
         gen_helper_mysp(t,cpu_env);
+}
 
     if (reg != 0)
         tcg_gen_mov_tl(cpu_gpr[reg], t);
