@@ -329,7 +329,7 @@ typedef struct ls1a_fb_pci_state {
 #define LS2KDC_VENDOR_ID  0x0014
 #define LS2KDC_DEVICE_ID  0x7a06
 
-static int ls1a_fb_pci_init(PCIDevice *pci_dev)
+static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
 {
     ls1a_fb_pci_state *d = DO_UPCAST(ls1a_fb_pci_state, dev, pci_dev);
     uint8_t *pci_conf;
@@ -356,7 +356,6 @@ static int ls1a_fb_pci_init(PCIDevice *pci_dev)
     d->dc.con = graphic_console_init(DEVICE(pci_dev), 0, &ls2hfb_fb_ops, &d->dc);
     ls2h_fb_reset(&d->dc);
 
-    return 0;
 }
 
 
@@ -370,7 +369,7 @@ static void ls1a_fb_pci_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = ls1a_fb_pci_init;
+    k->realize = ls1a_fb_pci_init;
     k->vendor_id = LS2KDC_VENDOR_ID;
     k->device_id = LS2KDC_DEVICE_ID;
     k->revision = 0x03;
@@ -384,6 +383,10 @@ static const TypeInfo ls1a_fb_pci_info = {
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(ls1a_fb_pci_state),
     .class_init    = ls1a_fb_pci_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_PCIE_DEVICE },
+        { }
+    },
 };
 
 static void ls1a_fb_pci_register_types(void)
