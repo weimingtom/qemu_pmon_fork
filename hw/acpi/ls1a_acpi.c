@@ -25,7 +25,7 @@
 #include "hw/pci/pci.h"
 #include "hw/i2c/i2c.h"
 #include "hw/i2c/smbus.h"
-#include <sysemu/sysemu.h>
+#include "sysemu/sysemu.h"
 
 //#define DEBUG
 
@@ -163,13 +163,13 @@ static void pm_mem_write(void *opaque, hwaddr addr, uint64_t val, unsigned size)
                 sus_typ = (val >> 10) & 7;
                 switch(sus_typ) {
                 case 0: /* soft power off */
-                    qemu_system_shutdown_request();
+                    qemu_system_shutdown_request(SHUTDOWN_CAUSE_GUEST_SHUTDOWN);
                     break;
                 case 1:
                     /* RSM_STS should be set on resume. Pretend that resume
                        was caused by power button */
                     s->pmsts |= (RSM_STS | PWRBTN_STS);
-                    qemu_system_reset_request();
+                    qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
                 default:
                     break;
                 }
@@ -226,7 +226,7 @@ static void piix4_powerdown(void *opaque, int irq, int power_failing)
     PIIX4PMState *s = opaque;
 
     if (!s) {
-        qemu_system_shutdown_request();
+        qemu_system_shutdown_request(SHUTDOWN_CAUSE_GUEST_SHUTDOWN);
     } else if (s->pmen & PWRBTN_EN) {
         s->pmsts |= PWRBTN_EN;
         pm_update_sci(s);
