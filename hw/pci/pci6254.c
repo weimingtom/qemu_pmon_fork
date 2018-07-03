@@ -60,7 +60,7 @@ static PCI6254State *pci6254_new(PCI6254State *s)
 #define PCI6254_VENDOR_ID  0x16c3
 #define PCI6254_DEVICE_ID  0xabcd
 
-static int pci_pci6254_init(PCIDevice *dev)
+static void pci_pci6254_init(PCIDevice *dev, Error **errp)
 {
     pci6254_pci_state * d = DO_UPCAST(pci6254_pci_state, card, dev);
     uint8_t *pci_conf;
@@ -87,7 +87,6 @@ static int pci_pci6254_init(PCIDevice *dev)
     pci_register_bar(&d->card, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->pci6254.ram_vram);
 
     //d->pci6254.irq = d->card.irq[0];
-    return 0;
 }
 
 
@@ -105,7 +104,7 @@ static void pci6254_class_init(ObjectClass *klass, void *data)
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);
 
-    k->init = pci_pci6254_init;
+    k->realize = pci_pci6254_init;
     k->romfile = "vgabios-vmware.bin";
     k->vendor_id = PCI6254_VENDOR_ID;
     k->device_id = PCI6254_DEVICE_ID;
@@ -119,6 +118,10 @@ static const TypeInfo pci6254_type_info = {
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(pci6254_pci_state),
     .class_init    = pci6254_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_PCIE_DEVICE },
+        { }
+    },
 };
 
 
