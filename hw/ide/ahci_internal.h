@@ -333,6 +333,10 @@ struct AHCIPCIState {
 #define ICH_AHCI(obj) \
     OBJECT_CHECK(AHCIPCIState, (obj), TYPE_ICH9_AHCI)
 
+#define LS2K_AHCI(obj) \
+    OBJECT_CHECK(AHCIPCIState, (obj), "ls2k-ahci")
+
+
 extern const VMStateDescription vmstate_ahci;
 
 #define VMSTATE_AHCI(_field, _state) {                               \
