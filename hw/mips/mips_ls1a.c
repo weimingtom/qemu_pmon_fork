@@ -272,25 +272,13 @@ static const int sector_len = 32 * 1024;
 
 static PCIBus *pcibus_ls1a_init(qemu_irq *pic, int (*board_map_irq)(int bus,int dev,int func,int pin));
 
-static CPUUnassignedAccess real_do_unassigned_access;
-static void mips_ls1a_do_unassigned_access(CPUState *cpu, hwaddr addr,
-                                           bool is_write, bool is_exec,
-                                           int opaque, unsigned size)
-{
-    if (!is_exec) {
-        /* ignore invalid access (ie do not raise exception) */
-        return;
-    }
-    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
-}
 
-static void mips_ls1a_init (MachineState *args)
+static void mips_ls1a_init (MachineState *machine)
 {
-	ram_addr_t ram_size = args->ram_size;
-	const char *cpu_model = args->cpu_model;
-	const char *kernel_filename = args->kernel_filename;
-	const char *kernel_cmdline = args->kernel_cmdline;
-	const char *initrd_filename = args->initrd_filename;
+	ram_addr_t ram_size = machine->ram_size;
+	const char *kernel_filename = machine->kernel_filename;
+	const char *kernel_cmdline = machine->kernel_cmdline;
+	const char *initrd_filename = machine->initrd_filename;
 	char *filename;
 	MemoryRegion *address_space_mem = get_system_memory();
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
@@ -306,29 +294,11 @@ static void mips_ls1a_init (MachineState *args)
 	DriveInfo *flash_dinfo=NULL;
 	int ddr2config = 0;
 	//ISABus *isa_bus;
-	CPUClass *cc;
 
 
 	/* init CPUs */
-	if (cpu_model == NULL) {
-#ifdef TARGET_MIPS64
-		cpu_model = "LS232";
-#else
-		cpu_model = "LS232";
-#endif
-	}
-
-		cpu = cpu_mips_init(cpu_model);
-		if (cpu == NULL) {
-			fprintf(stderr, "Unable to find CPU definition\n");
-			exit(1);
-		}
+	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
-
-		cc = CPU_GET_CLASS(cpu);
-		real_do_unassigned_access = cc->do_unassigned_access;
-		cc->do_unassigned_access = mips_ls1a_do_unassigned_access;
-
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
 		reset_info->vector = env->active_tc.PC;
@@ -601,6 +571,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls1a platform";
     mc->init = mips_ls1a_init;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("LS232");
 }
 
 DEFINE_MACHINE("ls1a", mips_machine_init)
@@ -784,7 +755,7 @@ static const MemoryRegionOps bonito_pciconf_ops = {
     },
 };
 
-static int bonito_initfn(PCIDevice *dev)
+static void bonito_initfn(PCIDevice *dev, Error **errp)
 {
     PCIBonitoState *s = DO_UPCAST(PCIBonitoState, dev, dev);
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
@@ -821,8 +792,6 @@ static int bonito_initfn(PCIDevice *dev)
     pci_set_byte(dev->config + PCI_MIN_GNT, 0x3c);
     pci_set_byte(dev->config + PCI_MAX_LAT, 0x00);
 
-
-    return 0;
 }
 
 
@@ -831,7 +800,7 @@ static void bonito_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = bonito_initfn;
+    k->realize = bonito_initfn;
     k->vendor_id = 0xdf53;
     k->device_id = 0x00d5;
     k->revision = 0x01;
