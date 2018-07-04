@@ -54,7 +54,7 @@
 #include "hw/empty_slot.h"
 #include "hw/ssi/ssi.h"
 #include "hw/ide/pci.h"
-#include "hw/ide/ahci.h"
+#include "hw/ide/ahci_internal.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 #include "loongson2k_rom.h"
@@ -1328,7 +1328,7 @@ static const MemoryRegionOps bonito_pciconf_ops = {
     },
 };
 
-static int bonito_initfn(PCIDevice *dev)
+static int bonito_initfn(PCIDevice *dev, Error **errp)
 {
     PCIBonitoState *s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, dev);
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
@@ -1373,7 +1373,7 @@ static void bonito_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = bonito_initfn;
+    k->realize = bonito_initfn;
     k->exit = pci_bridge_exitfn;
     k->vendor_id = 0xdf53;
     k->device_id = 0x00d5;
@@ -1531,29 +1531,6 @@ static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
 }
 
 
-/* Handle PCI-to-system address translation.  */
-/* TODO: A translation failure here ought to set PCI error codes on the
-   Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls2k_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr addr, bool is_write)
-{
-    //BonitoState *pcihost = container_of(iommu, BonitoState, iomem_mem);
-    IOMMUTLBEntry ret;
-
-    ret = (IOMMUTLBEntry) {
-        .target_as = &address_space_memory,
-        .translated_addr = addr,
-        .addr_mask = -1ULL,
-        .perm = IOMMU_RW,
-    };
-
-
-    return ret;
-}
-
-static const MemoryRegionIOMMUOps ls2k_pciedma_iommu_ops = {
-    .translate = ls2k_pciedma_translate_iommu,
-};
-
 /*
 two way to translate pci dma address:
 pci_setup_iommu
@@ -1572,7 +1549,6 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-    //memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls2k_pciedma_iommu_ops, "iommu-ls2kpcie", INT64_MAX);
 
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
     memory_region_init_alias(&pcihost->iomem_subbigmem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x40000000, 0x20000000);
