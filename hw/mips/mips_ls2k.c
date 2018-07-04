@@ -36,7 +36,6 @@
 #include "hw/mips/cpudevs.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bridge.h"
-#include "sysemu/char.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/arch_init.h"
 #include "qemu/log.h"
@@ -719,7 +718,6 @@ static void mips_ls2k_do_unassigned_access(CPUState *cpu, hwaddr addr,
 static void mips_ls2k_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
-	const char *cpu_model = machine->cpu_model;
 	const char *kernel_filename = machine->kernel_filename;
 	const char *kernel_cmdline = machine->kernel_cmdline;
 	const char *initrd_filename = machine->initrd_filename;
@@ -740,29 +738,14 @@ static void mips_ls2k_init(MachineState *machine)
 
 
 	/* init CPUs */
-	if (cpu_model == NULL) {
-#ifdef TARGET_MIPS64
-		cpu_model = "loongson2k";
-#else
-		cpu_model = "loongson2k";
-#endif
-	}
 
 	gipiState * gipis =g_malloc0(sizeof(gipiState));
 
 	for(i = 0; i < smp_cpus; i++) {
-		cpu = cpu_mips_init(cpu_model);
-		if (cpu == NULL) {
-			fprintf(stderr, "Unable to find CPU definition\n");
-			exit(1);
-		}
+	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
 		env->CP0_EBase |= i;
 		mycpu[i] = env;
-
-		cc = CPU_GET_CLASS(cpu);
-		real_do_unassigned_access = cc->do_unassigned_access;
-		cc->do_unassigned_access = mips_ls2k_do_unassigned_access;
 
 		reset_info[i] = g_malloc0(sizeof(ResetData));
 		reset_info[i]->cpu = cpu;
@@ -1077,6 +1060,7 @@ static void mips_machine_init(MachineClass *mc)
     mc->desc = "mips ls2k platform";
     mc->init = mips_ls2k_init;
     mc->max_cpus = 2;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("loongson2k");
 }
 
 DEFINE_MACHINE("ls2k", mips_machine_init)
@@ -1110,7 +1094,7 @@ static int pci_ls2k_map_irq(PCIDevice *d, int pin)
 	int dev=(d->devfn>>3)&0x1f;
 	int fn=d->devfn& 7;
 
-	if(d->bus != ls2k_pci_bus)
+	if(pci_get_bus(d) != ls2k_pci_bus)
 		return pin;
 
 	  switch(dev)
