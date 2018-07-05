@@ -848,7 +848,7 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     PCIHostState *phb = PCI_HOST_BRIDGE(dev);
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
 
-    phb->bus = pci_register_bus(DEVICE(dev), "pci",
+    phb->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_ls1a_set_irq, pci_ls1a_map_irq, pcihost->pic,
                                 get_system_memory(), get_system_io(),
                                 1<<3, 4, TYPE_PCI_BUS);
