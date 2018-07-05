@@ -171,42 +171,7 @@ static void ls1a_spi_reset(ls1a_spi_state *s)
 	s->sper=0;
 }
 
-static void ls1a_spi_save(QEMUFile *f, void *opaque)
-{
-    ls1a_spi_state *s = (ls1a_spi_state *)opaque;
-    int i;
 
-    qemu_put_be32(f, s->spcr);
-    qemu_put_be32(f, s->spsr);
-    qemu_put_be32(f, s->sper);
-    qemu_put_be32(f, s->tx_fifo_wptr);
-    qemu_put_be32(f, s->tx_fifo_rptr);
-    for (i = 0; i < 8; i++) {
-        qemu_put_be16(f, s->tx_fifo[i]);
-        qemu_put_be16(f, s->rx_fifo[i]);
-    }
-}
-
-static int ls1a_spi_load(QEMUFile *f, void *opaque, int version_id)
-{
-    ls1a_spi_state *s = (ls1a_spi_state *)opaque;
-    int i;
-
-    if (version_id != 1)
-        return -EINVAL;
-
-    s->spsr = qemu_get_be32(f);
-    s->spcr = qemu_get_be32(f);
-    s->sper = qemu_get_be32(f);
-    s->tx_fifo_wptr = qemu_get_be32(f);
-    s->rx_fifo_rptr = qemu_get_be32(f);
-    for (i = 0; i < 8; i++) {
-        s->tx_fifo[i] = qemu_get_be16(f);
-        s->rx_fifo[i] = qemu_get_be16(f);
-    }
-
-    return 0;
-}
 
 static const MemoryRegionOps ls1a_spi_ops = {
     .read = ls1a_spi_read,
@@ -232,7 +197,6 @@ static int ls1a_spi_init(SysBusDevice *dev)
     sysbus_init_mmio(dev, &d->iomem);
     d->ssi = ssi_create_bus(DEVICE(dev), "ssi");
     ls1a_spi_reset(d);
-    register_savevm(NULL, "ls1a_spi_ssp", -1, 1, ls1a_spi_save, ls1a_spi_load, d);
 
     return 0;
 }
