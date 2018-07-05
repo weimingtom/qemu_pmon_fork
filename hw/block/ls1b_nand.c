@@ -527,8 +527,8 @@ static int ls1b_nand_init(SysBusDevice *dev)
     nand_sysbus_state *d = SYS_BUS_LS1ANAND(dev);
     //memset(&d->nand,0,sizeof(d->nand));
     nand = drive_get(IF_MTD, 0, 0);
-    //d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0xec, d->nand.chip_id?:0xa1);
-    d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0x2c, d->nand.chip_id?:0x48);
+    d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0xec, d->nand.chip_id?:0xa1);
+    //d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0x2c, d->nand.chip_id?:0x48);
     nand_setpins(DEVICE(d->nand.chip), 0, 0, 0, 0, 0);
 
     if(!d->nand.as)
