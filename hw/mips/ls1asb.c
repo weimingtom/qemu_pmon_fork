@@ -285,7 +285,6 @@ static void ls1a_initfn(PCIDevice *dev, Error **errp)
     {
 	    MemoryRegion *ram = g_new(MemoryRegion, 1);
 	    memory_region_init_ram(ram, NULL, "mips_r4k.ram", 0x10000000, &error_fatal);
-	    vmstate_register_ram_global(ram);
 	    memory_region_add_subregion(&d->iomem_ddr, 0, ram);
     }
 

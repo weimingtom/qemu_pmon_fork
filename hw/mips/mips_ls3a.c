@@ -643,7 +643,6 @@ static void mips_ls3a_init (MachineState *machine)
 
 	memory_region_init_ram(ram, NULL, "mips_ls3a.ram", ram_size, &error_fatal);
         memory_region_init_alias(lowram, NULL, "mips_ls3a.lowram", ram, 0, MIN(ram_size,256*0x100000));
-	vmstate_register_ram_global(ram);
 
     /* allocate RAM */
 	memory_region_add_subregion(address_space_mem, 0, lowram);
@@ -667,7 +666,6 @@ static void mips_ls3a_init (MachineState *machine)
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
-        vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, false);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 
@@ -677,7 +675,6 @@ static void mips_ls3a_init (MachineState *machine)
     else {
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
-        vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, false);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 

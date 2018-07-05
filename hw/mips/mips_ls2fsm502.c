@@ -281,7 +281,6 @@ static void mips_ls2f_sm502_init (QEMUMachineInitArgs *args)
 
 		/* allocate RAM */
 	memory_region_init_ram(ram, "mips_ls3a.ram", ram_size);
-	vmstate_register_ram_global(ram);
 
     /* allocate RAM */
 
@@ -308,7 +307,6 @@ static void mips_ls2f_sm502_init (QEMUMachineInitArgs *args)
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE);
-        vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 
@@ -339,7 +337,6 @@ static void mips_ls2f_sm502_init (QEMUMachineInitArgs *args)
 
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", bios_size);
-        vmstate_register_ram_global(bios);
         memory_region_set_readonly(bios, true);
         memory_region_add_subregion(get_system_memory(), 0x1fc90000, bios);
 
