@@ -263,25 +263,13 @@ static void main_cpu_reset(void *opaque)
 
 static const int sector_len = 32 * 1024;
 
-static CPUUnassignedAccess real_do_unassigned_access;
-static void mips_ls232_do_unassigned_access(CPUState *cpu, hwaddr addr,
-                                           bool is_write, bool is_exec,
-                                           int opaque, unsigned size)
-{
-    if (!is_exec) {
-        /* ignore invalid access (ie do not raise exception) */
-        return;
-    }
-    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
-}
 
-static void mips_ls232_init (MachineState *args)
+static void mips_ls232_init (MachineState *machine)
 {
-	ram_addr_t ram_size = args->ram_size;
-	const char *cpu_model = args->cpu_model;
-	const char *kernel_filename = args->kernel_filename;
-	const char *kernel_cmdline = args->kernel_cmdline;
-	const char *initrd_filename = args->initrd_filename;
+	ram_addr_t ram_size = machine->ram_size;
+	const char *kernel_filename = machine->kernel_filename;
+	const char *kernel_cmdline = machine->kernel_cmdline;
+	const char *initrd_filename = machine->initrd_filename;
 	char *filename;
 	MemoryRegion *address_space_mem = get_system_memory();
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
@@ -292,29 +280,11 @@ static void mips_ls232_init (MachineState *args)
 	ResetData *reset_info;
 	DriveInfo *flash_dinfo=NULL;
 	int ddr2config = 0;
-	CPUClass *cc;
 
 
 	/* init CPUs */
-	if (cpu_model == NULL) {
-#ifdef TARGET_MIPS64
-		cpu_model = "LS232";
-#else
-		cpu_model = "LS232";
-#endif
-	}
-
-		cpu = cpu_mips_init(cpu_model);
-		if (cpu == NULL) {
-			fprintf(stderr, "Unable to find CPU definition\n");
-			exit(1);
-		}
+	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
-
-		cc = CPU_GET_CLASS(cpu);
-		real_do_unassigned_access = cc->do_unassigned_access;
-		cc->do_unassigned_access = mips_ls232_do_unassigned_access;
-
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
 		reset_info->vector = env->active_tc.PC;
@@ -459,6 +429,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls232 platform";
     mc->init = mips_ls232_init;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("LS232");
 }
 
 DEFINE_MACHINE("ls232", mips_machine_init)
