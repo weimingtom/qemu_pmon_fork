@@ -822,6 +822,8 @@ MemoryRegion *iomem;
 	}
 }
 
+static PCIBus *rootbus;
+
 static void mips_ls3a_reset(void)
 {
 	PCIBus *bus;
@@ -831,7 +833,7 @@ static void mips_ls3a_reset(void)
 	qemu_devices_reset();
 	cpu_outb(0x4d0,0xff);
 	cpu_outb(0x4d1,0xff);
-	bus = pci_find_primary_bus();
+	bus = rootbus;
 	printf("bus:%p pci_bus:%p\n", bus, pci_bus);
 	if(bus)
 	{
@@ -1358,7 +1360,7 @@ PCIBus *pci_ls3a_init(DeviceState *dev, qemu_irq *pic, int (*board_map_irq)(int 
 
     	phb = PCI_HOST_BRIDGE(dev);
 
-	phb->bus = s = pci_register_bus(dev,"pci",pci_ls3a_set_irq, pci_ls3a_map_irq, pic, get_system_memory(), get_system_io(), 1<<3, 4, TYPE_PCI_BUS);
+	rootbus = phb->bus = s = pci_register_root_bus(dev,"pci",pci_ls3a_set_irq, pci_ls3a_map_irq, pic, get_system_memory(), get_system_io(), 1<<3, 4, TYPE_PCI_BUS);
 
 	memory_region_init_io(iomem, NULL, &pci_ls3a_config_ops, s, "ls3a_pci_conf", 0x2000000);
         memory_region_init_alias(iomem1, NULL, "ls3a_pci_conf", iomem, 0, 0x2000000);
