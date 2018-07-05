@@ -1391,6 +1391,10 @@ static const TypeInfo bonito_info = {
     .parent        = TYPE_PCI_BRIDGE,
     .instance_size = sizeof(PCIBonitoState),
     .class_init    = bonito_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_PCIE_DEVICE },
+        { }
+    },
 };
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
@@ -1557,7 +1561,7 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
     phb = PCI_HOST_BRIDGE(dev);
-    pcihost->bus = phb->bus = pci_register_bus(DEVICE(dev), "pci",
+    pcihost->bus = phb->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_ls2k_set_irq, pcihost->pci_map_irq, pcihost->pic,
                                 &pcihost->iomem_mem, &pcihost->iomem_io,
                                 PCI_DEVFN(0, 0), 64, TYPE_PCI_BUS);

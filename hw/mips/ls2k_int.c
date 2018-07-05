@@ -181,24 +181,6 @@ static void ls2k_set_irq(void *opaque, int irq, int level)
 }
 
 
-static void ls2k_intctl_save(QEMUFile *f, void *opaque)
-{
-	GS232_INTCTLState *s = opaque;
-
-	qemu_put_be32s(f, &s->intreg_pending);
-}
-
-static int ls2k_intctl_load(QEMUFile *f, void *opaque, int version_id)
-{
-	GS232_INTCTLState *s = opaque;
-
-	if (version_id != 1)
-		return -EINVAL;
-
-	qemu_get_be32s(f, &s->intreg_pending);
-	ls2k_check_interrupts(s);
-	return 0;
-}
 
 static void ls2k_intctl_reset(void *opaque)
 {
@@ -227,7 +209,6 @@ static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_ir
 	s->cpu_irq = parent_irq;
 	s->baseaddr=addr;
 
-	register_savevm(NULL, "ls2k_intctl", addr, 1, ls2k_intctl_save, ls2k_intctl_load, s);
 	qemu_register_reset(ls2k_intctl_reset, s);
 	irqs = qemu_allocate_irqs(ls2k_set_irq, s, 32);
 
