@@ -263,6 +263,17 @@ static void main_cpu_reset(void *opaque)
 
 static const int sector_len = 32 * 1024;
 
+static CPUUnassignedAccess real_do_unassigned_access;
+static void mips_ls232_do_unassigned_access(CPUState *cpu, hwaddr addr,
+                                           bool is_write, bool is_exec,
+                                           int opaque, unsigned size)
+{
+    if (!is_exec) {
+        /* ignore invalid access (ie do not raise exception) */
+        return;
+    }
+    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
+}
 
 static void mips_ls232_init (MachineState *machine)
 {
@@ -280,11 +291,17 @@ static void mips_ls232_init (MachineState *machine)
 	ResetData *reset_info;
 	DriveInfo *flash_dinfo=NULL;
 	int ddr2config = 0;
+	CPUClass *cc;
 
 
 	/* init CPUs */
 	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
+
+		cc = CPU_GET_CLASS(cpu);
+		real_do_unassigned_access = cc->do_unassigned_access;
+		cc->do_unassigned_access = mips_ls232_do_unassigned_access;
+
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
 		reset_info->vector = env->active_tc.PC;

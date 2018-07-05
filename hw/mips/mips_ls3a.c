@@ -492,6 +492,18 @@ PCIBus *pci_ls3a_init(DeviceState *dev, qemu_irq *pic, int (*board_map_irq)(int 
 static void *ls3a_intctl_init(ISABus *isa_bus, CPUMIPSState *env[]);
 static const int sector_len = 32 * 1024;
 
+static CPUUnassignedAccess real_do_unassigned_access;
+static void mips_ls3a_do_unassigned_access(CPUState *cpu, hwaddr addr,
+                                           bool is_write, bool is_exec,
+                                           int opaque, unsigned size)
+{
+    if (!is_exec) {
+        /* ignore invalid access (ie do not raise exception) */
+        return;
+    }
+    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
+}
+
 static unsigned char mem200[256];
 static MemoryRegion *cachelock_iomem[4];
 
@@ -599,6 +611,7 @@ static void mips_ls3a_init (MachineState *machine)
 #endif
 	int i;
 	DeviceState *dev;
+	CPUClass *cc;
 	DriveInfo *flash_dinfo=NULL;
 
 
@@ -611,6 +624,10 @@ static void mips_ls3a_init (MachineState *machine)
   for(i = 0; i < smp_cpus; i++) {
     printf("==== init smp_cpus=%d ====\n", i);
 	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
+    cc = CPU_GET_CLASS(cpu);
+    real_do_unassigned_access = cc->do_unassigned_access;
+    cc->do_unassigned_access = mips_ls3a_do_unassigned_access;
+
     env = &cpu->env;
     mycpu[i] = env;
 

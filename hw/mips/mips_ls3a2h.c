@@ -664,6 +664,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 	qemu_irq *ls3a2h_irq,*ls3a2h_irq1, *ls2h_irq;
 	PCIBus *pci_bus[4];
 	DriveInfo *flash_dinfo=NULL;
+	CPUClass *cc;
 	MemoryRegion *iomem_axi = g_new(MemoryRegion, 1);
 	MemoryRegion *iomem_axi1 = g_new(MemoryRegion, 1);
 	MemoryRegion *iomem_axi2 = g_new(MemoryRegion, 1);
@@ -685,6 +686,10 @@ static void mips_ls3a2h_init(MachineState *machine)
 		env->CP0_EBase |= i;
 		env->CP0_Status |= (1 << CP0St_KX);
 		env->CP0_PRid   |= 0x6303;
+
+		cc = CPU_GET_CLASS(cpu);
+		real_do_unassigned_access = cc->do_unassigned_access;
+		cc->do_unassigned_access = mips_ls3a2h_do_unassigned_access;
 
 		reset_info[i] = g_malloc0(sizeof(ResetData));
 		reset_info[i]->cpu = cpu;

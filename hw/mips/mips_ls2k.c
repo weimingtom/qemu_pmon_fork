@@ -747,6 +747,10 @@ static void mips_ls2k_init(MachineState *machine)
 		env->CP0_EBase |= i;
 		mycpu[i] = env;
 
+		cc = CPU_GET_CLASS(cpu);
+		real_do_unassigned_access = cc->do_unassigned_access;
+		cc->do_unassigned_access = mips_ls2k_do_unassigned_access;
+
 		reset_info[i] = g_malloc0(sizeof(ResetData));
 		reset_info[i]->cpu = cpu;
 		reset_info[i]->vector = env->active_tc.PC;

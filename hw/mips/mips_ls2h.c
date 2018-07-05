@@ -548,6 +548,18 @@ static PCIBus *pcibus_ls2h_init(int busno,qemu_irq *pic, int (*board_map_irq)(PC
 
 static int ddr2config = 0;
 
+static CPUUnassignedAccess real_do_unassigned_access;
+static void mips_ls2h_do_unassigned_access(CPUState *cpu, hwaddr addr,
+                                           bool is_write, bool is_exec,
+                                           int opaque, unsigned size)
+{
+    if (!is_exec) {
+        /* ignore invalid access (ie do not raise exception) */
+        return;
+    }
+    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
+}
+
 static void mips_ls2h_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
@@ -565,6 +577,7 @@ static void mips_ls2h_init(MachineState *machine)
 	qemu_irq *ls2h_irq,*ls2h_irq1;
 	PCIBus *pci_bus[4];
 	DriveInfo *flash_dinfo=NULL;
+	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
 
@@ -573,6 +586,10 @@ static void mips_ls2h_init(MachineState *machine)
 
 	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
+		cc = CPU_GET_CLASS(cpu);
+		real_do_unassigned_access = cc->do_unassigned_access;
+		cc->do_unassigned_access = mips_ls2h_do_unassigned_access;
+
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
 		reset_info->vector = env->active_tc.PC;
