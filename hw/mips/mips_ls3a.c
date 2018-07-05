@@ -492,18 +492,6 @@ PCIBus *pci_ls3a_init(DeviceState *dev, qemu_irq *pic, int (*board_map_irq)(int 
 static void *ls3a_intctl_init(ISABus *isa_bus, CPUMIPSState *env[]);
 static const int sector_len = 32 * 1024;
 
-static CPUUnassignedAccess real_do_unassigned_access;
-static void mips_ls3a_do_unassigned_access(CPUState *cpu, hwaddr addr,
-                                           bool is_write, bool is_exec,
-                                           int opaque, unsigned size)
-{
-    if (!is_exec) {
-        /* ignore invalid access (ie do not raise exception) */
-        return;
-    }
-    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
-}
-
 static unsigned char mem200[256];
 static MemoryRegion *cachelock_iomem[4];
 
@@ -588,13 +576,12 @@ static const MemoryRegionOps mips_qemu_ops = {
 
 
 
-static void mips_ls3a_init (MachineState *args)
+static void mips_ls3a_init (MachineState *machine)
 {
-	ram_addr_t ram_size = args->ram_size;
-	const char *cpu_model = args->cpu_model;
-	const char *kernel_filename = args->kernel_filename;
-	const char *kernel_cmdline = args->kernel_cmdline;
-	const char *initrd_filename = args->initrd_filename;
+	ram_addr_t ram_size = machine->ram_size;
+	const char *kernel_filename = machine->kernel_filename;
+	const char *kernel_cmdline = machine->kernel_cmdline;
+	const char *initrd_filename = machine->initrd_filename;
 	char *filename;
 	MemoryRegion *address_space_mem = get_system_memory();
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
@@ -612,14 +599,9 @@ static void mips_ls3a_init (MachineState *args)
 #endif
 	int i;
 	DeviceState *dev;
-	CPUClass *cc;
 	DriveInfo *flash_dinfo=NULL;
 
 
-    /* init CPUs */
-    if (cpu_model == NULL) {
-        cpu_model = "godson3";
-    }
     /* init CPUs */
 {
   gipiState * gipis =g_malloc0(sizeof(gipiState));
@@ -628,16 +610,7 @@ static void mips_ls3a_init (MachineState *args)
 
   for(i = 0; i < smp_cpus; i++) {
     printf("==== init smp_cpus=%d ====\n", i);
-    cpu = cpu_mips_init(cpu_model);
-    if (cpu == NULL) {
-	    fprintf(stderr, "Unable to find CPU definition\n");
-	    exit(1);
-    }
-
-    cc = CPU_GET_CLASS(cpu);
-    real_do_unassigned_access = cc->do_unassigned_access;
-    cc->do_unassigned_access = mips_ls3a_do_unassigned_access;
-
+	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
     env = &cpu->env;
     mycpu[i] = env;
 
@@ -882,6 +855,7 @@ static void mips_machine_init(MachineClass *mc)
     mc->init = mips_ls3a_init;
     mc->reset = mips_ls3a_reset;
     mc->max_cpus = 16;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("godson3");
 }
 
 DEFINE_MACHINE("ls3a", mips_machine_init)
