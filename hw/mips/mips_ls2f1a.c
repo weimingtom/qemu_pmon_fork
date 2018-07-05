@@ -233,28 +233,15 @@ static int aui_boot_code[] ={
 };
 
 PCIBus *pci_bonito_init(CPUMIPSState *env,qemu_irq *pic, int irq,int (*board_map_irq)(int bus,int dev,int func,int pin),MemoryRegion *ram);
-int pci_ls1a_init(PCIBus *bus, int devfn, CharDriverState **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
+int pci_ls1a_init(PCIBus *bus, int devfn, Chardev **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
 static const int sector_len = 32 * 1024;
 
-static CPUUnassignedAccess real_do_unassigned_access;
-static void mips_ls2h_do_unassigned_access(CPUState *cpu, hwaddr addr,
-                                           bool is_write, bool is_exec,
-                                           int opaque, unsigned size)
+static void mips_ls2f_ls1a_init (MachineState *machine)
 {
-    if (!is_exec) {
-        /* ignore invalid access (ie do not raise exception) */
-        return;
-    }
-    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
-}
-
-static void mips_ls2f_ls1a_init (MachineState *args)
-{
-	ram_addr_t ram_size = args->ram_size;
-	const char *cpu_model = args->cpu_model;
-	const char *kernel_filename = args->kernel_filename;
-	const char *kernel_cmdline = args->kernel_cmdline;
-	const char *initrd_filename = args->initrd_filename;
+	ram_addr_t ram_size = machine->ram_size;
+	const char *kernel_filename = machine->kernel_filename;
+	const char *kernel_cmdline = machine->kernel_cmdline;
+	const char *initrd_filename = machine->initrd_filename;
 	char *filename;
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
 	MemoryRegion *bios;
@@ -267,26 +254,8 @@ static void mips_ls2f_ls1a_init (MachineState *args)
 
 
     /* init CPUs */
-    if (cpu_model == NULL) {
-#ifdef TARGET_MIPS64
-        cpu_model = "Loongson-2F";
-#else
-        cpu_model = "Loongson-2F";
-#endif
-    }
-
-
-
-		cpu = cpu_mips_init(cpu_model);
-		if (cpu == NULL) {
-			fprintf(stderr, "Unable to find CPU definition\n");
-			exit(1);
-		}
+	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
-
-		cc = CPU_GET_CLASS(cpu);
-		real_do_unassigned_access = cc->do_unassigned_access;
-		cc->do_unassigned_access = mips_ls2h_do_unassigned_access;
 
     /* Init CPU internal devices */
     cpu_mips_irq_init_cpu(cpu);
@@ -390,6 +359,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls2f1a platform";
     mc->init = mips_ls2f_ls1a_init;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("Loongson-2F");
 }
 
 DEFINE_MACHINE("ls2f1a", mips_machine_init)
