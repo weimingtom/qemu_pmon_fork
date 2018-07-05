@@ -264,25 +264,13 @@ void *ls1b_intctl_init(hwaddr addr,qemu_irq parent_irq);
 
 static const int sector_len = 32 * 1024;
 
-static CPUUnassignedAccess real_do_unassigned_access;
-static void mips_ls1b_do_unassigned_access(CPUState *cpu, hwaddr addr,
-                                           bool is_write, bool is_exec,
-                                           int opaque, unsigned size)
-{
-    if (!is_exec) {
-        /* ignore invalid access (ie do not raise exception) */
-        return;
-    }
-    (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
-}
 
-static void mips_ls1b_init (MachineState *args)
+static void mips_ls1b_init (MachineState *machine)
 {
-	ram_addr_t ram_size = args->ram_size;
-	const char *cpu_model = args->cpu_model;
-	const char *kernel_filename = args->kernel_filename;
-	const char *kernel_cmdline = args->kernel_cmdline;
-	const char *initrd_filename = args->initrd_filename;
+	ram_addr_t ram_size = machine->ram_size;
+	const char *kernel_filename = machine->kernel_filename;
+	const char *kernel_cmdline = machine->kernel_cmdline;
+	const char *initrd_filename = machine->initrd_filename;
 	char *filename;
 	MemoryRegion *address_space_mem = get_system_memory();
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
@@ -300,25 +288,8 @@ static void mips_ls1b_init (MachineState *args)
 
 
 	/* init CPUs */
-	if (cpu_model == NULL) {
-#ifdef TARGET_MIPS64
-		cpu_model = "LS232";
-#else
-		cpu_model = "LS232";
-#endif
-	}
-
-		cpu = cpu_mips_init(cpu_model);
-		if (cpu == NULL) {
-			fprintf(stderr, "Unable to find CPU definition\n");
-			exit(1);
-		}
+	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
 		env = &cpu->env;
-
-		cc = CPU_GET_CLASS(cpu);
-		real_do_unassigned_access = cc->do_unassigned_access;
-		cc->do_unassigned_access = mips_ls1b_do_unassigned_access;
-
 		reset_info = g_malloc0(sizeof(ResetData));
 		reset_info->cpu = cpu;
 		reset_info->vector = env->active_tc.PC;
@@ -585,6 +556,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls1b platform";
     mc->init = mips_ls1b_init;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("LS232");
 }
 
 DEFINE_MACHINE("ls1b", mips_machine_init)
@@ -758,26 +730,6 @@ static void ls1b_set_irq(void *opaque, int irq, int level)
 	ls1b_check_interrupts(s);
 }
 
-
-static void ls1b_intctl_save(QEMUFile *f, void *opaque)
-{
-	GS232_INTCTLState *s = opaque;
-
-	qemu_put_be32s(f, &s->intreg_pending);
-}
-
-static int ls1b_intctl_load(QEMUFile *f, void *opaque, int version_id)
-{
-	GS232_INTCTLState *s = opaque;
-
-	if (version_id != 1)
-		return -EINVAL;
-
-	qemu_get_be32s(f, &s->intreg_pending);
-	ls1b_check_interrupts(s);
-	return 0;
-}
-
 static void ls1b_intctl_reset(void *opaque)
 {
 	GS232_INTCTLState *s = opaque;
@@ -805,7 +757,6 @@ void *ls1b_intctl_init(hwaddr addr,qemu_irq parent_irq)
 	s->cpu_irq = parent_irq;
 	s->baseaddr=addr;
 
-	register_savevm(NULL, "ls1b_intctl", addr, 1, ls1b_intctl_save, ls1b_intctl_load, s);
 	qemu_register_reset(ls1b_intctl_reset, s);
 	irqs = qemu_allocate_irqs(ls1b_set_irq, s, 32);
 
