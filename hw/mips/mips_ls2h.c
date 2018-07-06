@@ -53,6 +53,7 @@
 #include "qemu/error-report.h"
 #include "hw/empty_slot.h"
 #include "hw/ssi/ssi.h"
+#include "hw/pci/pcie_host.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 
@@ -1026,7 +1027,7 @@ typedef struct PCIBonitoState
 } PCIBonitoState;
 
 struct BonitoState {
-    SysBusDevice busdev;
+    PCIExpressHost parent_obj;
     PCIBus *bus;
     qemu_irq *pic;
     PCIBonitoState *pci_dev;
@@ -1234,7 +1235,7 @@ static const TypeInfo bonito_info = {
     .instance_size = sizeof(PCIBonitoState),
     .class_init    = bonito_class_init,
     .interfaces = (InterfaceInfo[]) {
-        { INTERFACE_PCIE_DEVICE },
+        { INTERFACE_CONVENTIONAL_PCI_DEVICE },
         { }
     },
 };
@@ -1313,13 +1314,13 @@ static IOMMUTLBEntry ls2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr ad
     return ret;
 }
 
-static int bonito_pcihost_initfn(SysBusDevice *dev)
+static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 {
     BonitoState *pcihost;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-    memory_region_init_iommu(&pcihost->iommu, sizeof(&pcihost->iommu),
+    memory_region_init_iommu(&pcihost->iommu, sizeof(pcihost->iommu),
                              TYPE_BONITO_IOMMU_MEMORY_REGION, OBJECT(dev),
                              "iommu-ls2hpcie", UINT64_MAX);
     address_space_init(&pcihost->as_mem, MEMORY_REGION(&pcihost->iommu), "pcie memory");
@@ -1332,24 +1333,31 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     pcihost->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_ls2h_set_irq, pcihost->pci_map_irq, pcihost->pic,
                                 MEMORY_REGION(&pcihost->iommu), &pcihost->iomem_io,
-                                PCI_DEVFN(10, 0), 4, TYPE_PCI_BUS);
+                                PCI_DEVFN(10, 0), 4, TYPE_PCIE_BUS);
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
 
     return 0;
 }
 
+static const char *ls2k_host_root_bus_path(PCIHostState *host_bridge,
+                                          PCIBus *rootbus)
+{
+    return "0000:00";
+}
+
 static void bonito_pcihost_class_init(ObjectClass *klass, void *data)
 {
-    //DeviceClass *dc = DEVICE_CLASS(klass);
-    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIHostBridgeClass *hc = PCI_HOST_BRIDGE_CLASS(klass);
 
-    k->init = bonito_pcihost_initfn;
+    hc->root_bus_path = ls2k_host_root_bus_path;
+    dc->realize = bonito_pcihost_initfn;
 }
 
 static const TypeInfo bonito_pcihost_info = {
     .name          = TYPE_BONITO_PCI_HOST_BRIDGE,
-    .parent        = TYPE_PCI_HOST_BRIDGE,
+    .parent        = TYPE_PCIE_HOST_BRIDGE,
     .instance_size = sizeof(BonitoState),
     .class_init    = bonito_pcihost_class_init,
     .interfaces = (InterfaceInfo[]) {
