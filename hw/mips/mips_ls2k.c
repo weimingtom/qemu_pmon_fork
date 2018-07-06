@@ -55,6 +55,8 @@
 #include "hw/ssi/ssi.h"
 #include "hw/ide/pci.h"
 #include "hw/ide/ahci_internal.h"
+#include "hw/pci/pcie_host.h"
+#include "hw/pci/pcie_port.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 #include "loongson2k_rom.h"
@@ -1250,7 +1252,7 @@ typedef struct PCIBonitoState
 } PCIBonitoState;
 
 struct BonitoState {
-    SysBusDevice busdev;
+    PCIExpressHost parent_obj;
     PCIBus *bus;
     qemu_irq *pic;
     PCIBonitoState *pci_dev;
@@ -1329,7 +1331,7 @@ static const MemoryRegionOps bonito_pciconf_ops = {
     },
 };
 
-static int bonito_initfn(PCIDevice *dev, Error **errp)
+static void bonito_initfn(PCIDevice *dev, Error **errp)
 {
     PCIBonitoState *s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, dev);
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
@@ -1364,8 +1366,6 @@ static int bonito_initfn(PCIDevice *dev, Error **errp)
     pci_set_byte(dev->config + PCI_MAX_LAT, 0x00);
     pci_set_word(dev->config + PCI_CLASS_DEVICE, 0x0b30);
 
-
-    return 0;
 }
 
 
@@ -1393,8 +1393,8 @@ static const TypeInfo bonito_info = {
     .instance_size = sizeof(PCIBonitoState),
     .class_init    = bonito_class_init,
     .interfaces = (InterfaceInfo[]) {
-        { INTERFACE_PCIE_DEVICE },
-        { }
+        { INTERFACE_CONVENTIONAL_PCI_DEVICE },
+        { },
     },
 };
 
@@ -1544,7 +1544,7 @@ pci_setup_iommu will not change addr.
 memory_region_init_iommu can translate region and addr.
 */
 
-static int bonito_pcihost_initfn(SysBusDevice *dev)
+static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 {
     BonitoState *pcihost;
     PCIHostState *phb;
@@ -1565,25 +1565,31 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     pcihost->bus = phb->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_ls2k_set_irq, pcihost->pci_map_irq, pcihost->pic,
                                 &pcihost->iomem_mem, &pcihost->iomem_io,
-                                PCI_DEVFN(0, 0), 64, TYPE_PCI_BUS);
+                                PCI_DEVFN(0, 0), 64, TYPE_PCIE_BUS);
 
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
 
-    return 0;
+}
+
+static const char *ls2k_host_root_bus_path(PCIHostState *host_bridge,
+                                          PCIBus *rootbus)
+{
+    return "0000:00";
 }
 
 static void bonito_pcihost_class_init(ObjectClass *klass, void *data)
 {
-    //DeviceClass *dc = DEVICE_CLASS(klass);
-    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIHostBridgeClass *hc = PCI_HOST_BRIDGE_CLASS(klass);
 
-    k->init = bonito_pcihost_initfn;
+    hc->root_bus_path = ls2k_host_root_bus_path;
+    dc->realize = bonito_pcihost_initfn;
 }
 
 static const TypeInfo bonito_pcihost_info = {
     .name          = TYPE_BONITO_PCI_HOST_BRIDGE,
-    .parent        = TYPE_PCI_HOST_BRIDGE,
+    .parent        = TYPE_PCIE_HOST_BRIDGE,
     .instance_size = sizeof(BonitoState),
     .class_init    = bonito_pcihost_class_init,
 };
