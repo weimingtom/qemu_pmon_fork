@@ -58,7 +58,7 @@ static void pci_pciram_init(PCIDevice *dev, Error **errp)
        else size = ~(d->pciram.bar[i]&~0xf)+1;
 
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
-	memory_region_init_ram(ram, NULL, "pciram.ram", size, NULL);
+	memory_region_init_ram_nomigrate(ram, NULL, "pciram.ram", size, NULL);
         
        pci_register_bar(&d->card, i, io?PCI_BASE_ADDRESS_SPACE_IO:PCI_BASE_ADDRESS_SPACE_MEMORY, ram);
     }
