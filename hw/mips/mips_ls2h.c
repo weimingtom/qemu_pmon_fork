@@ -54,6 +54,7 @@
 #include "hw/empty_slot.h"
 #include "hw/ssi/ssi.h"
 #include "hw/pci/pcie_host.h"
+#include "hw/pci/pcie_port.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 
@@ -605,8 +606,6 @@ static void mips_ls2h_init(MachineState *machine)
 	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
 
 
-        //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls2h axi", UINT32_MAX);
-        memory_region_init(iomem_root, NULL,  "ls2h axi", UINT32_MAX);
         memory_region_init(iomem_root, NULL,  "ls2h axi", UINT32_MAX);
 	address_space_init(as,iomem_root, "ls2h axi memory");
 
@@ -697,9 +696,9 @@ static void mips_ls2h_init(MachineState *machine)
 
 
 	pci_bus[0]=pcibus_ls2h_init(0, &ls2h_irq1[20],pci_ls2h_map_irq);
-	pci_bus[1]=pcibus_ls2h_init(1, &ls2h_irq1[21],pci_ls2h_map_irq);
-	pci_bus[2]=pcibus_ls2h_init(2, &ls2h_irq1[22],pci_ls2h_map_irq);
-	pci_bus[3]=pcibus_ls2h_init(3, &ls2h_irq1[23],pci_ls2h_map_irq);
+	//pci_bus[1]=pcibus_ls2h_init(1, &ls2h_irq1[21],pci_ls2h_map_irq);
+	//pci_bus[2]=pcibus_ls2h_init(2, &ls2h_irq1[22],pci_ls2h_map_irq);
+	//pci_bus[3]=pcibus_ls2h_init(3, &ls2h_irq1[23],pci_ls2h_map_irq);
 
 
 	{
@@ -982,7 +981,7 @@ typedef struct BonitoState BonitoState;
 typedef struct PCIBonitoState
 {
     /*< private >*/
-    	PCIBridge parent_obj;
+    	PCIEPort parent_obj;
     /*< public >*/
 	BonitoState *pcihost;
 	MemoryRegion iomem;
@@ -1148,7 +1147,7 @@ static void bonito_pciconf_writel(void *opaque, hwaddr addr,
     PCIBonitoState *s = opaque;
     PCIDevice *d = PCI_DEVICE(s);
 
-    d->config_write(d, addr, val, 4);
+    d->config_write(d, addr, val, size);
 }
 
 static uint64_t bonito_pciconf_readl(void *opaque, hwaddr addr,
@@ -1158,7 +1157,7 @@ static uint64_t bonito_pciconf_readl(void *opaque, hwaddr addr,
     PCIBonitoState *s = opaque;
     PCIDevice *d = PCI_DEVICE(s);
 
-    return d->config_read(d, addr, 4);
+    return d->config_read(d, addr, size);
 }
 
 /* north bridge PCI configure space. 0x1fe0 0000 - 0x1fe0 00ff */
@@ -1175,23 +1174,32 @@ static const MemoryRegionOps bonito_pciconf_ops = {
 
 static void bonito_initfn(PCIDevice *dev, Error **errp)
 {
-    PCIBonitoState *s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, dev);
+    PCIBonitoState *s = OBJECT_CHECK(PCIBonitoState, dev, "LS2H_Bonito");
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
+    PCIEPort *p = PCIE_PORT(dev);
+    int busno = s->pcihost->busno;
 
     pci_bridge_initfn(dev, TYPE_PCI_BUS);
+    pcie_port_init_reg(dev);
 
-    memory_region_init_io(&s->iomem, NULL, &pci_bonito_local_ops, s, "ls2h_pci_conf", 0x100);
+    memory_region_init_io(&s->iomem, NULL, &pci_bonito_local_ops, s, "ls2h_pci_conf", 0x80);
     sysbus_init_mmio(sysbus, &s->iomem);
+     /*local map*/
+    sysbus_mmio_map(sysbus, 0, LS2H_PCIE_REG_BASE_PORT(busno));
 
     /* set the north bridge pci configure  mapping */
     memory_region_init_io(&s->conf_mem, NULL, &bonito_pciconf_ops, s,
                           "north-bridge-pci-config", 0x100);
     sysbus_init_mmio(sysbus, &s->conf_mem);
+     /*self header*/
+    sysbus_mmio_map(sysbus, 1, LS2H_PCIE_PORT_HEAD_BASE_PORT(busno));
 
     /* set the south bridge pci configure  mapping */
     memory_region_init_io(&s->data_mem, NULL, &pci_ls2h_config_ops, s,
                           "south-bridge-pci-config", 0x100);
     sysbus_init_mmio(sysbus, &s->data_mem);
+     /*devices header*/
+    sysbus_mmio_map(sysbus, 2, LS3H_PCIE_DEV_HEAD_BASE_PORT(busno));
 
     pci_config_set_prog_interface(dev->config, PCI_CLASS_BRIDGE_PCI_INF_SUB);
     /* set the default value of north bridge pci config */
@@ -1233,11 +1241,11 @@ static void bonito_class_init(ObjectClass *klass, void *data)
 
 static const TypeInfo bonito_info = {
     .name          = "LS2H_Bonito",
-    .parent        = TYPE_PCI_BRIDGE,
+    .parent        = TYPE_PCIE_PORT,
     .instance_size = sizeof(PCIBonitoState),
     .class_init    = bonito_class_init,
     .interfaces = (InterfaceInfo[]) {
-        { INTERFACE_CONVENTIONAL_PCI_DEVICE },
+        { INTERFACE_PCIE_DEVICE },
         { }
     },
 };
@@ -1250,7 +1258,6 @@ static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     BonitoState *pcihost;
     PCIBonitoState *s;
     PCIDevice *d;
-    SysBusDevice *sysbus;
     PCIBridge *br;
     PCIBus *bus2;
 
@@ -1263,9 +1270,9 @@ static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
 
     /* set the pcihost pointer before bonito_initfn is called */
     //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS2H_Bonito");
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(0, 0), true, "LS2H_Bonito");
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9, 0), true, "LS2H_Bonito");
 
-    s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
+    s = OBJECT_CHECK(PCIBonitoState, d, "LS2H_Bonito");
     s->pcihost = pcihost;
     pcihost->pci_dev = s;
     br = PCI_BRIDGE(d);
@@ -1275,18 +1282,6 @@ static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
 
     pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
 
-
-    sysbus = SYS_BUS_DEVICE(s->pcihost);
-     /*local map*/
-    sysbus_mmio_map(sysbus, 0, LS2H_PCIE_REG_BASE_PORT(busno));
-     /*self header*/
-    sysbus_mmio_map(sysbus, 1, LS2H_PCIE_PORT_HEAD_BASE_PORT(busno));
-     /*devices header*/
-    sysbus_mmio_map(sysbus, 2, LS3H_PCIE_DEV_HEAD_BASE_PORT(busno));
-
-//2h02
-    memory_region_add_subregion(get_system_memory(), 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
-    memory_region_add_subregion(get_system_memory(), 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
 
 
     return bus2;
@@ -1323,6 +1318,7 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     BonitoState *pcihost;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
     MemoryRegion *mem;
+    int busno = pcihost->busno;
 
     memory_region_init(&pcihost->iomem_mem, OBJECT(dev), "system", INT64_MAX);
     /* Host memory as seen from the PCI side, via the IOMMU.  */
@@ -1339,10 +1335,13 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     memory_region_init(&pcihost->iomem_io, OBJECT(dev), "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
+    memory_region_add_subregion(get_system_memory(), 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
+    memory_region_add_subregion(get_system_memory(), 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
+
     pcihost->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_ls2h_set_irq, pcihost->pci_map_irq, pcihost->pic,
                                 mem, &pcihost->iomem_io,
-                                PCI_DEVFN(10, 0), 4, TYPE_PCIE_BUS);
+                                PCI_DEVFN(0, 0), 4, TYPE_PCIE_BUS);
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
 
