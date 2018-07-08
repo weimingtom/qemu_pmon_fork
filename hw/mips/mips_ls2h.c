@@ -1034,9 +1034,11 @@ struct BonitoState {
     MemoryRegion iomem_submem;
     MemoryRegion iomem_io;
     IOMMUMemoryRegion iommu;
+    MemoryRegion iomem_mem;
     AddressSpace as_mem;
     AddressSpace as_io;
    int (*pci_map_irq)(PCIDevice *d, int irq_num);
+   int busno;
 };
 
 static inline uint32_t bonito_pci_config_addr(PCIBonitoState *s,hwaddr addr)
@@ -1256,6 +1258,7 @@ static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
     pcihost->pic = pic;
     pcihost->pci_map_irq = board_map_irq;
+    pcihost->busno = busno;
     qdev_init_nofail(dev);
 
     /* set the pcihost pointer before bonito_initfn is called */
@@ -1281,6 +1284,7 @@ static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
      /*devices header*/
     sysbus_mmio_map(sysbus, 2, LS3H_PCIE_DEV_HEAD_BASE_PORT(busno));
 
+//2h02
     memory_region_add_subregion(get_system_memory(), 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
     memory_region_add_subregion(get_system_memory(), 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
 
@@ -1299,7 +1303,7 @@ static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
 /* Handle PCI-to-system address translation.  */
 /* TODO: A translation failure here ought to set PCI error codes on the
    Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls2h_pciedma_translate_iommu(MemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag)
+static IOMMUTLBEntry ls2h_pciedma_translate_iommu(IOMMUMemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag)
 {
     IOMMUTLBEntry ret;
 
@@ -1318,21 +1322,26 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 {
     BonitoState *pcihost;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
+    MemoryRegion *mem;
 
+    memory_region_init(&pcihost->iomem_mem, OBJECT(dev), "system", INT64_MAX);
     /* Host memory as seen from the PCI side, via the IOMMU.  */
     memory_region_init_iommu(&pcihost->iommu, sizeof(pcihost->iommu),
                              TYPE_BONITO_IOMMU_MEMORY_REGION, OBJECT(dev),
                              "iommu-ls2hpcie", UINT64_MAX);
-    address_space_init(&pcihost->as_mem, MEMORY_REGION(&pcihost->iommu), "pcie memory");
+    mem = MEMORY_REGION(&pcihost->iommu);
+    //mem = &pcihost->iomem_mem;
+    address_space_init(&pcihost->as_mem, mem, "pcie memory");
 
-    memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", MEMORY_REGION(&pcihost->iommu), 0x10000000, 0x2000000);
 
-    memory_region_init(&pcihost->iomem_io, OBJECT(pcihost), "system", 0x10000);
+/*2h03*/
+    memory_region_init_alias(&pcihost->iomem_submem, OBJECT(dev), "pcisubmem", mem, 0x10000000UL+pcihost->busno*0x2000000UL, 0x2000000);
+    memory_region_init(&pcihost->iomem_io, OBJECT(dev), "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
     pcihost->bus = pci_register_root_bus(DEVICE(dev), "pci",
                                 pci_ls2h_set_irq, pcihost->pci_map_irq, pcihost->pic,
-                                MEMORY_REGION(&pcihost->iommu), &pcihost->iomem_io,
+                                mem, &pcihost->iomem_io,
                                 PCI_DEVFN(10, 0), 4, TYPE_PCIE_BUS);
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
