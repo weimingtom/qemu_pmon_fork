@@ -378,41 +378,41 @@ static void mips_ls1b_init (MachineState *machine)
 	ls1b_intctl_init(0x1Fd01088,env->irq[5]);
 
 
-	if (serial_hds[0])
-		serial_mm_init(address_space_mem, 0x1fe40000, 0,ls1b_irq[2],115200,serial_hds[0], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(0))
+		serial_mm_init(address_space_mem, 0x1fe40000, 0,ls1b_irq[2],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[1])
-		serial_mm_init(address_space_mem, 0x1fe44000, 0,ls1b_irq[3],115200,serial_hds[1], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(1))
+		serial_mm_init(address_space_mem, 0x1fe44000, 0,ls1b_irq[3],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[2])
-		serial_mm_init(address_space_mem, 0x1fe48000, 0,ls1b_irq[4],115200,serial_hds[2], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(2))
+		serial_mm_init(address_space_mem, 0x1fe48000, 0,ls1b_irq[4],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[3])
-		serial_mm_init(address_space_mem, 0x1fe4c000, 0,ls1b_irq[5],115200,serial_hds[3], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(3))
+		serial_mm_init(address_space_mem, 0x1fe4c000, 0,ls1b_irq[5],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[4])
-		serial_mm_init(address_space_mem, 0x1fe6c000, 0,ls1b_irq[29],115200,serial_hds[4], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(4))
+		serial_mm_init(address_space_mem, 0x1fe6c000, 0,ls1b_irq[29],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[5])
-		serial_mm_init(address_space_mem, 0x1fe7c000, 0,ls1b_irq[30],115200,serial_hds[5], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(5))
+		serial_mm_init(address_space_mem, 0x1fe7c000, 0,ls1b_irq[30],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[6])
-		serial_mm_init(address_space_mem, 0x1fe41000, 0,ls1b_irq[2],115200,serial_hds[6], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(6))
+		serial_mm_init(address_space_mem, 0x1fe41000, 0,ls1b_irq[2],115200,serial_hd(6), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[7])
-		serial_mm_init(address_space_mem, 0x1fe42000, 0,ls1b_irq[2],115200,serial_hds[7], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(7))
+		serial_mm_init(address_space_mem, 0x1fe42000, 0,ls1b_irq[2],115200,serial_hd(7), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[8])
-		serial_mm_init(address_space_mem, 0x1fe43000, 0,ls1b_irq[2],115200,serial_hds[8], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(8))
+		serial_mm_init(address_space_mem, 0x1fe43000, 0,ls1b_irq[2],115200,serial_hd(8), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[9])
-		serial_mm_init(address_space_mem, 0x1fe45000, 0,ls1b_irq[3],115200,serial_hds[9], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(9))
+		serial_mm_init(address_space_mem, 0x1fe45000, 0,ls1b_irq[3],115200,serial_hd(9), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[10])
-		serial_mm_init(address_space_mem, 0x1fe46000, 0,ls1b_irq[3],115200,serial_hds[10], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(10))
+		serial_mm_init(address_space_mem, 0x1fe46000, 0,ls1b_irq[3],115200,serial_hd(10), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[11])
-		serial_mm_init(address_space_mem, 0x1fe47000, 0,ls1b_irq[3],115200,serial_hds[11], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(11))
+		serial_mm_init(address_space_mem, 0x1fe47000, 0,ls1b_irq[3],115200,serial_hd(11), DEVICE_NATIVE_ENDIAN);
 
 	sysbus_create_simple("ls1a_fb", 0x1c301240, NULL);
 

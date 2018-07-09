@@ -737,10 +737,10 @@ static void mips_ls3a_init (MachineState *machine)
 
 	ls3a_serial_irq = qemu_allocate_irqs(ls3a_serial_set_irq, mycpu, 1);
 
-    if (serial_hds[0])
-            serial_mm_init(address_space_mem, 0x1fe001e0, 0,ls3a_serial_irq[0],115200,serial_hds[0], DEVICE_NATIVE_ENDIAN);
-    //if (serial_hds[1])
-	//	serial_isa_init(isa_bus, 0, serial_hds[1]);
+    if (serial_hd(0))
+            serial_mm_init(address_space_mem, 0x1fe001e0, 0,ls3a_serial_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
+    //if (serial_hd(1))
+	//	serial_isa_init(isa_bus, 0, serial_hd(1));
 
 
 	    if (nb_nics) {

@@ -363,8 +363,8 @@ static void mips_ls232_init (MachineState *machine)
 
 
 
-	if (serial_hds[0])
-		serial_mm_init(address_space_mem, 0x1fe40000, 0, env->irq[3],115200,serial_hds[0], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(0))
+		serial_mm_init(address_space_mem, 0x1fe40000, 0, env->irq[3],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
 
 
 	//sysbus_create_simple("ls1a_fb", 0x1c301240, NULL);

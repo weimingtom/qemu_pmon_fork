@@ -31,10 +31,7 @@ typedef struct LS1APciState {
 	PCIDevice card;
 	AddressSpace as;
 	void *ls1a;
-	union{
-		Chardev **serial_hds;
-		void *serial_ptr;
-	};
+	uint32_t serial_idx;
 	union{
 		DriveInfo *hd;
 		void *hd_ptr;
@@ -61,13 +58,13 @@ typedef struct LS1APciState {
 } LS1APciState;
 
 
-int pci_ls1a_init(PCIBus *bus, int devfn, Chardev **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
-int pci_ls1a_init(PCIBus *bus, int devfn, Chardev **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash)
+int pci_ls1a_init(PCIBus *bus, int devfn, int serialidx, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
+int pci_ls1a_init(PCIBus *bus, int devfn, int serialidx, DriveInfo *hd, NICInfo *nd, DriveInfo *flash)
 {
     PCIDevice *dev;
 
     dev = pci_create(bus, devfn, "ls1a");
-    qdev_prop_set_ptr(&dev->qdev, "serial", serial);
+    qdev_prop_set_uint32(&dev->qdev, "serial", serialidx);
     qdev_prop_set_ptr(&dev->qdev, "hd", hd);
     qdev_prop_set_ptr(&dev->qdev, "nd", nd);
     qdev_prop_set_ptr(&dev->qdev, "flash", flash);
@@ -311,19 +308,18 @@ static void ls1a_initfn(PCIDevice *dev, Error **errp)
     ls1a_intctl_init(&d->iomem_axi, 0x00d01070, d->pin1_irqs[0]);
     ls1a_intctl_init(&d->iomem_axi, 0x00d01088, d->pin1_irqs[1]);
 
-    printf("serial_hds[0]=%p\n", d->serial_hds[0]);
 
-    if (d->serial_hds[0])
-	    serial_mm_init(&d->iomem_axi, 0x00e40000, 2,ls1a_irq[2],115200,d->serial_hds[0], DEVICE_NATIVE_ENDIAN);
+    if (serial_hd(d->serial_idx))
+	    serial_mm_init(&d->iomem_axi, 0x00e40000, 2,ls1a_irq[2],115200,serial_hd(d->serial_idx), DEVICE_NATIVE_ENDIAN);
 
-    if (d->serial_hds[1])
-	    serial_mm_init(&d->iomem_axi, 0x00e44000, 2,ls1a_irq[3],115200,d->serial_hds[1], DEVICE_NATIVE_ENDIAN);
+    if (serial_hd(d->serial_idx+1))
+	    serial_mm_init(&d->iomem_axi, 0x00e44000, 2,ls1a_irq[3],115200,serial_hd(d->serial_idx+1), DEVICE_NATIVE_ENDIAN);
 
-    if (d->serial_hds[2])
-	    serial_mm_init(&d->iomem_axi, 0x00e48000, 2,ls1a_irq[4],115200,d->serial_hds[2], DEVICE_NATIVE_ENDIAN);
+    if (serial_hd(d->serial_idx+2))
+	    serial_mm_init(&d->iomem_axi, 0x00e48000, 2,ls1a_irq[4],115200,serial_hd(d->serial_idx+2), DEVICE_NATIVE_ENDIAN);
 
-    if (d->serial_hds[3])
-	    serial_mm_init(&d->iomem_axi, 0x00e4c000, 2,ls1a_irq[5],115200,d->serial_hds[3], DEVICE_NATIVE_ENDIAN);
+    if (serial_hd(d->serial_idx+3))
+	    serial_mm_init(&d->iomem_axi, 0x00e4c000, 2,ls1a_irq[5],115200,serial_hd(d->serial_idx+3), DEVICE_NATIVE_ENDIAN);
 
     {
 	    MemoryRegion *i8042 = g_new(MemoryRegion, 1);
@@ -567,7 +563,7 @@ static void ls1a_initfn(PCIDevice *dev, Error **errp)
 
 
 static Property ls1a_properties[] = {
-    DEFINE_PROP_PTR("serial", LS1APciState, serial_ptr),
+    DEFINE_PROP_UINT32("serial", LS1APciState, serial_idx, 0),
     DEFINE_PROP_PTR("hd", LS1APciState, hd_ptr),
     DEFINE_PROP_PTR("nd", LS1APciState, nd_ptr),
     DEFINE_PROP_PTR("flash", LS1APciState, flash_ptr),

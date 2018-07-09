@@ -233,7 +233,7 @@ static int aui_boot_code[] ={
 };
 
 PCIBus *pci_bonito_init(CPUMIPSState *env,qemu_irq *pic, int irq,int (*board_map_irq)(int bus,int dev,int func,int pin),MemoryRegion *ram);
-int pci_ls1a_init(PCIBus *bus, int devfn, Chardev **serial, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
+int pci_ls1a_init(PCIBus *bus, int devfn, int serialidx, DriveInfo *hd, NICInfo *nd, DriveInfo *flash);
 static const int sector_len = 32 * 1024;
 
 static CPUUnassignedAccess real_do_unassigned_access;
@@ -359,8 +359,8 @@ static void mips_ls2f_ls1a_init (MachineState *machine)
 
 	hd=drive_get_next(IF_IDE);
 	
-	printf("serial_hds[0]=%p\n", serial_hds[0]);
-	pci_ls1a_init(pci_bus,9<<3, serial_hds, hd, &nd_table[0], flash_dinfo);
+	printf("serial_hd(0)=%p\n", serial_hd(0));
+	pci_ls1a_init(pci_bus,9<<3, 0, hd, &nd_table[0], flash_dinfo);
 
 }
 

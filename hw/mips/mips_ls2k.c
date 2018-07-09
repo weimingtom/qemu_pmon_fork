@@ -848,17 +848,17 @@ static void mips_ls2k_init(MachineState *machine)
 	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, env->irq);
 
 
-	if (serial_hds[0])
-		serial_mm_init(address_space_mem, 0x1fe00000, 0,ls2k_irq[0],115200,serial_hds[0], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(0))
+		serial_mm_init(address_space_mem, 0x1fe00000, 0,ls2k_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[1])
-		serial_mm_init(address_space_mem, 0x1fe00100, 0,ls2k_irq[0],115200,serial_hds[1], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(1))
+		serial_mm_init(address_space_mem, 0x1fe00100, 0,ls2k_irq[0],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[2])
-		serial_mm_init(address_space_mem, 0x1fe00200, 0,ls2k_irq[0],115200,serial_hds[2], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(2))
+		serial_mm_init(address_space_mem, 0x1fe00200, 0,ls2k_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
 
-	if (serial_hds[3])
-		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls2k_irq[0],115200,serial_hds[3], DEVICE_NATIVE_ENDIAN);
+	if (serial_hd(3))
+		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls2k_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
 
 
 
