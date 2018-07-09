@@ -1352,7 +1352,8 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 /*2h03*/
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", mem, 0x10000000UL+pcihost->busno*0x2000000UL, 0x2000000);
     memory_region_init(&pcihost->iomem_io, NULL, "system", 0x10000);
-    address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
+    //make io a address space, fix me
+    //address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
     memory_region_add_subregion(get_system_memory(), 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
     memory_region_add_subregion(get_system_memory(), 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
