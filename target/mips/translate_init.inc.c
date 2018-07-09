@@ -56,6 +56,98 @@
 const mips_def_t mips_defs[] =
 {
     {
+        .name = "LS232",
+      //  .CP0_PRid = 0x00019300,
+	.CP0_PRid = 0x00004220,
+        .CP0_Config0 = MIPS_CONFIG0 | (0x1 << CP0C0_AR) |
+                    (MMU_TYPE_R4000 << CP0C0_MT),
+	.CP0_Config1 = ((1 << CP0C1_M) | (0 << CP0C1_C2) | (0 << CP0C1_MD) | 
+			(1 << CP0C1_PC) | (0 << CP0C1_WR) | (0 << CP0C1_CA) | 
+			(1 << CP0C1_EP) | (1 << CP0C1_FP))| (31 << CP0C1_MMU) |
+		        (1 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
+		        (1 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA),
+
+#if 0
+	.CP0_Config1 = MIPS_CONFIG1 | (31 << CP0C1_MMU) |
+		        // (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
+		        (1 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
+		       // (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+		        (1 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA),
+#endif
+//        .CP0_Config1 = MIPS_CONFIG1 | (1 << CP0C1_FP) | (15 << CP0C1_MMU) |
+//		    (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
+//		    (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+        .CP0_Config2 = MIPS_CONFIG2,
+        .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt),
+        .SYNCI_Step = 32,
+        .CCRes = 2,
+        /* No DSP implemented. */
+        //.CP0_Status_rw_bitmask = 0x017800E0,  //LS232
+        .CP0_Status_rw_bitmask = 0xFC58FF1F,  //LS232
+        //.CP0_Status_rw_bitmask = 0x3678FF1F,  //24KF
+       // .CP0_Status_rw_bitmask = 0xFFFFFFFF,  //24KF
+        .CP1_fcr0 = (1 << FCR0_F64) | (1 << FCR0_L) | (1 << FCR0_W) |
+                    (1 << FCR0_D) | (1 << FCR0_S) | (0x93 << FCR0_PRID),
+        .SEGBITS = 32,
+        .PABITS = 32,
+        .insn_flags = CPU_MIPS32R2 | ASE_MIPS16,
+        .mmu_type = MMU_TYPE_R4000,
+    },
+    {
+        /* A generic CPU providing MIPS64 Release 2 features.
+           FIXME: Eventually this should be replaced by a real CPU model. */
+        .name = "godson2h",
+        .CP0_PRid = 0x6305,
+        .CP0_Config0 = MIPS_CONFIG0 | (0x1 << CP0C0_AR) | (0x2 << CP0C0_AT) |
+                       (MMU_TYPE_R4000 << CP0C0_MT),
+        .CP0_Config1 = MIPS_CONFIG1 | (1 << CP0C1_FP) | (63 << CP0C1_MMU) |
+                       (2 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
+                       (2 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA) |
+                       (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
+        .CP0_Config2 = MIPS_CONFIG2,
+        .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA),
+        .SYNCI_Step = 32,
+        .CCRes = 2,
+        .CP0_Status_rw_bitmask = 0x76FBFFFF,
+        .CP1_fcr0 = (1 << FCR0_F64) | (1 << FCR0_3D) | (1 << FCR0_PS) |
+                    (1 << FCR0_L) | (1 << FCR0_W) | (1 << FCR0_D) |
+                    (1 << FCR0_S) | (0x00 << FCR0_PRID) | (0x0 << FCR0_REV),
+        .SEGBITS = 42,
+        /* The architectural limit is 59, but we have hardcoded 36 bit
+           in some places...
+        .PABITS = 59, */ /* the architectural limit */
+        .PABITS = 48,
+        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F,
+        .mmu_type = MMU_TYPE_R4000,
+    },
+    {
+        /* A generic CPU providing MIPS64 Release 2 features.
+           FIXME: Eventually this should be replaced by a real CPU model. */
+        .name = "godson3",
+        .CP0_PRid = 0x6305,
+        .CP0_Config0 = MIPS_CONFIG0 | (0x1 << CP0C0_AR) | (0x2 << CP0C0_AT) |
+                       (MMU_TYPE_R4000 << CP0C0_MT),
+        .CP0_Config1 = MIPS_CONFIG1 | (1 << CP0C1_FP) | (63 << CP0C1_MMU) |
+                       (2 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
+                       (2 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA) |
+                       (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
+        .CP0_Config2 = MIPS_CONFIG2,
+        .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA),
+        .SYNCI_Step = 32,
+        .CCRes = 2,
+        .CP0_Status_rw_bitmask = 0x76FBFFFF,
+        .CP1_fcr0 = (1 << FCR0_F64) | (1 << FCR0_3D) | (1 << FCR0_PS) |
+                    (1 << FCR0_L) | (1 << FCR0_W) | (1 << FCR0_D) |
+                    (1 << FCR0_S) | (0x00 << FCR0_PRID) | (0x0 << FCR0_REV),
+        .SEGBITS = 42,
+        /* The architectural limit is 59, but we have hardcoded 36 bit
+           in some places...
+        .PABITS = 59, */ /* the architectural limit */
+        .PABITS = 48,
+        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F,
+        .mmu_type = MMU_TYPE_R4000,
+    },
+    {
         .name = "4Kc",
         .CP0_PRid = 0x00018000,
         .CP0_Config0 = MIPS_CONFIG0 | (MMU_TYPE_R4000 << CP0C0_MT),
