@@ -57,6 +57,26 @@
 #include "hw/pci/pcie_port.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
+#if 0
+void memory_region_ref(MemoryRegion *mr)
+{
+    /* MMIO callbacks most likely will access data that belongs
+     * to the owner, hence the need to ref/unref the owner whenever
+     * the memory region is in use.
+     *
+     * The memory region is a child of its owner.  As long as the
+     * owner doesn't call unparent itself on the memory region,
+     * ref-ing the owner will also keep the memory region alive.
+     * Memory regions without an owner are supposed to never go away;
+     * we do not ref/unref them because it slows down DMA sensibly.
+     */
+    if (mr && mr->owner) {
+//bug here
+        object_ref(mr->owner);
+    }
+}
+
+#endif
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
 
@@ -972,17 +992,17 @@ qemu_irq *pic = opaque;
 
 #define TYPE_BONITO_IOMMU_MEMORY_REGION "ls2h-bonito-iommu-memory-region"
 #define TYPE_BONITO_PCI_HOST_BRIDGE "ls2h-pcihost"
-typedef struct BonitoState BonitoState;
+typedef struct HostBonitoState HostBonitoState;
 
 #define BONITO_PCI_HOST_BRIDGE(obj) \
-    OBJECT_CHECK(BonitoState, (obj), TYPE_BONITO_PCI_HOST_BRIDGE)
+    OBJECT_CHECK(HostBonitoState, (obj), TYPE_BONITO_PCI_HOST_BRIDGE)
 
-typedef struct PCIBonitoState
+typedef struct LS2HBonitoState
 {
     /*< private >*/
     	PCIEPort parent_obj;
     /*< public >*/
-	BonitoState *pcihost;
+	HostBonitoState *pcihost;
 	MemoryRegion iomem;
 	MemoryRegion conf_mem;
 	MemoryRegion data_mem;
@@ -1022,13 +1042,13 @@ typedef struct PCIBonitoState
 		unsigned int dataload0;
 		unsigned int dataload1;
 	} mypcilocalreg;
-} PCIBonitoState;
+} LS2HBonitoState;
 
-struct BonitoState {
+struct HostBonitoState {
     PCIExpressHost parent_obj;
     PCIBus *bus;
     qemu_irq *pic;
-    PCIBonitoState *pci_dev;
+    LS2HBonitoState *pci_dev;
     MemoryRegion iomem_submem;
     MemoryRegion iomem_io;
     IOMMUMemoryRegion iommu;
@@ -1039,7 +1059,7 @@ struct BonitoState {
    int busno;
 };
 
-static inline uint32_t bonito_pci_config_addr(PCIBonitoState *s,hwaddr addr)
+static inline uint32_t bonito_pci_config_addr(LS2HBonitoState *s,hwaddr addr)
 {
 	int bus = 0, dev = -1, func = 0, reg = 0;
 	uint32_t busaddr;
@@ -1057,17 +1077,17 @@ static inline uint32_t bonito_pci_config_addr(PCIBonitoState *s,hwaddr addr)
 static void pci_ls2h_config_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
-	PCIBonitoState *s = opaque;
+	LS2HBonitoState *s = opaque;
 	//   PCIDevice *d = PCI_DEVICE(s);
-	BonitoState *phb = s->pcihost;
+	HostBonitoState *phb = s->pcihost;
 	pci_data_write(phb->bus, bonito_pci_config_addr(s, addr), val, size);
 }
 
 static uint64_t pci_ls2h_config_readl (void *opaque, hwaddr addr, unsigned size)
 {
-	PCIBonitoState *s = opaque;
+	LS2HBonitoState *s = opaque;
 	//  PCIDevice *d = PCI_DEVICE(s);
-	BonitoState *phb = s->pcihost;
+	HostBonitoState *phb = s->pcihost;
 	uint32_t val;
 	val = pci_data_read(phb->bus, bonito_pci_config_addr(s, addr), size);
 	return val;
@@ -1094,7 +1114,7 @@ static const MemoryRegionOps pci_ls2h_config_ops = {
 
 static uint64_t pci_bonito_local_readl (void *opaque, hwaddr addr, unsigned size)
 {
-    PCIBonitoState *s = opaque;
+    LS2HBonitoState *s = opaque;
 	uint32_t val;
 
 	//printf("local addr=%x\n", (unsigned int)addr);
@@ -1127,7 +1147,7 @@ static uint64_t pci_bonito_local_readl (void *opaque, hwaddr addr, unsigned size
 static void pci_bonito_local_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
-    PCIBonitoState *s = opaque;
+    LS2HBonitoState *s = opaque;
 	uint32_t relative_addr=addr;
 	//printf("local addr=%x\n", (unsigned int)addr);
 	if(addr>=sizeof(struct pcilocalreg)) return;
@@ -1143,7 +1163,7 @@ static const MemoryRegionOps pci_bonito_local_ops = {
 static void bonito_pciconf_writel(void *opaque, hwaddr addr,
                                   uint64_t val, unsigned size)
 {
-    PCIBonitoState *s = opaque;
+    LS2HBonitoState *s = opaque;
     PCIDevice *d = PCI_DEVICE(s);
 
     d->config_write(d, addr, val, size);
@@ -1153,7 +1173,7 @@ static uint64_t bonito_pciconf_readl(void *opaque, hwaddr addr,
                                      unsigned size)
 {
 
-    PCIBonitoState *s = opaque;
+    LS2HBonitoState *s = opaque;
     PCIDevice *d = PCI_DEVICE(s);
 
     return d->config_read(d, addr, size);
@@ -1173,7 +1193,7 @@ static const MemoryRegionOps bonito_pciconf_ops = {
 
 static void bonito_initfn(PCIDevice *dev, Error **errp)
 {
-    PCIBonitoState *s = OBJECT_CHECK(PCIBonitoState, dev, "LS2H_Bonito");
+    LS2HBonitoState *s = OBJECT_CHECK(LS2HBonitoState, dev, "LS2H_Bonito");
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
     PCIEPort *p = PCIE_PORT(dev);
     int busno = s->pcihost->busno;
@@ -1241,7 +1261,7 @@ static void bonito_class_init(ObjectClass *klass, void *data)
 static const TypeInfo bonito_info = {
     .name          = "LS2H_Bonito",
     .parent        = TYPE_PCIE_PORT,
-    .instance_size = sizeof(PCIBonitoState),
+    .instance_size = sizeof(LS2HBonitoState),
     .class_init    = bonito_class_init,
     .interfaces = (InterfaceInfo[]) {
         { INTERFACE_PCIE_DEVICE },
@@ -1254,8 +1274,8 @@ static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num))
 {
     DeviceState *dev;
-    BonitoState *pcihost;
-    PCIBonitoState *s;
+    HostBonitoState *pcihost;
+    LS2HBonitoState *s;
     PCIDevice *d;
     PCIBridge *br;
     PCIBus *bus2;
@@ -1271,7 +1291,7 @@ static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
     //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS2H_Bonito");
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9, 0), true, "LS2H_Bonito");
 
-    s = OBJECT_CHECK(PCIBonitoState, d, "LS2H_Bonito");
+    s = OBJECT_CHECK(LS2HBonitoState, d, "LS2H_Bonito");
     s->pcihost = pcihost;
     pcihost->pci_dev = s;
     br = PCI_BRIDGE(d);
@@ -1289,7 +1309,7 @@ static PCIBus *pcibus_ls2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(P
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
 {
-    BonitoState *pcihost = opaque;
+    HostBonitoState *pcihost = opaque;
     return &pcihost->as_mem;
 }
 
@@ -1314,7 +1334,7 @@ static IOMMUTLBEntry ls2h_pciedma_translate_iommu(IOMMUMemoryRegion *iommu, hwad
 
 static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 {
-    BonitoState *pcihost;
+    HostBonitoState *pcihost;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
     MemoryRegion *mem;
     int busno = pcihost->busno;
@@ -1322,7 +1342,7 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     memory_region_init(&pcihost->iomem_mem, OBJECT(dev), "system", INT64_MAX);
     /* Host memory as seen from the PCI side, via the IOMMU.  */
     memory_region_init_iommu(&pcihost->iommu, sizeof(pcihost->iommu),
-                             TYPE_BONITO_IOMMU_MEMORY_REGION, OBJECT(dev),
+                             TYPE_BONITO_IOMMU_MEMORY_REGION, NULL,
                              "iommu-ls2hpcie", UINT64_MAX);
     mem = MEMORY_REGION(&pcihost->iommu);
     //mem = &pcihost->iomem_mem;
@@ -1330,8 +1350,8 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 
 
 /*2h03*/
-    memory_region_init_alias(&pcihost->iomem_submem, OBJECT(dev), "pcisubmem", mem, 0x10000000UL+pcihost->busno*0x2000000UL, 0x2000000);
-    memory_region_init(&pcihost->iomem_io, OBJECT(dev), "system", 0x10000);
+    memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", mem, 0x10000000UL+pcihost->busno*0x2000000UL, 0x2000000);
+    memory_region_init(&pcihost->iomem_io, NULL, "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
     memory_region_add_subregion(get_system_memory(), 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
@@ -1365,7 +1385,7 @@ static void bonito_pcihost_class_init(ObjectClass *klass, void *data)
 static const TypeInfo bonito_pcihost_info = {
     .name          = TYPE_BONITO_PCI_HOST_BRIDGE,
     .parent        = TYPE_PCIE_HOST_BRIDGE,
-    .instance_size = sizeof(BonitoState),
+    .instance_size = sizeof(HostBonitoState),
     .class_init    = bonito_pcihost_class_init,
     .interfaces = (InterfaceInfo[]) {
         { INTERFACE_PCIE_DEVICE },
