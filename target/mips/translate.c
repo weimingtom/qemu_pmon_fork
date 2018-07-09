@@ -20024,7 +20024,7 @@ static void decode_opc(CPUMIPSState *env, DisasContext *ctx)
     rd = (ctx->opcode >> 11) & 0x1f;
     sa = (ctx->opcode >> 6) & 0x1f;
     imm = (int16_t)ctx->opcode;
-    gen_helper_2i(mypc, ctx->pc, ctx->opcode);
+    gen_helper_2i(mypc, ctx->base.pc_next, ctx->opcode);
     switch (op) {
     case OPC_SPECIAL:
         decode_opc_special(env, ctx);
