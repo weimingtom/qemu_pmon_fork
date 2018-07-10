@@ -80,7 +80,7 @@ static void *boot_params_p;
 /* i8254 PIT is attached to the IRQ0 at PIC i8259 */
 
 static struct _loaderparams {
-    int ram_size;
+    uint64_t ram_size;
     const char *kernel_filename;
     const char *kernel_cmdline;
     const char *initrd_filename;
@@ -282,7 +282,7 @@ static int64_t load_kernel(void)
     }
 
 
-	if(!getenv("LOONGSONENV"))
+	if(getenv("OLDENV"))
 	 set_bootparam(initrd_offset, initrd_size);
 	else
 	 set_bootparam1(initrd_offset, initrd_size);
@@ -540,7 +540,7 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 				{
 					printf("base = 0x%llx size = 0x%llx\n", base, bsize);
 					if(!cachelock_iomem[j]) cachelock_iomem[j] = g_new(MemoryRegion, 1);
-					memory_region_init_ram(cachelock_iomem[j], NULL, "mips_r4k.ram", bsize, &error_fatal);
+					memory_region_init_ram_nomigrate(cachelock_iomem[j], NULL, "mips_r4k.cachemem", bsize, &error_fatal);
 					memory_region_add_subregion_overlap(get_system_memory(), base, cachelock_iomem[j], 1);
 				}
 				else if(cachelock_iomem[j])
@@ -781,7 +781,7 @@ static void mips_ls3a_init (MachineState *machine)
 char *p;
 MemoryRegion *iomem;
         iomem = g_new(MemoryRegion, 1);
-	memory_region_init_ram(iomem, NULL, "mips_r4k.ram", 0x0200, &error_fatal);
+	memory_region_init_ram(iomem, NULL, "mips_r4k.xbar2ram", 0x0200, &error_fatal);
 	memory_region_add_subregion(address_space_mem, 0x3ff00000, iomem);
   	p = memory_region_get_ram_ptr(iomem);
 
@@ -796,7 +796,7 @@ MemoryRegion *iomem;
 	*(long long *)(p+0x180) = 0xf0;
 
         iomem = g_new(MemoryRegion, 1);
-	memory_region_init_ram(iomem, NULL, "mips_r4k.ram", 0x1000, &error_fatal);
+	memory_region_init_ram(iomem, NULL, "mips_r4k.xbar1ram", 0x1000, &error_fatal);
 	memory_region_add_subregion(address_space_mem, 0x3ff02000, iomem);
   	p = memory_region_get_ram_ptr(iomem);
 	memset(p,0,0x800);
