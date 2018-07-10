@@ -889,6 +889,9 @@ static void mips_ls2h_init(MachineState *machine)
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00210, "0x1fd00210", 0x4);
                 memory_region_add_subregion(address_space_mem, 0x1fd00210, iomem);
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00220, "0x1fd00220", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fd00220, iomem);
 		/*ins*/
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00800, "0x1fd00800", 0x34);
@@ -1353,7 +1356,7 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", mem, 0x10000000UL+pcihost->busno*0x2000000UL, 0x2000000);
     memory_region_init(&pcihost->iomem_io, NULL, "system", 0x10000);
     //make io a address space, fix me
-    //address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
+    address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
     memory_region_add_subregion(get_system_memory(), 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
     memory_region_add_subregion(get_system_memory(), 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
