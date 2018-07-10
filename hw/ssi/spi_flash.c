@@ -348,6 +348,7 @@ static void spi_flash_realize(SSISlave *dev, Error **errp)
 
 	if(s->blk)
 	{
+		blk_set_perm(s->blk, BLK_PERM_ALL, BLK_PERM_ALL, errp);
 		len = blk_getlength(s->blk);
 		if(len != 0x800000) {
 			printf("length=%d must be 8 mega bytes,run command bellow to trucate file to size:\n", len);
