@@ -1,4 +1,4 @@
-obj-y += mips_r4k.o mips_malta.o mips_mipssim.o mips_ls2h.o mips_ls2k.o mips_ls1a.o mips_ls1b.o ls1asb.o mips_ls2f1a.o mips_ls3a.o  mips_ls1gp.o mips_ls1gpa.o mips_ls232.o mips_ls3a2h.o
+obj-y += mips_r4k.o mips_malta.o mips_mipssim.o mips_ls2h.o mips_ls2k.o mips_ls1a.o mips_ls1b.o ls1asb.o mips_ls2f1a.o mips_ls3a.o  mips_ls1gp.o mips_ls1gpa.o mips_ls232.o mips_ls3a2h.o mips_ls1c.o
 obj-y += addr.o mips_int.o
 obj-$(CONFIG_JAZZ) += mips_jazz.o
 obj-$(CONFIG_FULONG) += mips_fulong2e.o
