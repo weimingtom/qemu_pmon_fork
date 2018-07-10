@@ -8,6 +8,7 @@
 #include "sysemu/blockdev.h"
 #include "exec/memory.h"
 #include "sysemu/dma.h"
+#include "sysemu/sysemu.h"
 #define DPRINTF(a...) //printf(a)
 #define HW_FLASH_H
 static DeviceState *nand_init(BlockBackend *blk, int manf_id, int chip_id);
@@ -97,6 +98,11 @@ typedef struct NandState{
 typedef struct nand_sysbus_state {
 	SysBusDevice busdev;
 	NandState nand;
+	/*bellow for nand boot*/
+	uint64_t addr;
+	uint32_t size;
+	MemoryRegion mem;
+	uint8_t *buf;
 } nand_sysbus_state;
 
 
@@ -528,6 +534,51 @@ static const MemoryRegionOps ls1a_nand_ops = {
 #define SYS_BUS_LS1ANAND(obj) \
     OBJECT_CHECK(nand_sysbus_state, (obj), TYPE_SYS_BUS_LS1ANAND)
 
+static uint64_t spi_rom_read(void *opaque, hwaddr addr, unsigned size)
+{
+	nand_sysbus_state *s = opaque;
+
+	switch(size)
+	{
+	case 4: return *(uint32_t *)(s->buf + addr);
+	case 2: return *(uint16_t *)(s->buf + addr);
+	case 1: return *(uint8_t *)(s->buf + addr);
+	default: return *(uint64_t *)(s->buf + addr);
+	}
+
+}
+
+static void spi_rom_write(void *opaque, hwaddr addr, uint64_t data, unsigned size)
+{
+}
+
+static const MemoryRegionOps spi_rom_ops = {
+    .read = spi_rom_read,
+    .write = spi_rom_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
+static int load_bios(uint8_t **buf)
+{
+	char *filename;
+	int bios_size;
+	if (bios_name == NULL)
+	return 0;
+
+	filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+	if (filename) {
+		bios_size = get_image_size(filename);
+		*buf = g_malloc(bios_size);
+		load_image(filename,*buf);
+	} else {
+		bios_size = 0;
+		*buf = NULL;
+	}
+	return bios_size;
+}
+
+
+
 static int ls1a_nand_init(SysBusDevice *dev)
 {
     DriveInfo *nand;
@@ -542,6 +593,47 @@ static int ls1a_nand_init(SysBusDevice *dev)
     d->nand.as = &address_space_memory;
     memory_region_init_io(&d->nand.iomem, NULL, &ls1a_nand_ops, (void *)&d->nand, "ls1a nand", 0x24);
     memory_region_init_io(&d->nand.iomem1, NULL, &ls1a_nand_ops, (void *)&d->nand, "ls1a nand", 0x4);
+if(d->size)
+{
+	NANDFlashState *s = d->nand.chip;
+	uint8_t *buf;
+        int i, once;
+	int pagesize = 1<<s->page_shift;
+	int erasesize = 1<<(s->erase_shift + s->page_shift);
+	int size = load_bios(&buf);
+        Error *err;
+	if(size)
+	{
+		for(i=0;i<size;i+=pagesize)
+		{
+		once = min(size-i,pagesize);
+		s->addr = i;
+		s->offset = 0;
+		s->iolen = once;
+		memcpy(s->io, buf + i, once);
+		if((i&(erasesize-1)) == 0)
+				s->blk_erase(s);
+		s->blk_write(s);
+		}
+	}
+
+
+
+	memory_region_init_rom_device(&d->mem, NULL, &spi_rom_ops , d, "spi flash rom", d->size, &err);
+  	d->buf = memory_region_get_ram_ptr(&d->mem);
+
+	nand_reset(s);
+
+	for(i=0;i<1024;i=i+pagesize)
+	{
+	s->addr = i;
+	s->blk_load(s, i, 0);
+	memcpy(d->buf+i, s->io, min(1024-i,pagesize));
+	}
+
+	memory_region_add_subregion(get_system_memory(), d->addr, &d->mem);
+	nand_reset(s);
+}
     sysbus_init_mmio(dev, &d->nand.iomem);
     sysbus_init_mmio(dev, &d->nand.iomem1);
     sysbus_init_irq(dev, &d->nand.irq);
@@ -555,6 +647,8 @@ static Property ls1a_nand_properties[] = {
     DEFINE_PROP_UINT8("manufacturer_id", nand_sysbus_state, nand.manf_id, 0),
     DEFINE_PROP_UINT8("chip_id", nand_sysbus_state, nand.chip_id, 0),
     DEFINE_PROP_UINT8("cs", nand_sysbus_state, nand.cs, 0),
+    DEFINE_PROP_UINT32("size", nand_sysbus_state, size, 0),
+    DEFINE_PROP_UINT64("addr", nand_sysbus_state, addr, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
