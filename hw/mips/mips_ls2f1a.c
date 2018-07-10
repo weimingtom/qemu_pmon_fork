@@ -55,7 +55,7 @@ static const int ide_irq[2] = { 14, 15 };
 /* i8254 PIT is attached to the IRQ0 at PIC i8259 */
 
 static struct _loaderparams {
-    int ram_size;
+    uint64_t ram_size;
     const char *kernel_filename;
     const char *kernel_cmdline;
     const char *initrd_filename;
