@@ -534,7 +534,7 @@ static void mips_machine_init(MachineClass *mc)
     mc->default_cpu_type = MIPS_CPU_TYPE_NAME("LS232");
 }
 
-DEFINE_MACHINE("ls1a", mips_machine_init)
+DEFINE_MACHINE("ls1c", mips_machine_init)
 
 //------------
 //#define DEBUG_IRQ
