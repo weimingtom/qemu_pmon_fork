@@ -48,5 +48,5 @@ virtio-gpu-3d.o-cflags := $(VIRGL_CFLAGS)
 virtio-gpu-3d.o-libs += $(VIRGL_LIBS)
 obj-$(CONFIG_DPCD) += dpcd.o
 obj-$(CONFIG_XLNX_ZYNQMP_ARM) += xlnx_dp.o
-obj-y += ls2h_fb.o
-obj-y += ls2h_fb.o ls1a_fb.o
+obj-$(CONFIG_LS2H_FB) += ls2h_fb.o
+obj-$(CONFIG_LS1A_FB) += ls1a_fb.o
