@@ -2439,10 +2439,10 @@ Chardev *serial_hd(int i)
 {
     int debugserial = 0;
     if(getenv("SERIAL")) debugserial = strtoul(getenv("SERIAL"),0,0);
+    i = (i == 0)?debugserial:(i==debugserial)?0:i;
 	
     assert(i >= 0);
     if (i < num_serial_hds) {
-	    i = (i == 0)?debugserial:(i==debugserial)?0:i;
         return serial_hds[i];
     }
     return NULL;
