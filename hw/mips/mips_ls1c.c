@@ -296,6 +296,9 @@ static void mips_ls1c_init (MachineState *machine)
 	qemu_irq *ls1c_irq,*ls1c_irq1;
 	int ddr2config = 0;
 	CPUClass *cc;
+	char *filename;
+	MemoryRegion *bios;
+	int bios_size;
 
 
 	/* init CPUs */
@@ -314,13 +317,38 @@ static void mips_ls1c_init (MachineState *machine)
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
+	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, MIN(ram_size, 0x10000000));
 	memory_region_add_subregion(address_space_mem, 0, ram1);
 	memory_region_add_subregion(address_space_mem, 0x40000000ULL, ram);
 
 	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
 	//memory_region_add_subregion(address_space_mem, 0x1fbf0000, iomem);
 
+    /* Try to load a BIOS image. If this fails, we continue regardless,
+       but initialize the hardware ourselves. When a kernel gets
+       preloaded we also initialize the hardware, since the BIOS wasn't
+       run. */
+        if (bios_name)
+        {
+            filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+            if (filename) {
+                bios_size = get_image_size(filename);
+            } else {
+                bios_size = -1;
+            }
+
+            if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
+                bios = g_new(MemoryRegion, 1);
+                memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
+                memory_region_set_readonly(bios, true);
+                memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
+
+                load_image_targphys(filename, 0x1fc00000, BIOS_SIZE);
+            }
+            if (filename) {
+                g_free(filename);
+            }
+        }
 
     if (kernel_filename) {
 	uint64_t vector;
@@ -464,8 +492,11 @@ static void mips_ls1c_init (MachineState *machine)
 		DeviceState *dev;
 		SysBusDevice *s;
 		dev = qdev_create(NULL, "ls1a_nand");
-		qdev_prop_set_uint32(dev, "size", 0x1000);
-		qdev_prop_set_uint64(dev, "addr", 0x1fc00000);
+		if(drive_get(IF_MTD, 0, 0))
+		{
+			qdev_prop_set_uint32(dev, "size", 0x1000);
+			qdev_prop_set_uint64(dev, "addr", 0x1fc00000);
+		}
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
 		sysbus_mmio_map(s, 0, 0x1fe78000);
