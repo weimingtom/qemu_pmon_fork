@@ -3,7 +3,7 @@
 
 extern void (*poweroff_pt)(void);
 extern void (*reboot_pt)(void);
-static void init_efi(struct efi *efi);
+static void init_efi(struct efi_loongson *efi);
 static void init_reset_system(struct efi_reset_system_t *reset);
 static void init_smbios(struct smbios_tables *smbios);
 static void init_loongson_params(struct loongson_params *lp);
@@ -30,7 +30,7 @@ static int init_boot_param(struct boot_params *bp)
   return 0;
 }
 
-void init_efi(struct efi *efi)
+void init_efi(struct efi_loongson *efi)
 {
     init_smbios(&(efi->smbios));
 }
@@ -76,6 +76,7 @@ void init_loongson_params(struct loongson_params *lp)
   lp->special_offset = (unsigned long long)init_special_info(p) - (unsigned long long)lp; 
   p+= align(sizeof(struct loongson_special_attribute));
   boot_params_p = p;
+  printf("memory_offset = 0x%llx;cpu_offset = 0x%llx; system_offset = 0x%llx; irq_offset = 0x%llx; interface_offset = 0x%llx;\n",lp->memory_offset,lp->cpu_offset,lp->system_offset,lp->irq_offset, lp->interface_offset);
 }
 
 
@@ -122,10 +123,64 @@ struct efi_memory_map_loongson * init_memory_map(void *g_map)
 	return emap;
 #undef	EMAP_ENTRY
 }
+#elif defined(LS7A)
+struct efi_memory_map_loongson * init_memory_map(void *g_map)
+{
+	struct efi_memory_map_loongson *emap = g_map;
+	int i = 0;
+	unsigned long long size = atoi(getenv("highmemsize"))<<20;
+
+#define EMAP_ENTRY(entry, node, type, start, size) \
+	emap->map[(entry)].node_id = (node), \
+	emap->map[(entry)].mem_type = (type), \
+	emap->map[(entry)].mem_start = (start), \
+	emap->map[(entry)].mem_size = (size), \
+	(entry)++
+
+#if 1
+	EMAP_ENTRY(i, 0, SYSTEM_RAM_LOW, 0x00200000, 0x0ee);
+	/* for entry with mem_size < 1M, we set bit31 to 1 to indicate
+	 * that the unit in mem_size is Byte not MBype */
+	EMAP_ENTRY(i, 0, SMBIOS_TABLE, (SMBIOS_PHYSICAL_ADDRESS & 0x0fffffff),
+			(SMBIOS_SIZE_LIMIT | 0x80000000));
+	/* 0x20000000 size 512M */
+	EMAP_ENTRY(i, 0, VUMA_VIDEO_RAM, 0x20000000, 0x200);
+	/* SYSTEM_RAM_HIGH high 512M  */
+	EMAP_ENTRY(i, 0, UMA_VIDEO_RAM, 0x90000000ULL + ((unsigned long long)(size - 0x20000000)), 0x200);
+
+	EMAP_ENTRY(i, 0, SYSTEM_RAM_HIGH, 0x90000000, (size - 0x20000000) >> 20);
+#endif
+
+#ifdef MULTI_CHIP
+	if(getenv("memorysize_high_n1")) {
+ 		EMAP_ENTRY(i, 1, SYSTEM_RAM_LOW, 0x00000000000L, 0x100);
+ 		EMAP_ENTRY(i, 1, SYSTEM_RAM_HIGH, 0x00000000000L + 0x90000000, atoi(getenv("memorysize_high_n1")));
+	}
+#endif
+
+
+	emap->vers = 1;
+	emap->nr_map = i;
+	return emap;
+#undef	EMAP_ENTRY
+}
+
+struct board_devices *board_devices_info(void *g_board)
+{
+
+	struct board_devices *bd = g_board;
+
+#ifdef  MULTI_CHIP
+	strcpy(bd->name,"Loongson-3A3000-7A-Dev-2way");
+#else
+	strcpy(bd->name,"Loongson-3A3000-7A-Dev-1way");
+#endif
+	bd->num_resources = 10;
+
+	return bd;
+}
 
 #else
-
-
 struct efi_memory_map_loongson * init_memory_map(void *g_map)
 {
   struct efi_memory_map_loongson *emap = g_map;
@@ -363,7 +418,11 @@ struct irq_source_routing_table *init_irq_source(void *g_irq_source)
 
 	irq_info->pci_mem_start_addr = 0x40000000ul;
 	irq_info->pci_mem_end_addr = 0x7ffffffful;
-
+#if (defined RS780E || defined LS7A)
+	irq_info->dma_mask_bits= 64;
+#else
+	irq_info->dma_mask_bits = 32;
+#endif
 	return irq_info;
 }
 
@@ -386,6 +445,7 @@ struct interface_info *init_interface_info(void *g_interface)
   return inter;
 }
 
+#if !defined(LS7A)
 static struct board_devices *board_devices_info(void *g_board)
 {
   
@@ -428,6 +488,7 @@ static struct board_devices *board_devices_info(void *g_board)
  
   return bd;
 }
+#endif
 
 
 struct loongson_special_attribute *init_special_info(void *g_special)
