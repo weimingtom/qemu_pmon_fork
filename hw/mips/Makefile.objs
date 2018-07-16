@@ -5,4 +5,4 @@ obj-$(CONFIG_FULONG) += mips_fulong2e.o
 obj-y += gt64xxx_pci.o
 obj-$(CONFIG_MIPS_CPS) += cps.o
 obj-$(CONFIG_MIPS_BOSTON) += boston.o
-obj-$(CONFIG_LOONGSON) += mips_ls2h.o mips_ls2k.o mips_ls1a.o mips_ls1b.o ls1asb.o mips_ls2f1a.o mips_ls3a.o  mips_ls1gp.o mips_ls1gpa.o mips_ls232.o mips_ls3a2h.o mips_ls1c.o
+obj-$(CONFIG_LOONGSON) += mips_ls2h.o mips_ls2k.o mips_ls1a.o mips_ls1b.o ls1asb.o mips_ls2f1a.o mips_ls3a.o  mips_ls1gp.o mips_ls1gpa.o mips_ls232.o mips_ls3a2h.o mips_ls1c.o mips_ls3a7a.o
