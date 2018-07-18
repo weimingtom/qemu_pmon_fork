@@ -849,7 +849,7 @@ void mips_cpu_do_interrupt(CPUState *cs)
             int KX = (env->CP0_Status & (1 << CP0St_KX)) != 0;
 
             if ((R != 0 || UX) && (R != 3 || KX) &&
-                (!(env->insn_flags & (INSN_LOONGSON2E | INSN_LOONGSON2F)))) {
+                (env->CP0_PRid != 0x6302 && env->CP0_PRid != 0x6303)) {
                 offset = 0x080;
             } else {
 #endif
@@ -870,7 +870,7 @@ void mips_cpu_do_interrupt(CPUState *cs)
             int KX = (env->CP0_Status & (1 << CP0St_KX)) != 0;
 
             if ((R != 0 || UX) && (R != 3 || KX) &&
-                (!(env->insn_flags & (INSN_LOONGSON2E | INSN_LOONGSON2F)))) {
+                (env->CP0_PRid != 0x6302 && env->CP0_PRid != 0x6303)) {
                 offset = 0x080;
             } else {
 #endif
