@@ -783,7 +783,7 @@ static void mips_ls2k_init(MachineState *machine)
 
 
         //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls2k axi", UINT32_MAX);
-        memory_region_init(iomem_root, NULL,  "ls2k axi", UINT32_MAX);
+        memory_region_init(iomem_root, NULL,  "ls2k axi", UINT64_MAX);
 	address_space_init(as,iomem_root, "ls2k axi memory");
 
 	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
