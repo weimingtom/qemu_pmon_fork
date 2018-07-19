@@ -786,7 +786,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 
         //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls3a7a axi", UINT32_MAX);
-        memory_region_init(iomem_root, NULL,  "ls3a7a axi", UINT32_MAX);
+        memory_region_init(iomem_root, NULL,  "ls3a7a axi", UINT64_MAX);
 	address_space_init(as,iomem_root, "ls3a7a axi memory");
 
 	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
