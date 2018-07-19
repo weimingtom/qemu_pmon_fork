@@ -700,7 +700,7 @@ static int godson_ipi_init(qemu_irq parent_irq , unsigned long index, gipiState 
 
 
 
-static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq);
+static void *ls7a_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq);
 
 static const int sector_len = 32 * 1024;
 
@@ -851,8 +851,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls3a7a_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, env->irq);
-	ls3a7a_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, env->irq);
+	ls3a7a_irq =ls7a_intctl_init(get_system_memory(), 0xe0010000000ULL, env->irq[3]);
 
 	if (serial_hd(0))
 		serial_mm_init(address_space_mem, 0x1fe001e0, 0,env->irq[2],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
@@ -1080,7 +1079,7 @@ DEFINE_MACHINE("ls3a7a", mips_machine_init)
 
 #define MAX_PILS 16
 
-#include "ls2k_int.c"
+#include "ls7a_int.c"
 //-------------------------
 // pci bridge
 //-----------------
