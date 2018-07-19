@@ -776,13 +776,13 @@ static void mips_ls3a7a_init(MachineState *machine)
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
+	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, MIN(ram_size, 0x10000000));
 	memory_region_add_subregion(address_space_mem, 0, ram1);
 	memory_region_add_subregion(address_space_mem, 0x80000000ULL, ram);
 	MemoryRegion *ram_pciram = g_new(MemoryRegion, 1);
 	MemoryRegion *ram_pciram1 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram_pciram1, NULL, "ddrlowmem", ram, 0, 0x10000000);
-	memory_region_init_alias(ram_pciram, NULL, "ddrmem", ram, 0, memory_region_size(ram));
+	memory_region_init_alias(ram_pciram, NULL, "ddrmem", ram, 0, ram_size);
 
 
         //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls3a7a axi", UINT32_MAX);
@@ -790,8 +790,12 @@ static void mips_ls3a7a_init(MachineState *machine)
 	address_space_init(as,iomem_root, "ls3a7a axi memory");
 
 	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram2, NULL, "lowmem", ram, 0, ram_size);
+	memory_region_init_alias(ram2, NULL, "dmalowmem", ram, 0, MIN(ram_size, 0x10000000));
         memory_region_add_subregion(iomem_root, 0, ram2);
+
+	MemoryRegion *ram3 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram3, NULL, "dmamem", ram, 0, ram_size);
+        memory_region_add_subregion(iomem_root, 0x80000000ULL, ram3);
 
 
 	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
@@ -891,15 +895,6 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 #endif
 	}
-#if 1
-{
-    PCIDevice *dev = pci_create_multifunction(pci_bus[1], -1, false, "pciram");
-    qdev_prop_set_uint16(&dev->qdev, "vendor", 0x1002);
-    qdev_prop_set_uint16(&dev->qdev, "device", 0x9615);
-    qdev_prop_set_uint32(&dev->qdev, "bar0", (~(0x04000-1))|1);
-    qdev_init_nofail(&dev->qdev);
-}
-#endif
 
 #if 0
 	{
@@ -1111,11 +1106,10 @@ static int pci_ls3a7a_map_irq(PCIDevice *d, int pin)
 
 		case 4:
 		/*
-		OTG: 4 0
+		OHCI: 4 0
 		EHCI: 4 1
-		OHCI: 4 2
 		*/
-		 return (fn == 0)? 49:(fn == 1)? 50:51;
+		 return (fn == 0)? 49:48;
 		break;
 
 		case 5:
@@ -1417,6 +1411,9 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     pcihost->pci_map_irq = board_map_irq;
     qdev_init_nofail(dev);
 
+    memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
+    memory_region_add_subregion(&pcihost->iomem_mem, 0x80000000ULL, ram);
+
     /* set the pcihost pointer before bonito_initfn is called */
     //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS7A_Bonito");
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9, 0), true, "LS7A_Bonito");
@@ -1463,11 +1460,10 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
 
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 0), true, "pciram");
-    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00001000-1));
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 0), true, "pci-ohci");
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a04);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
 
 #if 1
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 1), true, "usb-ehci");
@@ -1476,10 +1472,6 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a14);
 #endif
 
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 2), true, "pci-ohci");
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
 
 #if 0
     d = pci_create(pcihost->bus, PCI_DEVFN(4, 1), "pci-ehci-usb");
@@ -1518,8 +1510,6 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 
 //pci-synopgmac
 
-    memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
-    memory_region_add_subregion(&pcihost->iomem_mem, 0x100000000UL, ram);
 
     ls3a7a_pci_bus = pcihost->bus;
 
@@ -1554,7 +1544,7 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     /* Host memory as seen from the PCI side, via the IOMMU.  */
 
     memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
-    memory_region_init_alias(&pcihost->iomem_subbigmem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x40000000, 0x20000000);
+    memory_region_init_alias(&pcihost->iomem_subbigmem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x40000000, 0x40000000);
 
     memory_region_init(&pcihost->iomem_io, OBJECT(pcihost), "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
