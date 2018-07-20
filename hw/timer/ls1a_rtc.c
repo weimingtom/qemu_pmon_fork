@@ -98,7 +98,7 @@ static void update_toy_timer(ls1a_rtc_state *s)
 	(tm.tm_hour << 12) | \
 	((tm.tm_mday-1) << 17) | \
 	(tm.tm_mon << 22) |
-	((tm.tm_year+1900) << 26);
+	((tm.tm_year) << 26);
 
 	for(i=0;i<3;i++)
 	{
@@ -142,7 +142,7 @@ static uint64_t ls1a_rtc_read(void *opaque, hwaddr offset, unsigned size)
 	break;
     case TOYREAD1:
 	qemu_get_timedate(&tm, s->offset);
-	val = tm.tm_year+1900;
+	val = tm.tm_year;
 	break;
     case TOYMATCH0:
 	val = s->toymatch[0];
@@ -195,7 +195,7 @@ static void ls1a_rtc_write(void *opaque, hwaddr offset, uint64_t val, unsigned s
         break;
     case TOYWRITE1:
 	qemu_get_timedate(&tm, s->offset);
-	tm.tm_year = val - 1900;
+	tm.tm_year = val;
         s->offset = qemu_timedate_diff(&tm);
         break;
     case TOYMATCH0:
@@ -243,7 +243,7 @@ static void toy_timer(void *opaque)
 
 	qemu_get_timedate(&tm, s->offset);
 
-	if(tm.tm_mday-1 == day && tm.tm_mon == month && tm.tm_year+1900 == year && (s->cntrctl & TOYEN))
+	if(tm.tm_mday-1 == day && tm.tm_mon == month && tm.tm_year == year && (s->cntrctl & TOYEN))
 	 qemu_irq_raise(s->irq[s->tidx]);
 	update_toy_timer(s);
 }
