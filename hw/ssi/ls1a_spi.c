@@ -25,6 +25,7 @@
 #include "qapi/error.h"
 #include "hw/sysbus.h"
 #include "hw/ssi/ssi.h"
+#include "hw/pci/pci.h"
 
 typedef struct {
     SysBusDevice busdev;
@@ -189,7 +190,7 @@ static int ls1a_spi_init(SysBusDevice *dev)
     ls1a_spi_state *d = SYS_BUS_LS1ASPI(dev);
     int i;
 
-    memory_region_init_io(&d->iomem, NULL, &ls1a_spi_ops, (void *)d, "ls1a spi", 0x7);
+    memory_region_init_io(&d->iomem, NULL, &ls1a_spi_ops, (void *)d, "ls1a spi", 0x8);
 
     sysbus_init_irq(dev, &d->irq);
     for(i=0;i<4;i++)
@@ -226,3 +227,78 @@ static void ls1a_spi_register_types(void)
 
 type_init(ls1a_spi_register_types)
 
+//-------------
+
+/* PCI interface */
+#define LS1ASPI_VENDOR_ID  0x0014
+#define LS1ASPI_DEVICE_ID  0x7a0b
+typedef struct ls1a_spi_pci_state {
+    PCIDevice dev;
+    ls1a_spi_state  spi;
+} ls1a_spi_pci_state;
+
+static void
+pci_ls1a_spi_uninit(PCIDevice *dev)
+{
+}
+
+static void pci_ls1a_spi_init(PCIDevice *pci_dev, Error **errp)
+{
+    ls1a_spi_pci_state *p = DO_UPCAST(ls1a_spi_pci_state, dev, pci_dev);
+    uint8_t *pci_conf;
+    ls1a_spi_state *d;
+    d = &p->spi;
+
+    pci_conf = p->dev.config;
+
+    pci_config_set_vendor_id(pci_conf, LS1ASPI_VENDOR_ID);
+    pci_config_set_device_id(pci_conf, LS1ASPI_DEVICE_ID);
+    pci_conf[0x04] = 0x07; /* command = I/O space, Bus Master */
+    pci_config_set_class(pci_conf, PCI_CLASS_NETWORK_ETHERNET);
+    pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL|0x80; /* header_type */
+    pci_conf[PCI_INTERRUPT_PIN] = 1; /* interrupt pin A */
+    pci_conf[0x34] = 0xdc;
+
+    memory_region_init_io(&d->iomem, NULL, &ls1a_spi_ops, (void *)d, "ls1a spi", 0x100);
+
+    d->irq = pci_allocate_irq(pci_dev);
+    qdev_init_gpio_out_named(DEVICE(pci_dev), d->cs_line, SYSBUS_DEVICE_GPIO_IRQ, 4);
+    d->ssi = ssi_create_bus(DEVICE(pci_dev), "ssi");
+    ls1a_spi_reset(d);
+
+    pci_register_bar(pci_dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->iomem);
+
+}
+
+
+static void ls1a_spi_pci_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->realize = pci_ls1a_spi_init;
+    k->exit = pci_ls1a_spi_uninit;
+    k->vendor_id = LS1ASPI_VENDOR_ID;
+    k->device_id = LS1ASPI_DEVICE_ID;
+    k->revision = 0x03;
+    k->class_id = PCI_BASE_CLASS_COMMUNICATION;
+    dc->desc = "synopsis Gigabit Ethernet";
+}
+
+static const TypeInfo ls1a_spi_pci_info = {
+    .name          = "pci-1a_spi",
+    .parent        = TYPE_PCI_DEVICE,
+    .instance_size = sizeof(ls1a_spi_pci_state),
+    .class_init    = ls1a_spi_pci_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { INTERFACE_PCIE_DEVICE },
+        { }
+    },
+};
+
+static void ls1a_spi_pci_register_types(void)
+{
+    type_register_static(&ls1a_spi_pci_info);
+}
+
+type_init(ls1a_spi_pci_register_types)
