@@ -242,13 +242,8 @@ if(((opcode & 0xffe00000) == OP_MTC0) || ((opcode & 0xffe00000) == OP_DMTC0))
 #endif
 
 
-void ls1gpa_sdio_set_dmaaddr(uint32_t val);
-void __attribute__((weak)) ls1gpa_sdio_set_dmaaddr(uint32_t val)
-{
-}
-
 static MemoryRegion *ddrcfg_iomem;
-static int reg424;
+static int reg180;
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
@@ -256,16 +251,13 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
-		case 0x1fe10c10:
-		ls1gpa_sdio_set_dmaaddr(val);
-		break;
-		case 0x1fe10424:
-			reg424 = val;
+		case 0x1fe00180:
+			reg180 = val;
 			memory_region_transaction_begin();
 			if(ddrcfg_iomem->container == get_system_memory())
 				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
 
-			if((val&0x100) == 0)
+			if((val&0x10) == 0)
 			{
 				memory_region_add_subregion_overlap(get_system_memory(), 0x0ff00000, ddrcfg_iomem, 1);
 			}
@@ -280,42 +272,12 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case 0x1fe00180:
+		return reg180;
 		case 0x0ff00960:
 		return 0x100;
-		case 0x0ff00010:
-		return 1;
-		case 0x1fe104b0:
-		return 0x10000;
-		case 0x1fe104c0:
-		return 0x10000;
-		case 0x1fe10480:
-		return 0x50010c85;
-		case 0x1fe10484:
-		return 0x00000450;
-		case 0x1fe10488:
-		return 0x00000002;
-		case 0x1fe1048c:
-		return 0;
-		case 0x1fe10490:
-		return 0x10010c87;
-		case 0x1fe10494:
-		return 0x00000440;
-		case 0x1fe10498:
-		return 0x01c00004;
-		case 0x1fe1049c:
-		return 00064000;
-		case 0x1fe104a0:
-		return 0x10000;
 		case 0x0ff00160:
-		return 0x0f000000;
-		case 0x0ff00184:
-		return 0xffff00;
-		case 0x0ff00188:
-		return 0x1000000;
-		case 0x0ff0018c:
-		return 0x1;
-		case 0x1fe10424:
-		return reg424;
+		return 1<<24;
 	}
 	return 0;
 }
@@ -953,39 +915,18 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 
 	{
-
-                MemoryRegion *iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104b0, "0x1fe104b0", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fe104b0, iomem);
-                iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104c0, "0x1fe104c0", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fe104c0, iomem);
-                iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10c10, "0x1fe10c10", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fe10c10, iomem);
-
-                iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10480, "0x1fe10480", 0x20);
-                memory_region_add_subregion(address_space_mem, 0x1fe10480, iomem);
-
-                iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10490, "0x1fe10490", 0x10);
-                memory_region_add_subregion(address_space_mem, 0x1fe10490, iomem);
-
-                iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104a0, "0x1fe104a0", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fe104a0, iomem);
-
-                iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10424, "0x1fe10424", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fe10424, iomem);
-	}
-
-
-	{
                 ddrcfg_iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(ddrcfg_iomem, NULL, &mips_qemu_ops, (void *)0x0ff00000, "ddr", 0x100000);
 	}
+
+	{
+
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe00180, "0x1fe00180", 0x8);
+                memory_region_add_subregion(address_space_mem, 0x1fe00180, iomem);
+		mips_qemu_writel((void *)0x1fe00180, 0, 0xff003180, 4);
+	}
+
 
 
 
@@ -1031,7 +972,6 @@ static int pci_ls3a7a_map_irq(PCIDevice *d, int pin)
 {
 	int dev=(d->devfn>>3)&0x1f;
 	int fn=d->devfn& 7;
-	printf("map_irq dev %d bus = %p %p\n", dev, pci_get_bus(d), ls3a7a_pci_bus);
 
 	if(pci_get_bus(d) != ls3a7a_pci_bus)
 		return pin;
