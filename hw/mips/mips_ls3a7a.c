@@ -902,46 +902,6 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 
 
-#if 0
-	{
-		DeviceState *dev;
-		SysBusDevice *s;
-		dev = qdev_create(NULL, "ls3a7a_ac97");
-		printf("ac97 dev=%p\n",dev);
-		qdev_init_nofail(dev);
-		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fe74000);
-		sysbus_connect_irq(s, 0, ls3a7a_irq[14]);
-		sysbus_connect_irq(s, 1, ls3a7a_irq[15]);
-	}
-#endif
-
-		sysbus_create_simple("ls1a_dma",0x1fe10c00, NULL);
-	{
-		DeviceState *dev;
-		SysBusDevice *s;
-		dev = qdev_create(NULL, "ls1a_nand");
-		qdev_prop_set_uint8(dev, "cs", 0x2);
-		qdev_init_nofail(dev);
-		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fe06000);
-		sysbus_connect_irq(s, 0, ls3a7a_irq[12]);
-	}
-
-	{
-		DriveInfo *dinfo;
-		dinfo = drive_get(IF_SD, 0, 0);
-		if (!dinfo) {
-			fprintf(stderr, "qemu: missing SecureDigital device\n");
-			exit(1);
-		}
-
-		ls1gpa_mmci_init(address_space_mem, 0x1fe0c000,
-				blk_by_legacy_dinfo(dinfo),
-				ls3a7a_irq[31]
-				);
-	}
-
 #if 1
 	{
 		DeviceState *dev;
@@ -949,7 +909,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 		dev = qdev_create(NULL, "ls1a_rtc");
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x100d0100);
+		sysbus_mmio_map(s, 0, 0x100d0120);
 		sysbus_connect_irq(s, 0, ls3a7a_irq[14]);
 		sysbus_connect_irq(s, 1, ls3a7a_irq[15]);
 		sysbus_connect_irq(s, 2, ls3a7a_irq[16]);
@@ -1028,22 +988,6 @@ static void mips_ls3a7a_init(MachineState *machine)
 	}
 
 
-#if 0
-	{
-		DeviceState *dev;
-		SysBusDevice *s;
-		BusState *hdabus;
-		DeviceState *codec;
-		dev = qdev_create(NULL, "intel-hda");
-		qdev_init_nofail(dev);
-		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fe20000);
-		sysbus_connect_irq(s, 0, ls3a7a_irq1[25]);
-		hdabus = QLIST_FIRST(&dev->child_bus);
-		codec = qdev_create(hdabus, "hda-duplex");
-		qdev_init_nofail(codec);
-	}
-#endif
 
 	mypc_callback =  mypc_callback_for_net;
 }
@@ -1512,6 +1456,8 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 	    }
 	    //else dev1 = ssi_create_slave(bus, "ssi-sd");
     }
+
+    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(7,0), true, "intel-hda");
 
     sysbus = SYS_BUS_DEVICE(s->pcihost);
      /*self header*/
