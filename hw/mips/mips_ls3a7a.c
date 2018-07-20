@@ -60,6 +60,7 @@
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 #include "loongson2k_rom.h"
+#include "hw/timer/hpet.h"
 extern target_ulong mypc;
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
@@ -72,7 +73,7 @@ extern target_ulong mypc;
 static const int ide_iobase[2] = { 0x1f0, 0x170 };
 static const int ide_iobase2[2] = { 0x3f6, 0x376 };
 static const int ide_irq[2] = { 14, 15 };
-static qemu_irq *ls3a7a_irq,*ls3a7a_irq1;
+static qemu_irq *ls3a7a_irq;
 
 /* i8254 PIT is attached to the IRQ0 at PIC i8259 */
 
@@ -708,7 +709,6 @@ static PCIBus **pcibus_ls3a7a_init(int busno,qemu_irq *pic, int (*board_map_irq)
 
 
 
-static int ddr2config = 0;
 
 static CPUUnassignedAccess real_do_unassigned_access;
 static void mips_ls3a7a_do_unassigned_access(CPUState *cpu, hwaddr addr,
@@ -722,6 +722,7 @@ static void mips_ls3a7a_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
+struct hpet_fw_config hpet_cfg = {.count = UINT8_MAX};
 static void mips_ls3a7a_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
@@ -737,7 +738,6 @@ static void mips_ls3a7a_init(MachineState *machine)
 	CPUMIPSState *env;
 	ResetData *reset_info[2];
 	PCIBus **pci_bus;
-	DriveInfo *flash_dinfo=NULL;
 	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
@@ -821,9 +821,7 @@ static void mips_ls3a7a_init(MachineState *machine)
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 
         load_image_targphys(filename, 0x1fc00000, BIOS_SIZE);
-	ddr2config = 1;
-    } else if ((flash_dinfo = drive_get_next(IF_PFLASH)))
-	ddr2config = 1;
+	}
     else {
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
@@ -851,7 +849,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls3a7a_irq =ls7a_intctl_init(get_system_memory(), 0xe0010000000ULL, env->irq[3]);
+	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0xe0010000000ULL, env->irq[3]);
 
 	if (serial_hd(0))
 		serial_mm_init(address_space_mem, 0x1fe001e0, 0,env->irq[2],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
@@ -870,7 +868,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 
 
-	pci_bus =pcibus_ls3a7a_init(0, &ls3a7a_irq1[20],pci_ls3a7a_map_irq, ram_pciram, ram_pciram1);
+	pci_bus =pcibus_ls3a7a_init(0, ls3a7a_irq,pci_ls3a7a_map_irq, ram_pciram, ram_pciram1);
 
 
 
@@ -901,24 +899,6 @@ static void mips_ls3a7a_init(MachineState *machine)
 	}
 #endif
 
-	{
-		DeviceState *dev,*dev1;
-		void *bus;
-		qemu_irq cs_line;
-		dev=sysbus_create_simple("ls1a_spi",0x1fe70000, ls3a7a_irq[8]);
-		bus = qdev_get_child_bus(dev, "ssi");
-		if(flash_dinfo)
-		{
-			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
-			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
-			qdev_prop_set_uint32(dev1, "size", 0x100000);
-			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
-			qdev_init_nofail(dev1);
-		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
-		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
-		}
-		//else dev1 = ssi_create_slave(bus, "ssi-sd");
-	}
 
 
 
@@ -969,7 +949,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 		dev = qdev_create(NULL, "ls1a_rtc");
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fe07820);
+		sysbus_mmio_map(s, 0, 0x100d0100);
 		sysbus_connect_irq(s, 0, ls3a7a_irq[14]);
 		sysbus_connect_irq(s, 1, ls3a7a_irq[15]);
 		sysbus_connect_irq(s, 2, ls3a7a_irq[16]);
@@ -979,7 +959,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	{
 		DeviceState *dev;
 		void *bus;
-		dev=sysbus_create_simple("ls1a_i2c",0x1fe01000, ls3a7a_irq[7]);
+		dev=sysbus_create_simple("ls1a_i2c",0x10090000, ls3a7a_irq[7]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 	}
@@ -987,9 +967,28 @@ static void mips_ls3a7a_init(MachineState *machine)
 	{
 		DeviceState *dev;
 		void *bus;
-		dev=sysbus_create_simple("ls1a_i2c",0x1fe01800, ls3a7a_irq[8]);
+		dev=sysbus_create_simple("ls1a_i2c",0x10090100, ls3a7a_irq[8]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
+	}
+
+	{
+        DeviceState *hpet = qdev_try_create(NULL, TYPE_HPET);
+        if (hpet) {
+            /* For pc-piix-*, hpet's intcap is always IRQ2. For pc-q35-1.7
+             * and earlier, use IRQ2 for compat. Otherwise, use IRQ16~23,
+             * IRQ8 and IRQ2.
+             */
+            uint8_t compat = object_property_get_uint(OBJECT(hpet),
+                    HPET_INTCAP, NULL);
+            if (!compat) {
+                qdev_prop_set_uint32(hpet, HPET_INTCAP, 1);
+            }
+            qdev_init_nofail(hpet);
+            sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0xe0010001000);
+
+            sysbus_connect_irq(SYS_BUS_DEVICE(hpet), i, ls3a7a_irq[55]);
+        }
 	}
 
 
@@ -1088,6 +1087,7 @@ static int pci_ls3a7a_map_irq(PCIDevice *d, int pin)
 {
 	int dev=(d->devfn>>3)&0x1f;
 	int fn=d->devfn& 7;
+	printf("map_irq dev %d bus = %p %p\n", dev, pci_get_bus(d), ls3a7a_pci_bus);
 
 	if(pci_get_bus(d) != ls3a7a_pci_bus)
 		return pin;
@@ -1172,10 +1172,7 @@ static int pci_ls3a7a_map_irq(PCIDevice *d, int pin)
 
 static void pci_ls3a7a_set_irq(void *opaque, int irq_num, int level)
 {
-	if(irq_num<32)
 		qemu_set_irq(ls3a7a_irq[irq_num],level);
-	else 
-		qemu_set_irq(ls3a7a_irq1[irq_num-32],level);
 }
 /*self pci header*/
 #define LS2K_PCIE_PORT_HEAD_BASE_PORT(portnum)  (0x18114000 + (portnum << 22))
@@ -1496,6 +1493,25 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     ls2k_ahci_ide_create_devs(d, hd);
 
     pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
+    d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(22,0), true, "pci-1a_spi");
+    {
+	    DeviceState *dev1;
+	    void *bus;
+	    qemu_irq cs_line;
+	    DriveInfo *flash_dinfo=NULL;
+
+	    flash_dinfo = drive_get_next(IF_PFLASH);
+	    if(flash_dinfo)
+	    {
+		    bus = qdev_get_child_bus(DEVICE(d), "ssi");
+		    dev1 = ssi_create_slave_no_init(bus, "spi-flash");
+		    qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
+		    qdev_init_nofail(dev1);
+		    cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
+		    qdev_connect_gpio_out_named(DEVICE(d), SYSBUS_DEVICE_GPIO_IRQ, 0, cs_line);
+	    }
+	    //else dev1 = ssi_create_slave(bus, "ssi-sd");
+    }
 
     sysbus = SYS_BUS_DEVICE(s->pcihost);
      /*self header*/
