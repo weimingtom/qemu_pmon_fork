@@ -747,7 +747,6 @@ static void mips_ls3a7a_init(MachineState *machine)
 	memory_region_init_alias(ram_pciram, NULL, "ddrmem", ram, 0, ram_size);
 
 
-        //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls3a7a axi", UINT32_MAX);
         memory_region_init(iomem_root, NULL,  "ls3a7a axi", UINT64_MAX);
 	address_space_init(as,iomem_root, "ls3a7a axi memory");
 
@@ -1236,7 +1235,7 @@ static void bonito_initfn(PCIDevice *dev, Error **errp)
     pci_set_byte(dev->config + PCI_INTERRUPT_PIN, 0x01);
     pci_set_byte(dev->config + PCI_MIN_GNT, 0x3c);
     pci_set_byte(dev->config + PCI_MAX_LAT, 0x00);
-    pci_set_word(dev->config + PCI_CLASS_DEVICE, 0x0b30);
+    pci_set_word(dev->config + PCI_CLASS_DEVICE, 0x0604);
 
 }
 
