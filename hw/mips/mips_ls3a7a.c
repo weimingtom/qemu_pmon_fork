@@ -1396,7 +1396,18 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 	    //else dev1 = ssi_create_slave(bus, "ssi-sd");
     }
 
-    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(7,0), true, "intel-hda");
+
+   {
+    BusState *hdabus;
+    DeviceState *codec;
+    d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(7,0), true, "intel-hda");
+    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a07);
+
+    hdabus = QLIST_FIRST(&DEVICE(d)->child_bus);
+    codec = qdev_create(hdabus, "hda-duplex");
+    qdev_init_nofail(codec);
+   }
 
     sysbus = SYS_BUS_DEVICE(s->pcihost);
      /*self header*/
