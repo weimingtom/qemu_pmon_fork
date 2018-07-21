@@ -16,6 +16,7 @@ unsigned int mask;
 qemu_irq irq;
 uint16_t vendor_id, device_id;
 uint32_t bar[6];
+void *iomem[6];
 } PCIRAMState;
 
 typedef struct pciram_pci_state {
@@ -65,8 +66,14 @@ static void pci_pciram_init(PCIDevice *dev, Error **errp)
 	 type = PCI_BASE_ADDRESS_SPACE_MEMORY|(type & 0xe);
 	}
 
-	MemoryRegion *ram = g_new(MemoryRegion, 1);
-	memory_region_init_ram_nomigrate(ram, NULL, "pciram.ram", size, NULL);
+	MemoryRegion *ram;
+	if(pciram.iomem[i])
+	 ram = pciram.iomem[i];
+	else
+	{
+		ram = g_new(MemoryRegion, 1);
+		memory_region_init_ram_nomigrate(ram, NULL, "pciram.ram", size, NULL);
+	}
         
        pci_register_bar(&d->card, i, type, ram);
     }
@@ -77,7 +84,7 @@ static void pci_pciram_init(PCIDevice *dev, Error **errp)
 	pci_conf[0xd2] = 1;
 	}
 
-    d->pciram.irq = pci_allocate_irq(dev);
+    //d->pciram.irq = pci_allocate_irq(dev);
 }
 
 
@@ -92,6 +99,14 @@ static Property pciram_properties[] = {
     DEFINE_PROP_UINT32("bar5", pciram_pci_state, pciram.bar[5],0),
     DEFINE_PROP_UINT32("bar6", pciram_pci_state, pciram.bar[6],0),
     DEFINE_PROP_UINT32("bar7", pciram_pci_state, pciram.bar[7],0),
+    DEFINE_PROP_PTR("iomem0", pciram_pci_state, pciram.iomem[0]),
+    DEFINE_PROP_PTR("iomem1", pciram_pci_state, pciram.iomem[1]),
+    DEFINE_PROP_PTR("iomem2", pciram_pci_state, pciram.iomem[2]),
+    DEFINE_PROP_PTR("iomem3", pciram_pci_state, pciram.iomem[3]),
+    DEFINE_PROP_PTR("iomem4", pciram_pci_state, pciram.iomem[4]),
+    DEFINE_PROP_PTR("iomem5", pciram_pci_state, pciram.iomem[5]),
+    DEFINE_PROP_PTR("iomem6", pciram_pci_state, pciram.iomem[6]),
+    DEFINE_PROP_PTR("iomem7", pciram_pci_state, pciram.iomem[7]),
     DEFINE_PROP_END_OF_LIST(),
 };
 
