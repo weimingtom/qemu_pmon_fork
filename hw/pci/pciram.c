@@ -51,16 +51,24 @@ static void pci_pciram_init(PCIDevice *dev, Error **errp)
 
     for(i=0;i<7;i++)
     {
-       int io, size;
+       int io, size, type;
        if(!d->pciram.bar[i]) continue;
        io = d->pciram.bar[i]&1;
-       if(io) size= ~(d->pciram.bar[i]&~3)+1;
-       else size = ~(d->pciram.bar[i]&~0xf)+1;
+       if(io)
+	{
+	 size= ~(d->pciram.bar[i]&~3)+1;
+	 type = PCI_BASE_ADDRESS_SPACE_IO;
+	}
+       else
+	{ 
+	 size = ~(d->pciram.bar[i]&~0xf)+1;
+	 type = PCI_BASE_ADDRESS_SPACE_MEMORY|(type & 0xe);
+	}
 
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
 	memory_region_init_ram_nomigrate(ram, NULL, "pciram.ram", size, NULL);
         
-       pci_register_bar(&d->card, i, io?PCI_BASE_ADDRESS_SPACE_IO:PCI_BASE_ADDRESS_SPACE_MEMORY, ram);
+       pci_register_bar(&d->card, i, type, ram);
     }
 
     if(d->pciram.bar[7]) 
@@ -69,7 +77,7 @@ static void pci_pciram_init(PCIDevice *dev, Error **errp)
 	pci_conf[0xd2] = 1;
 	}
 
-  //  d->pciram.irq = d->card.irq[0];
+    d->pciram.irq = pci_allocate_irq(dev);
 }
 
 
