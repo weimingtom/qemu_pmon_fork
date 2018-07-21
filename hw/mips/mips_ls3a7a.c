@@ -1375,7 +1375,18 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     ide_drive_get(hd, LS2K_AHCI(d)->ahci.ports);
     ls2k_ahci_ide_create_devs(d, hd);
 
-    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(6, 0), true, "pciram");
+    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00008000-1)|4);
+    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x01000000-1)|4);
+    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x00000100-1)|4);
+    qdev_init_nofail(DEVICE(d));
+    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
+
+    d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,1), true, "pci_ls2h_fb");
+    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a06);
+
     d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(22,0), true, "pci-1a_spi");
     {
 	    DeviceState *dev1;
