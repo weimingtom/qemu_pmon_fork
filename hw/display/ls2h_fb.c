@@ -31,6 +31,13 @@
 #include "hw/pci/pci.h"
 #include "sysemu/dma.h"
 #include "framebuffer.h"
+#ifdef DEBUGPC
+#include "exec/address-spaces.h"
+#include "cpu.h"
+#include "hw/mips/mips.h"
+#include "hw/mips/cpudevs.h"
+extern unsigned long long mypc;
+#endif
 
 typedef struct {
     SysBusDevice busdev;
@@ -247,6 +254,14 @@ static void ls2h_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned si
 	ls2h_fb_size(s);
   break;
  }
+
+#ifdef DEBUGPC
+ printf("%s 0x%llx 0x%llx pc 0x%llx\n", __FUNCTION__, (long long)addr, (long long) val, (long long)mypc);
+ MIPSCPU *cpu = MIPS_CPU(current_cpu);
+ CPUMIPSState *env = &cpu->env;
+ env->active_tc.PC = mypc;
+ do_raise_exception_err(env, EXCP_DEBUG, 0, mypc);
+#endif
 }
 
 static uint64_t ls2h_fb_readl (void *opaque, hwaddr addr, unsigned size)
@@ -345,7 +360,8 @@ static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
     pci_conf[0x34] = 0xdc;
 
 
-    d->dc.root = get_system_memory();
+    //d->dc.root = get_system_memory();
+    d->dc.root = pci_address_space(pci_dev);
 
     memory_region_init_io(&d->dc.iomem, NULL, &ls2h_fb_ops, (void *)&d->dc, "ls2h fb", 0x10000);
     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->dc.iomem);
@@ -373,7 +389,7 @@ static void ls1a_fb_pci_class_init(ObjectClass *klass, void *data)
     k->vendor_id = LS2KDC_VENDOR_ID;
     k->device_id = LS2KDC_DEVICE_ID;
     k->revision = 0x03;
-    k->class_id = PCI_CLASS_NETWORK_ETHERNET;
+    k->class_id = PCI_CLASS_DISPLAY_VGA;
     dc->desc = "ls1a dc pci";
     dc->props = ls1a_fb_pci_properties;
 }
