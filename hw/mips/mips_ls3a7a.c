@@ -243,6 +243,7 @@ if(((opcode & 0xffe00000) == OP_MTC0) || ((opcode & 0xffe00000) == OP_DMTC0))
 
 
 #define CONFBASE 0xc0000000
+#define GPUBASE 0xd0000000
 static MemoryRegion *ddrcfg_iomem;
 static int reg180;
 
@@ -271,7 +272,7 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 {
 	addr=((hwaddr)(long)opaque) + addr;
-	printf("%s 0x%llx\n", __FUNCTION__, (long long)addr);
+//	printf("%s 0x%llx\n", __FUNCTION__, (long long)addr);
 	switch(addr)
 	{
 		case 0x1fe00180:
@@ -283,6 +284,10 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		case CONFBASE+0x4b0+4:
 		return random();
 		case CONFBASE+0x4c0+4:
+		return random();
+		case GPUBASE+4:
+		case GPUBASE+0:
+		case GPUBASE+0x100:
 		return random();
 	}
 	return 0;
@@ -1393,14 +1398,19 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     pci_set_word(d->wmask + PCI_COMMAND, 0);
     }
 
-    //gpu
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(6, 0), true, "pciram");
-    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00008000-1)|4);
-    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x00100000-1)|4);
-    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x02000000-1)|4);
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
+    {
+	    //gpu
+	    MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	    memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)GPUBASE, "gpu", 0x8000);
+	    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(6, 0), true, "pciram");
+	    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00008000-1)|4);
+	    qdev_prop_set_ptr(DEVICE(d), "iomem0", iomem);
+	    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x00100000-1)|4);
+	    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x02000000-1)|4);
+	    qdev_init_nofail(DEVICE(d));
+	    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
+    }
 
     //dc
     d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,1), true, "pci_ls2h_fb");
