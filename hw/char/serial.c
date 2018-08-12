@@ -345,11 +345,7 @@ static void serial_ioport_write(void *opaque, hwaddr addr, uint64_t val,
     default:
     case 0:
         if (s->lcr & UART_LCR_DLAB) {
-            if (size == 2) {
-                s->divider = (s->divider & 0xff00) | val;
-            } else if (size == 4) {
-                s->divider = val;
-            }
+	    s->divider = (s->divider & 0xff00) | val;
             serial_update_parameters(s);
         } else {
             s->thr = (uint8_t) val;
