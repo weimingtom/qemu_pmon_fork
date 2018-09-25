@@ -323,7 +323,10 @@ static void mips_ls1a_init (MachineState *machine)
 		/* allocate RAM */
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 
-	memory_region_add_subregion(address_space_mem, 0, ram);
+	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
+	memory_region_add_subregion(address_space_mem, 0, ram1);
+	memory_region_add_subregion(address_space_mem, 0x40000000, ram);
 
 	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
 	//memory_region_add_subregion(address_space_mem, 0x1fbf0000, iomem);
