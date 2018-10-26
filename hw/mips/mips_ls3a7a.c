@@ -241,11 +241,22 @@ if(((opcode & 0xffe00000) == OP_MTC0) || ((opcode & 0xffe00000) == OP_DMTC0))
 }
 #endif
 
+#define _str(x) #x
+#define str(x) _str(x)
+#define SIMPLE_OPS(ADDR,SIZE) \
+	({\
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);\
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)ADDR, str(ADDR) , SIZE);\
+                memory_region_add_subregion_overlap(address_space_mem, ADDR, iomem, 1);\
+		iomem;\
+	})
 
 #define CONFBASE 0xc0000000
 #define GPUBASE 0xd0000000
 static MemoryRegion *ddrcfg_iomem;
+static MemoryRegion *iomem160;
 static int reg180;
+static int reg424;
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
@@ -259,9 +270,22 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 			if(ddrcfg_iomem->container == get_system_memory())
 				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
 
-			if((val&0x10) == 0)
+			if((val&0x210) != 0x210)
 			{
 				memory_region_add_subregion_overlap(get_system_memory(), 0x0ff00000, ddrcfg_iomem, 1);
+			}
+
+			memory_region_transaction_commit();
+			break;
+		case 0xe0010010424:
+			reg424 = val;
+			memory_region_transaction_begin();
+			if(iomem160->container == get_system_memory())
+				memory_region_del_subregion(get_system_memory(), iomem160);
+
+			if((val&0x10000000) != 0x10000000)
+			{
+				memory_region_add_subregion_overlap(get_system_memory(), 0xe0040000160, iomem160, 1);
 			}
 
 			memory_region_transaction_commit();
@@ -288,7 +312,59 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		case GPUBASE+4:
 		case GPUBASE+0:
 		case GPUBASE+0x100:
+		case 0xefdfb000044:
 		return random();
+		case 0xefdfb000178:
+		return 8;
+		case 0xefdfe0001f4:
+		return 8;
+		case 0xe0010013ff8:
+		return 0x7a000000;
+		case 0xe0010010484:
+		case 0xe0010010494:
+		case 0xe00100104a4:
+		case 0xe00100104b4:
+		case 0xe00100104c4:
+		return 0x80;
+		case 0xe0010010424:
+		return 0xfff00;
+		case 0xe0010010594:
+		case 0xe0010010694:
+		case 0xe0010010794:
+		case 0xe0010010894:
+		case 0xe00100105b4:
+		case 0xe00100106b4:
+		case 0xe00100107b4:
+		case 0xe00100108b4:
+		return 4;
+		case 0xe00100105d4:
+		case 0xe00100106d4:
+		case 0xe00100107d4:
+		case 0xe00100108d4:
+		case 0xe00100105dc:
+		case 0xe00100106dc:
+		case 0xe00100107dc:
+		case 0xe00100108dc:
+		case 0xe00100105f4:
+		case 0xe00100106f4:
+		case 0xe00100107f4:
+		case 0xe00100108f4:
+		case 0xe00100105fc:
+		case 0xe00100106fc:
+		case 0xe00100107fc:
+		case 0xe00100108fc:
+
+		case 0xe0010010614:
+		case 0xe0010010714:
+		case 0xe0010010814:
+		case 0xe0010010914:
+		case 0xe001001061c:
+		case 0xe001001071c:
+		case 0xe001001081c:
+		case 0xe001001091c:
+		return 4;
+		case 0xe0040000160:
+		return 1<<24;
 	}
 	return 0;
 }
@@ -696,6 +772,8 @@ static void mips_ls3a7a_do_unassigned_access(CPUState *cpu, hwaddr addr,
 }
 
 struct hpet_fw_config hpet_cfg = {.count = UINT8_MAX};
+
+static DriveInfo *flash_dinfo=NULL;
 static void mips_ls3a7a_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
@@ -793,7 +871,8 @@ static void mips_ls3a7a_init(MachineState *machine)
         memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
 
         load_image_targphys(filename, 0x1fc00000, BIOS_SIZE);
-	}
+    } else if ((flash_dinfo = drive_get_next(IF_PFLASH)))
+	;
     else {
         bios = g_new(MemoryRegion, 1);
         memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
@@ -827,16 +906,19 @@ static void mips_ls3a7a_init(MachineState *machine)
 		serial_mm_init(address_space_mem, 0x1fe001e0, 0,env->irq[2],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(1))
-		serial_mm_init(address_space_mem, 0x1fe00000, 0,ls3a7a_irq[0],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe001e8, 0,env->irq[2],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(2))
-		serial_mm_init(address_space_mem, 0x1fe00100, 0,ls3a7a_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe00000, 0,ls3a7a_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(3))
-		serial_mm_init(address_space_mem, 0x1fe00200, 0,ls3a7a_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe00100, 0,ls3a7a_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(4))
-		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls3a7a_irq[0],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe00200, 0,ls3a7a_irq[0],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
+
+	if (serial_hd(5))
+		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls3a7a_irq[0],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
 
 
 
@@ -938,7 +1020,59 @@ static void mips_ls3a7a_init(MachineState *machine)
 	}
 
 
+	{
+	#define ADDR 0xe000f000000
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);
+		memory_region_init_alias(iomem, NULL, "lowmem", ram, 0x0f000000, 0x10000);
+		//memory_region_init_ram_nomigrate(iomem, NULL, "7aram", 0x10000, NULL);
+                memory_region_add_subregion(address_space_mem, ADDR, iomem);
+	#undef ADDR
+ 
+	}
 
+
+
+
+	SIMPLE_OPS(0xefdfb000178, 4);
+
+	SIMPLE_OPS(0xefdfb000044, 4);
+
+	SIMPLE_OPS(0xefdfe0001f4, 4);
+
+	SIMPLE_OPS(0xe0010013ff8, 4);
+
+	SIMPLE_OPS(0xe0010010480, 0x50);
+
+	SIMPLE_OPS(0xe0010010594, 4);
+	SIMPLE_OPS(0xe0010010694, 4);
+	SIMPLE_OPS(0xe0010010794, 4);
+	SIMPLE_OPS(0xe0010010894, 4);
+
+	SIMPLE_OPS(0xe00100105b4, 4);
+	SIMPLE_OPS(0xe00100106b4, 4);
+	SIMPLE_OPS(0xe00100107b4, 4);
+	SIMPLE_OPS(0xe00100108b4, 4);
+
+	SIMPLE_OPS(0xe0010010424, 4);
+	iomem160 = SIMPLE_OPS(0xe0040000160, 8);
+
+	SIMPLE_OPS(0xe00100105d0,0x10);
+	SIMPLE_OPS(0xe00100106d0,0x10);
+	SIMPLE_OPS(0xe00100107d0,0x10);
+	SIMPLE_OPS(0xe00100108d0,0x10);
+
+	SIMPLE_OPS(0xe00100105f0,0x10);
+	SIMPLE_OPS(0xe00100106f0,0x10);
+	SIMPLE_OPS(0xe00100107f0,0x10);
+	SIMPLE_OPS(0xe00100108f0,0x10);
+
+	SIMPLE_OPS(0xe0010010610,0x10);
+	SIMPLE_OPS(0xe0010010710,0x10);
+	SIMPLE_OPS(0xe0010010810,0x10);
+	SIMPLE_OPS(0xe0010010910,0x10);
+
+
+	//mips_qemu_writel((void *)0xe0040000160, 0, 1<<24, 4);
 
 	mypc_callback =  mypc_callback_for_net;
 }
@@ -948,7 +1082,7 @@ static void mips_machine_init(MachineClass *mc)
 {
     mc->desc = "mips ls3a7a platform";
     mc->init = mips_ls3a7a_init;
-    mc->max_cpus = 2;
+    mc->max_cpus = 4;
     mc->default_cpu_type = MIPS_CPU_TYPE_NAME("godson3");
 }
 
@@ -1422,14 +1556,14 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 	    DeviceState *dev1;
 	    void *bus;
 	    qemu_irq cs_line;
-	    DriveInfo *flash_dinfo=NULL;
 
-	    flash_dinfo = drive_get_next(IF_PFLASH);
 	    if(flash_dinfo)
 	    {
 		    bus = qdev_get_child_bus(DEVICE(d), "ssi");
 		    dev1 = ssi_create_slave_no_init(bus, "spi-flash");
 		    qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
+		    qdev_prop_set_uint32(dev1, "size", 0x100000);
+	            qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 		    qdev_init_nofail(dev1);
 		    cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
 		    qdev_connect_gpio_out_named(DEVICE(d), SYSBUS_DEVICE_GPIO_IRQ, 0, cs_line);
