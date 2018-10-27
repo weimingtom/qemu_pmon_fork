@@ -83,6 +83,7 @@ typedef struct SPIFlashState {
 	MemoryRegion mem;
 	MemoryRegion mem1;
 	uint64_t addr;
+	int isram;
 } SPIFlashState;
 
 static void program_page(SPIFlashState *s, int addr, unsigned char value, int count)
@@ -310,12 +311,15 @@ static void spi_rom_write(void *opaque, hwaddr addr, uint64_t data, unsigned siz
 {
 	SPIFlashState *s = opaque;
 
-	switch(size)
+	if(s->isram)
 	{
-	case 4: *(uint32_t *)(s->buf + addr) = data; break;
-	case 2: *(uint16_t *)(s->buf + addr) = data; break;
-	case 1: *(uint8_t *)(s->buf + addr) = data; break;
-	default: *(uint64_t *)(s->buf + addr) = data; break;
+		switch(size)
+		{
+			case 4: *(uint32_t *)(s->buf + addr) = data; break;
+			case 2: *(uint16_t *)(s->buf + addr) = data; break;
+			case 1: *(uint8_t *)(s->buf + addr) = data; break;
+			default: *(uint64_t *)(s->buf + addr) = data; break;
+		}
 	}
 }
 
@@ -329,6 +333,7 @@ static Property spi_flash_properties[] = {
     DEFINE_PROP_UINT32("size", SPIFlashState, size, 0),
     DEFINE_PROP_UINT64("addr", SPIFlashState, addr, 0),
     DEFINE_PROP_DRIVE("drive", SPIFlashState, blk),
+    DEFINE_PROP_INT32("isram", SPIFlashState, isram, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
