@@ -1560,8 +1560,8 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 	    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(6, 0), true, "pciram");
 	    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00008000-1)|4);
 	    qdev_prop_set_ptr(DEVICE(d), "iomem0", iomem);
-	    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x00100000-1)|4);
-	    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x02000000-1)|4);
+	    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x08000000-1)|4);
+	    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x00000100-1)|4);
 	    qdev_init_nofail(DEVICE(d));
 	    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
 	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
