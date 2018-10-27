@@ -920,6 +920,24 @@ static void mips_ls3a7a_init(MachineState *machine)
 	if (serial_hd(5))
 		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls3a7a_irq[0],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
 
+	{
+		DeviceState *dev,*dev1;
+		void *bus;
+		qemu_irq cs_line;
+		dev=sysbus_create_simple("ls1a_spi",0x1fe00220, NULL);
+		bus = qdev_get_child_bus(dev, "ssi");
+		if(flash_dinfo)
+		{
+			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
+			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
+			qdev_prop_set_uint32(dev1, "size", 0x100000);
+			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
+			qdev_init_nofail(dev1);
+		}
+		else dev1 = ssi_create_slave(bus, "ssi-sd");
+		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
+		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
+	}
 
 
 	pci_bus =pcibus_ls3a7a_init(0, ls3a7a_irq,pci_ls3a7a_map_irq, ram_pciram, ram_pciram1);
@@ -1556,14 +1574,12 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 	    DeviceState *dev1;
 	    void *bus;
 	    qemu_irq cs_line;
-
+	    DriveInfo *flash_dinfo=drive_get_next(IF_PFLASH);
 	    if(flash_dinfo)
 	    {
 		    bus = qdev_get_child_bus(DEVICE(d), "ssi");
 		    dev1 = ssi_create_slave_no_init(bus, "spi-flash");
 		    qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
-		    qdev_prop_set_uint32(dev1, "size", 0x100000);
-	            qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
 		    qdev_init_nofail(dev1);
 		    cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
 		    qdev_connect_gpio_out_named(DEVICE(d), SYSBUS_DEVICE_GPIO_IRQ, 0, cs_line);
