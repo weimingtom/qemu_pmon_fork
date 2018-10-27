@@ -365,6 +365,8 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 4;
 		case 0xe0040000160:
 		return 1<<24;
+		case 0x1fe00100:
+		return 0x10000;
 	}
 	return 0;
 }
@@ -909,16 +911,16 @@ static void mips_ls3a7a_init(MachineState *machine)
 		serial_mm_init(address_space_mem, 0x1fe001e8, 0,env->irq[2],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(2))
-		serial_mm_init(address_space_mem, 0x1fe00000, 0,ls3a7a_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080000, 0,ls3a7a_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(3))
-		serial_mm_init(address_space_mem, 0x1fe00100, 0,ls3a7a_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080100, 0,ls3a7a_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(4))
-		serial_mm_init(address_space_mem, 0x1fe00200, 0,ls3a7a_irq[0],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080200, 0,ls3a7a_irq[0],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(5))
-		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls3a7a_irq[0],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080300, 0,ls3a7a_irq[0],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
 
 	{
 		DeviceState *dev,*dev1;
@@ -1088,6 +1090,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	SIMPLE_OPS(0xe0010010710,0x10);
 	SIMPLE_OPS(0xe0010010810,0x10);
 	SIMPLE_OPS(0xe0010010910,0x10);
+	SIMPLE_OPS(0x1fe00100,0x4);
 
 
 	//mips_qemu_writel((void *)0xe0040000160, 0, 1<<24, 4);
