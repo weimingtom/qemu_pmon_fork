@@ -60,6 +60,8 @@
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 #include "loongson2k_rom.h"
+#include "hw/timer/hpet.h"
+#include "sysemu/device_tree.h"
 extern target_ulong mypc;
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
@@ -246,6 +248,7 @@ void __attribute__((weak)) ls1gpa_sdio_set_dmaaddr(uint32_t val)
 {
 }
 
+#define GPUBASE 0xd0000000
 static MemoryRegion *ddrcfg_iomem;
 static int reg424;
 
@@ -279,6 +282,10 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case GPUBASE+4:
+		case GPUBASE+0:
+		case GPUBASE+0x100:
+		return random();
 		case 0x0ff00960:
 		return 0x100;
 		case 0x0ff00010:
@@ -380,8 +387,8 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	*parg_env++=0;
 
 	//env
-	sprintf(memenv,"memsize=%d",loaderparams.ram_size>=0xf000000?240:(loaderparams.ram_size>>20));
-	sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+	sprintf(memenv,"memsize=%d",loaderparams.ram_size>=0xf000000?240:(int)(loaderparams.ram_size>>20));
+	sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(int)(loaderparams.ram_size>>20)-256:0);
 
 
 	for(i=0;i<sizeof(pmonenv)/sizeof(char *);i++)
@@ -407,7 +414,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 return 0;
 }
 
-static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
+static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 {
 	char memenv[32];
 	char highmemenv[32];
@@ -415,6 +422,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 	void *params_buf;
 	unsigned int *parg_env;
 	int ret;
+	char *cmdline;
 
 	/* Store command line.  */
 	params_size = 0x100000;
@@ -434,6 +442,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 	ret +=1+snprintf(params_buf+ret,256-ret,"g");
 	//argv1
 	*parg_env++=BOOTPARAM_ADDR+ret;
+	cmdline = params_buf+ret;
 	if (initrd_size > 0) {
 		ret +=1+snprintf(params_buf+ret,256-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
 				PHYS_TO_VIRT((uint32_t)initrd_offset),
@@ -459,17 +468,48 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 	init_boot_param(boot_params_buf);
 	printf("param len=%ld\n", boot_params_p-params_buf);
 
-	rom_add_blob_fixed("params", params_buf, params_size,
-			BOOTPARAM_PHYADDR);
 	loaderparams.a0 = 2;
 	loaderparams.a1 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR;
+	//loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
+	loaderparams.a2 = 0;
+
+	if(dtb)
+	{
+	int size;
+	void *fdt;
+	int err;
+        unsigned long ram_low_sz, ram_high_sz;
+	
+	ret = boot_params_p-params_buf;
 	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
-        printf("env %x\n", BOOTPARAM_PHYADDR + ret);
+	fdt = load_device_tree(dtb, &size);
+        printf("fdt %x %p\n", BOOTPARAM_PHYADDR + ret, fdt);
+
+	err = qemu_fdt_setprop_string(fdt, "/chosen", "bootargs", cmdline);
+	if (err < 0) {
+		fprintf(stderr, "couldn't set /chosen/bootargs\n");
+		exit(-1);
+	}
+
+
+	ram_low_sz = loaderparams.ram_size>=0xf000000?0xf0000000:loaderparams.ram_size;
+	ram_high_sz = loaderparams.ram_size>0x30000000?loaderparams.ram_size-0x30000000:0;
+	
+	qemu_fdt_setprop_sized_cells(fdt, "/memory", "reg",
+			2, ram_low_sz,
+			2, ram_high_sz);
+	memcpy(boot_params_p, fdt, size);
+
+	qemu_fdt_dumpdtb(fdt, size);
+	}
+
+	rom_add_blob_fixed("params", params_buf, params_size,
+			BOOTPARAM_PHYADDR);
 return 0;
 }
 
 
-static int64_t load_kernel(void)
+static int64_t load_kernel(char *dtb)
 {
     int64_t entry, kernel_low, kernel_high;
     long kernel_size, initrd_size;
@@ -525,7 +565,7 @@ static int64_t load_kernel(void)
 	if(getenv("OLDENV"))
 	 set_bootparam(initrd_offset, initrd_size);
 	else
-	 set_bootparam1(initrd_offset, initrd_size);
+	 set_bootparam1(initrd_offset, initrd_size, dtb);
 	
 return entry;
 }
@@ -835,7 +875,7 @@ static void mips_ls2k_init(MachineState *machine)
         loaderparams.kernel_filename = kernel_filename;
         loaderparams.kernel_cmdline = kernel_cmdline;
         loaderparams.initrd_filename = initrd_filename;
-        reset_info[0]->vector = load_kernel()?:reset_info[0]->vector;
+        reset_info[0]->vector = load_kernel(machine->dtb)?:reset_info[0]->vector;
     }
 
 
@@ -991,6 +1031,25 @@ static void mips_ls2k_init(MachineState *machine)
 		dev=sysbus_create_simple("ls1a_i2c",0x1fe01800, ls2k_irq[8]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
+	}
+
+	{
+        DeviceState *hpet = qdev_try_create(NULL, TYPE_HPET);
+        if (hpet) {
+            /* For pc-piix-*, hpet's intcap is always IRQ2. For pc-q35-1.7
+             * and earlier, use IRQ2 for compat. Otherwise, use IRQ16~23,
+             * IRQ8 and IRQ2.
+             */
+            uint8_t compat = object_property_get_uint(OBJECT(hpet),
+                    HPET_INTCAP, NULL);
+            if (!compat) {
+                qdev_prop_set_uint32(hpet, HPET_INTCAP, 1);
+            }
+            qdev_init_nofail(hpet);
+            sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0x1fe04000);
+
+            sysbus_connect_irq(SYS_BUS_DEVICE(hpet), 0, ls2k_irq[21]);
+        }
 	}
 
 
@@ -1506,7 +1565,21 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     ide_drive_get(hd, LS2K_AHCI(d)->ahci.ports);
     ls2k_ahci_ide_create_devs(d, hd);
 
-    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
+    {
+	    //gpu
+	    MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	    memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)GPUBASE, "gpu", 0x8000);
+	    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(6, 0), true, "pciram");
+	    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00008000-1)|4);
+	    qdev_prop_set_ptr(DEVICE(d), "iomem0", iomem);
+	    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x08000000-1)|4);
+	    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x00000100-1)|4);
+	    qdev_init_nofail(DEVICE(d));
+	    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
+    }
+
+    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,1), true, "pci_ls2h_fb");
 
     sysbus = SYS_BUS_DEVICE(s->pcihost);
      /*self header*/
