@@ -16,12 +16,15 @@ typedef struct GS232_INTCTLState {
 	//clr
 	uint32_t intreg_en;
 	uint32_t intreg_pending;
+	uint32_t intreg_bce;
+	uint32_t intreg_auto;
 	char irqroute[32];
 #ifdef DEBUG_IRQ_COUNT
 	uint64_t irq_count[32];
 #endif
 	qemu_irq *cpu_irq;
-	uint32_t pil_out[4];
+	uint32_t pil_out[8];
+	uint32_t cpu_isr[2];
 } GS232_INTCTLState;
 
 #define INTCTL_SIZE 0x40
@@ -65,6 +68,12 @@ static uint64_t ls2k_intctl_mem_readl(void *opaque, hwaddr addr, unsigned size)
 		case 0x34:
 			ret= s->intreg_edge;
 			break;
+		case 0x38:
+			ret= s->intreg_bce;
+			break;
+		case 0x3c:
+			ret= s->intreg_auto;
+			break;
 		default:
 			ret = 0;
 			break;
@@ -106,8 +115,16 @@ static void ls2k_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 			s->intreg_pol=val;
 			ls2k_check_interrupts(s);
 			break;
-		case 0x3c:
+		case 0x34:
 			s->intreg_edge=val;
+			ls2k_check_interrupts(s);
+			break;
+		case 0x38:
+			s->intreg_bce=val;
+			ls2k_check_interrupts(s);
+			break;
+		case 0x3c:
+			s->intreg_auto=val;
 			ls2k_check_interrupts(s);
 			break;
 		default:
@@ -125,10 +142,13 @@ static const MemoryRegionOps ls2k_intctl_mem_ops = {
 static void ls2k_check_interrupts(void *opaque)
 {
 	GS232_INTCTLState *s = opaque;
-	uint32_t pil_pending[4] = {0,0,0,0};
+	uint32_t pil_pending[8] = {0};
 	int i, j, imask, jmask;
 	int irqs, maps;
+	int cpu;
+	static char cpus[32] = {0};
 	irqs = s->intreg_pending & s->intreg_en;
+	uint32_t cpu_isr[2] = {0};
 	
 
 	for (i=0, imask=1;i<32 && irqs;i++,imask <<= 1)
@@ -136,29 +156,58 @@ static void ls2k_check_interrupts(void *opaque)
 		if (irqs & imask)
 		{
 			maps = s->irqroute[i];
+			switch(maps&3)
+			{
+			  case 1:
+				cpu = 0;
+				break;
+			  case 2:
+				cpu = 1;
+				break;
+			  case 3:
+				cpus[i]=!cpus[i];
+				cpu = cpus[i];
+				break;
+			  case 0:
+				cpu = 0;
+				break;
+			}
+			
 			for(j=0, jmask=0x10;j<4 && maps;j++,jmask <<= 1)
 			{
 				if(maps & jmask)
 				{
-					pil_pending[j] = 1;
+					pil_pending[cpu*4+j] = 1;
 					maps &= ~jmask;
 				}
 			}
+
+		  cpu_isr[cpu] |=  imask;
 		  irqs &= ~imask;
 		}
 	}
 
-	for(i=0;i<4;i++)
+	s->cpu_isr[0] = cpu_isr[0];
+	s->cpu_isr[1] = cpu_isr[1];
+
+	for(i=0;i<8;i++)
 	{
 		if (pil_pending[i]) {
-			qemu_irq_raise(s->cpu_irq[i+2]);
+			qemu_irq_raise(s->cpu_irq[i]);
 		} else {
 			if (s->pil_out[i])
-				qemu_irq_lower(s->cpu_irq[i+2]);
+				qemu_irq_lower(s->cpu_irq[i]);
 		}
 
 		s->pil_out[i] = pil_pending[i];
 	}
+}
+
+static GS232_INTCTLState *ls2k_intctl_opaque[2];
+
+static uint32_t ls2k_cpu_irqsts(int cpu, int i)
+{
+	return i?ls2k_intctl_opaque[1]->cpu_isr[cpu]:ls2k_intctl_opaque[0]->cpu_isr[cpu];
 }
 
 /*
@@ -195,8 +244,9 @@ static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_ir
 {
 	qemu_irq *irqs;
 	GS232_INTCTLState *s;
+	static int cnt=0;
 
-	s = g_malloc0(sizeof(GS232_INTCTLState));
+	ls2k_intctl_opaque[cnt++] = s = g_malloc0(sizeof(GS232_INTCTLState));
 	if (!s)
 		return NULL;
 

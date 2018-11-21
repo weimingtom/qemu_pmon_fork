@@ -655,6 +655,7 @@ static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 	IPI_DPRINTF("gipi_write: addr=0x%02x val=0x%02llx cpu=%d pc=%llx\n", (int)addr, (long long)val, (int)cpu->cpu_index, (long long)mypc);
 }
 
+static uint32_t ls2k_cpu_irqsts(int cpu, int i);
 static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 {
 	gipiState * s = opaque;
@@ -687,24 +688,10 @@ static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 			ret = s->core[no].buf[(addr-0x20)/4];
 			break;
 		case 0x40:
-			if(no == 0)
-			{
-				address_space_read(&address_space_memory, 0x1fe11420, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
-				address_space_read(&address_space_memory, 0x1fe11424, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
-				ret = isr&en;
-			}
-			else
-				ret = 0;
+			ret = ls2k_cpu_irqsts(no, 0);
 			break;
 		case 0x48:
-			if(no == 0)
-			{
-				address_space_read(&address_space_memory, 0x1fe11460, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
-				address_space_read(&address_space_memory, 0x1fe11464, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
-				ret = isr & en;
-			}
-			else
-				ret = 0;
+			ret = ls2k_cpu_irqsts(no, 1);
 			break;
 		default:
 			break;
@@ -757,6 +744,39 @@ static void mips_ls2k_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
+static int ls2k_cpu_irq;
+static int ls2k_cpu_irq1;
+static int ls2k_cpu_irq_old;
+
+static void ls2k_set_cpuirq(void *opaque, int irq, int level)
+{
+	int *p = opaque?&ls2k_cpu_irq1:&ls2k_cpu_irq;
+	int ls2k_cpu_irq_new;
+
+	if (level) {
+		*p |= 1<<irq;
+	} else {
+		*p &= ~(1<<irq);
+	}
+
+	ls2k_cpu_irq_new =  ls2k_cpu_irq|ls2k_cpu_irq1;
+
+	if( ls2k_cpu_irq_new != ls2k_cpu_irq_old)
+	{
+		if(ls2k_cpu_irq_new&(1<<irq))
+		{
+			qemu_irq_raise(mycpu[irq/4]->irq[2+(irq%4)]);
+		}
+		else
+		{
+			qemu_irq_lower(mycpu[irq/4]->irq[2+(irq%4)]);
+		}
+
+		ls2k_cpu_irq_old = ls2k_cpu_irq|ls2k_cpu_irq1;
+	}
+}
+
+
 static void mips_ls2k_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
@@ -777,7 +797,10 @@ static void mips_ls2k_init(MachineState *machine)
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
 	int i;
-
+	qemu_irq *cpu_irq;
+	qemu_irq *cpu_irq1;
+	cpu_irq = qemu_allocate_irqs(ls2k_set_cpuirq, 0, 8);
+	cpu_irq1 = qemu_allocate_irqs(ls2k_set_cpuirq, 1, 8);
 
 	/* init CPUs */
 
@@ -884,8 +907,8 @@ static void mips_ls2k_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls2k_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, env->irq);
-	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, env->irq);
+	ls2k_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, cpu_irq);
+	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, cpu_irq1);
 
 
 	if (serial_hd(0))
