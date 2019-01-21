@@ -456,6 +456,8 @@ void cpu_mips_store_cause(CPUMIPSState *env, target_ulong val)
 }
 #endif
 
+static int debug_mmu_exception;
+
 static void raise_mmu_exception(CPUMIPSState *env, target_ulong address,
                                 int rw, int tlb_error)
 {
@@ -531,6 +533,12 @@ static void raise_mmu_exception(CPUMIPSState *env, target_ulong address,
 #endif
     cs->exception_index = exception;
     env->error_code = error_code;
+    if(debug_mmu_exception)
+    {
+	    extern target_ulong mypc;
+	    env->active_tc.PC = mypc;
+	    do_raise_exception(env, EXCP_DEBUG, mypc);
+    }
 }
 
 #if !defined(CONFIG_USER_ONLY)
@@ -1107,3 +1115,10 @@ void QEMU_NORETURN do_raise_exception_err(CPUMIPSState *env,
 
     cpu_loop_exit_restore(cs, pc);
 }
+
+static void debug_mmu_types(void)
+{
+	if(getenv("DEBUG_MMU")) debug_mmu_exception = 1;
+}
+
+trace_init(debug_mmu_types)
