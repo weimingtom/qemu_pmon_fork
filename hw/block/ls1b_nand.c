@@ -214,7 +214,12 @@ static int nand_load_next(NandState *s)
 	s->chip->blk_load(s->chip, addr, offset);
 	s->chip->iolen = oplen;
 	if(s->chip->iolen >= iolen)
-	 s->regs.addr_h += 0x1;
+	{
+		uint32_t addr_l = s->regs.addr_l ;
+		s->regs.addr_l += (cmd &CMD_SPARE )?(1<<13):(1<<12);
+		if((addr_l ^ s->regs.addr_l) & 0x80000000)
+			s->regs.addr_h += 0x1;
+	}
 	return oplen;
 }
 
@@ -258,12 +263,18 @@ again:
 		s->chip->offset = offset;
 		s->chip->iolen = oplen;
 
+		//printf("nand write at 0x%lx off 0x%lx len 0x%lx\n",(long)addr, (long)offset, (long)oplen);
 		s->chip->blk_write(s->chip);
 
 		s->chip->ioaddr = s->chip->io;
 		s->chip->iolen = 0;
 		if(s->chip->iolen >= iolen)
-		s->regs.addr_h += 0x1;
+		{
+			uint32_t addr_l = s->regs.addr_l ;
+			s->regs.addr_l += (cmd &CMD_SPARE )?(1<<13):(1<<12);
+			if((addr_l ^ s->regs.addr_l) & 0x80000000)
+				s->regs.addr_h += 0x1;
+		}
 		s->regs.op_num -= oplen;
 		goto again;
 	}
@@ -527,7 +538,7 @@ static int ls1b_nand_init(SysBusDevice *dev)
 {
     DriveInfo *nand;
     nand_sysbus_state *d = SYS_BUS_LS1ANAND(dev);
-    //memset(&d->nand,0,sizeof(d->nand));
+    memset(&d->nand.regs,0,sizeof(d->nand.regs));
     nand = drive_get(IF_MTD, 0, 0);
     d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0xec, d->nand.chip_id?:0xa1);
     //d->nand.chip = (NANDFlashState *) nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL, d->nand.manf_id?:0x2c, d->nand.chip_id?:0x48);
