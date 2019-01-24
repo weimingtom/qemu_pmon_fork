@@ -1021,7 +1021,7 @@ static void mips_ls3a7a_init(MachineState *machine)
             qdev_init_nofail(hpet);
             sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0xe0010001000);
 
-            sysbus_connect_irq(SYS_BUS_DEVICE(hpet), i, ls3a7a_irq[55]);
+            sysbus_connect_irq(SYS_BUS_DEVICE(hpet), 0, ls3a7a_irq[55]);
         }
 	}
 
@@ -1566,6 +1566,22 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 	    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
 	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
     }
+
+#if 0
+    {
+	    //lpc
+	    MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	    memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)LPCBASE, "lpc", 0x8000);
+	    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(6, 0), true, "pciram");
+	    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00001000-1)|4);
+	    qdev_prop_set_ptr(DEVICE(d), "iomem0", iomem);
+	    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x08000000-1)|4);
+	    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x00000100-1)|4);
+	    qdev_init_nofail(DEVICE(d));
+	    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
+	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
+    }
+#endif
 
     //dc
     d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,1), true, "pci_ls2h_fb");

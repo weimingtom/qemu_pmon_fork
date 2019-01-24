@@ -857,6 +857,14 @@ static void mips_ls2k_init(MachineState *machine)
 	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
 	//memory_region_add_subregion(address_space_mem, 0x1fbf0000, iomem);
 
+    if (kernel_filename) {
+        loaderparams.ram_size = ram_size;
+        loaderparams.kernel_filename = kernel_filename;
+        loaderparams.kernel_cmdline = kernel_cmdline;
+        loaderparams.initrd_filename = initrd_filename;
+        ((int64_t *)aui_boot_code)[1] = load_kernel(machine->dtb);
+    }
+
     /* Try to load a BIOS image. If this fails, we continue regardless,
        but initialize the hardware ourselves. When a kernel gets
        preloaded we also initialize the hardware, since the BIOS wasn't
@@ -892,16 +900,6 @@ static void mips_ls2k_init(MachineState *machine)
     if (filename) {
         g_free(filename);
     }
-
-    if (kernel_filename) {
-        loaderparams.ram_size = ram_size;
-        loaderparams.kernel_filename = kernel_filename;
-        loaderparams.kernel_cmdline = kernel_cmdline;
-        loaderparams.initrd_filename = initrd_filename;
-        reset_info[0]->vector = load_kernel(machine->dtb)?:reset_info[0]->vector;
-    }
-
-
 
 
 	/* Register 64 KB of IO space at 0x1f000000 */

@@ -423,7 +423,7 @@ static void mips_ls1b_init (MachineState *machine)
 	}
 
 
-//	sysbus_create_simple("exynos4210-ehci-usb",0x1fe00000, ls1b_irq1[0]);
+	sysbus_create_simple("exynos4210-ehci-usb",0x1fe00000, ls1b_irq1[0]);
 	{
 		DeviceState *dev;
 		dev = qdev_create(NULL, "sysbus-ohci");
