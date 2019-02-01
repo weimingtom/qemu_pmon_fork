@@ -1107,6 +1107,9 @@ static void mips_ls2k_init(MachineState *machine)
 	{
                 ddrcfg_iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(ddrcfg_iomem, NULL, &mips_qemu_ops, (void *)0x0ff00000, "ddr", 0x100000);
+
+		if(ddr2config)
+			mips_qemu_writel (0, 0x1fe10424, 0x000, 4);
 	}
 
 
