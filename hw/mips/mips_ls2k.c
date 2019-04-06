@@ -998,7 +998,15 @@ static void mips_ls2k_init(MachineState *machine)
 	}
 #endif
 
-		sysbus_create_simple("ls1a_dma",0x1fe10c00, NULL);
+	{
+		DeviceState *dev;
+		SysBusDevice *s;
+		dev = qdev_create(NULL, "ls1a_dma");
+		qdev_prop_set_uint8(dev, "mode", 0x1);
+		qdev_init_nofail(dev);
+		s = SYS_BUS_DEVICE(dev);
+		sysbus_mmio_map(s, 0, 0x1fe10c00);
+	}
 	{
 		DeviceState *dev;
 		SysBusDevice *s;

@@ -31,12 +31,14 @@
 typedef struct dma_sysbus_state {
 	SysBusDevice busdev;
 	MemoryRegion dma;
+	uint64_t dma_addr;
+	int32_t mode;
 } dma_sysbus_state;
 
 
 void ls1a_ac97_rec_set_dmaaddr(uint32_t val);
 void ls1a_ac97_play_set_dmaaddr(uint32_t val);
-void ls1a_nand_set_dmaaddr(uint32_t val);
+void ls1a_nand_set_dmaaddr(uint64_t val);
 
 static uint64_t dma_dma_readl(void *ptr, hwaddr addr, unsigned size)
 {
@@ -45,7 +47,7 @@ static uint64_t dma_dma_readl(void *ptr, hwaddr addr, unsigned size)
 	return val;
 }
 
-void __attribute__((weak)) ls1a_nand_set_dmaaddr(uint32_t val)
+void __attribute__((weak)) ls1a_nand_set_dmaaddr(uint64_t val)
 {
 }
 
@@ -61,13 +63,17 @@ void __attribute__((weak)) ls1a_ac97_rec_set_dmaaddr(uint32_t val)
 static void dma_dma_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 {
 	int chn = val&3;
+	dma_sysbus_state *d = ptr;
 	switch(chn)
 	{
 	  case 0:
 		ls1a_nand_set_dmaaddr(val);
 		break;
 	  case 1:
-		ls1a_ac97_play_set_dmaaddr(val);
+		if(d->mode == 0)
+		 ls1a_ac97_play_set_dmaaddr(val);
+		else
+		 ls1a_nand_set_dmaaddr(val);
 		break;
 	  case 2:
 		ls1a_ac97_rec_set_dmaaddr(val);
@@ -82,6 +88,14 @@ static void dma_dma_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 static const MemoryRegionOps dma_ops = {
     .read = dma_dma_readl,
     .write = dma_dma_writel,
+     .valid = {
+    .min_access_size = 4,
+    .max_access_size = 8,
+    },
+     .impl = {
+    .min_access_size = 4,
+    .max_access_size = 8,
+    },
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
@@ -93,12 +107,17 @@ static const MemoryRegionOps dma_ops = {
 static int dma_sysbus_init(SysBusDevice *dev)
 {
     dma_sysbus_state *d = SYS_BUS_LS1ADMA(dev);
-    memory_region_init_io(&d->dma, NULL, &dma_ops, (void *)d, "dma", 0x4);
+    memory_region_init_io(&d->dma, NULL, &dma_ops, (void *)d, "dma", 0x8);
 
     sysbus_init_mmio(dev, &d->dma);
 
     return 0;
 }
+
+static Property dma_properties[] = {
+    DEFINE_PROP_INT32("mode", dma_sysbus_state, mode, 0),
+    DEFINE_PROP_END_OF_LIST(),
+};
 
 static void dma_sysbus_class_init(ObjectClass *klass, void *data)
 {
@@ -107,6 +126,7 @@ static void dma_sysbus_class_init(ObjectClass *klass, void *data)
 
     k->init = dma_sysbus_init;
     dc->desc = "ls1a dma";
+    dc->props = dma_properties;
 }
 
 static const TypeInfo dma_sysbus_info = {

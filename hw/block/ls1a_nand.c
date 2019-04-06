@@ -24,19 +24,21 @@ uint32_t nand_getio(DeviceState *dev);
 uint32_t nand_getbuswidth(DeviceState *dev);
 #include "nand.c"
 
-
 struct dma_desc{
-	uint32_t ordered;
+	uint32_t orderad;
 	uint32_t saddr;
 	uint32_t daddr;
 	uint32_t length;
 	uint32_t step_length;
 	uint32_t step_times;
 	uint32_t cmd;
+	uint32_t dummy;
+	uint32_t order_addr_hi;
+	uint32_t saddr_hi;
 	/*used by logic only*/
 	uint32_t left;
 	uint32_t active;
-	uint32_t nextaddr;
+	uint64_t nextaddr;
 };
 
 enum {
@@ -153,15 +155,15 @@ static int dma_next(NandState *s)
 		}
 
 
-		if(s->dma_desc.ordered & DMA_ORDER_EN)
+		if(s->dma_desc.orderad & DMA_ORDER_EN)
 		{
-			dma_memory_read(s->as, s->dma_desc.ordered & ~DMA_ORDER_EN,(uint8_t *)&s->dma_desc,4*7);
+			dma_memory_read(s->as, (s->dma_desc.orderad & ~DMA_ORDER_EN)|((uint64_t)s->dma_desc.order_addr_hi<<32),(uint8_t *)&s->dma_desc,4*10);
 			s->dma_desc.left = s->dma_desc.length * 4;
 			s->dma_desc.step_times--;
 		}
 		else if(s->dma_desc.nextaddr)
 		{
-			dma_memory_read(s->as, s->dma_desc.nextaddr, (uint8_t *)&s->dma_desc,4*7);
+			dma_memory_read(s->as, s->dma_desc.nextaddr, (uint8_t *)&s->dma_desc,4*10);
 			s->dma_desc.nextaddr = 0;
 			s->dma_desc.left = s->dma_desc.length * 4;
 		}
@@ -179,12 +181,13 @@ static int dma_next(NandState *s)
 	return s->dma_desc.active;
 }
 
+#define  CHIP_CAP_SHIFT 8
+static const char cap2cs[16] = {[0]=16,[1]=17,[2]=18,[3]=19,[4]=19,[5]=19,[6]=20,[7]=21,[9]=14,[10]=15,[11]=16,[12]=17,[13]=18};
+#define addr_cs_h(cs)  ((cs)*(1ULL<<cap2cs[(s->regs.paramter>>CHIP_CAP_SHIFT)&0xf]))
 
-
-#define PAGE_ADDR(s) ((uint64_t)((s->regs.addr_h-s->cs*(s->chip->size>>s->chip->page_shift))&0x1ffffff))
+#define PAGE_ADDR(s) ((uint64_t)(s->regs.addr_h-addr_cs_h(s->cs)))
 #define COLUM_ADDR(s) (s->regs.addr_l)
-#define CUR_CS(s) (s->regs.addr_h/(s->chip->size>>s->chip->page_shift))
-#define ACCESS_ME(s) (s->cs == CUR_CS(s))
+#define ACCESS_ME(s) (s->regs.addr_h >= addr_cs_h(s->cs) && s->regs.addr_h  < addr_cs_h(s->cs + 1))
 
 static int nand_load_next(NandState *s)
 {
@@ -295,7 +298,7 @@ static int dma_readnand(NandState *s)
 
 		if(!copied) break;
 
-		dma_memory_write(s->as, s->dma_desc.saddr,s->chip->ioaddr,copied);
+		dma_memory_write(s->as, s->dma_desc.saddr|((uint64_t)s->dma_desc.saddr_hi<<32),s->chip->ioaddr,copied);
 
 		s->chip->ioaddr += copied;
 		s->chip->iolen -= copied;
@@ -337,7 +340,7 @@ static int dma_writenand(NandState *s)
 
 		if(!copied) break;
 
-		dma_memory_read(s->as, s->dma_desc.saddr,s->chip->ioaddr,copied);
+		dma_memory_read(s->as, s->dma_desc.saddr|((uint64_t)s->dma_desc.saddr_hi<<32),s->chip->ioaddr,copied);
 
 		s->chip->ioaddr += copied;
 		s->chip->iolen += copied;
@@ -361,12 +364,12 @@ static int dma_writenand(NandState *s)
 }
 
 static NandState  *ls1a_nand;
-void ls1a_nand_set_dmaaddr(uint32_t val);
+void ls1a_nand_set_dmaaddr(uint64_t val);
 
-void ls1a_nand_set_dmaaddr(uint32_t val)
+void ls1a_nand_set_dmaaddr(uint64_t val)
 {
 	NandState  *s = ls1a_nand;
-	uint32_t dmaaddr;
+	uint64_t dmaaddr;
 	dmaaddr = val & ~0xf;
 
 	if(val & 0x8)
@@ -377,7 +380,7 @@ void ls1a_nand_set_dmaaddr(uint32_t val)
 		}
 		else
 		{
-		dma_memory_read(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
+		dma_memory_read(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*10);
 		s->dma_desc.left = s->dma_desc.length * 4;
 		s->dma_desc.step_times--;
 		s->dma_desc.active = 1;
@@ -391,7 +394,7 @@ void ls1a_nand_set_dmaaddr(uint32_t val)
 
 	if(val & 0x4)
 	{
-		dma_memory_write(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*7);
+		dma_memory_write(s->as, dmaaddr,(uint8_t *)&s->dma_desc,4*10);
 	}
 
 }
