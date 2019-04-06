@@ -1593,17 +1593,18 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
 	    //gpu
 	    MemoryRegion *iomem = g_new(MemoryRegion, 1);
 	    memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)GPUBASE, "gpu", 0x8000);
-	    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(6, 0), true, "pciram");
+	    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(5, 0), true, "pciram");
 	    qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00008000-1)|4);
 	    qdev_prop_set_ptr(DEVICE(d), "iomem0", iomem);
-	    qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x08000000-1)|4);
-	    qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x00000100-1)|4);
+	    
+	//qdev_prop_set_uint32(DEVICE(d), "bar1", ~(0x01000000-1)|4);
+	  //  qdev_prop_set_uint32(DEVICE(d), "bar2", ~(0x00000100-1)|4);
 	    qdev_init_nofail(DEVICE(d));
 	    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
 	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
     }
 
-    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,1), true, "pci_ls2h_fb");
+    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
 
     sysbus = SYS_BUS_DEVICE(s->pcihost);
      /*self header*/
