@@ -594,6 +594,16 @@ static void main_cpu_reset(void *opaque)
 	env->active_tc.gpr[6]=loaderparams.a2;
 }
 
+static void ls3auart_set_irq(void *opaque, int irq, int level)
+{
+	CPUMIPSState *env = opaque;
+	static int irqstatus = 0;
+	if(level) irqstatus |= 1<<irq;
+	else irqstatus &= ~(1<<irq);
+
+	qemu_set_irq(env->irq[2],!!irqstatus);
+}
+
 #define MAX_CPUS 2
 static CPUMIPSState *mycpu[MAX_CPUS];
 
@@ -790,6 +800,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	MIPSCPU *cpu;
 	CPUMIPSState *env;
 	ResetData *reset_info[2];
+	qemu_irq *ls3auart_irq;
 	PCIBus **pci_bus;
 	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
@@ -904,11 +915,12 @@ static void mips_ls3a7a_init(MachineState *machine)
 	//isa_mem_base = 0x10000000;
 	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0xe0010000000ULL, env->irq[3]);
 
+	ls3auart_irq = qemu_allocate_irqs(ls3auart_set_irq, env, 2);
 	if (serial_hd(0))
-		serial_mm_init(address_space_mem, 0x1fe001e0, 0,env->irq[2],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe001e0, 0,ls3auart_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(1))
-		serial_mm_init(address_space_mem, 0x1fe001e8, 0,env->irq[2],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe001e8, 0,ls3auart_irq[1] ,115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(2))
 		serial_mm_init(address_space_mem, 0x10080000, 0,ls3a7a_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
