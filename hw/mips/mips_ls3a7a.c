@@ -594,17 +594,17 @@ static void main_cpu_reset(void *opaque)
 	env->active_tc.gpr[6]=loaderparams.a2;
 }
 
+static int uart_irqstatus = 0;
 static void ls3auart_set_irq(void *opaque, int irq, int level)
 {
 	CPUMIPSState *env = opaque;
-	static int irqstatus = 0;
-	if(level) irqstatus |= 1<<irq;
-	else irqstatus &= ~(1<<irq);
+	if(level) uart_irqstatus |= 1<<irq;
+	else uart_irqstatus &= ~(1<<irq);
 
-	qemu_set_irq(env->irq[2],!!irqstatus);
+	qemu_set_irq(env->irq[2],!!uart_irqstatus);
 }
 
-#define MAX_CPUS 2
+#define MAX_CPUS 4
 static CPUMIPSState *mycpu[MAX_CPUS];
 
 #define CORE0_STATUS_OFF       0x000
@@ -708,26 +708,6 @@ static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 		case 0x20 ... 0x3c:
 			ret = s->core[no].buf[(addr-0x20)/4];
 			break;
-		case 0x40:
-			if(no == 0)
-			{
-				address_space_read(&address_space_memory, 0x1fe11420, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
-				address_space_read(&address_space_memory, 0x1fe11424, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
-				ret = isr&en;
-			}
-			else
-				ret = 0;
-			break;
-		case 0x48:
-			if(no == 0)
-			{
-				address_space_read(&address_space_memory, 0x1fe11460, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&isr, 4);
-				address_space_read(&address_space_memory, 0x1fe11464, MEMTXATTRS_UNSPECIFIED, (uint8_t *)&en, 4);
-				ret = isr & en;
-			}
-			else
-				ret = 0;
-			break;
 		default:
 			break;
 	}
@@ -786,6 +766,8 @@ static void mips_ls3a7a_do_unassigned_access(CPUState *cpu, hwaddr addr,
 struct hpet_fw_config hpet_cfg = {.count = UINT8_MAX};
 
 static DriveInfo *flash_dinfo=NULL;
+static void ht_set_irq(void *opaque, int irq, int level);
+static qemu_irq *ls3a_intctl_init(MemoryRegion *iomem_root, CPUMIPSState *env[]);
 static void mips_ls3a7a_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
@@ -800,7 +782,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	MIPSCPU *cpu;
 	CPUMIPSState *env;
 	ResetData *reset_info[2];
-	qemu_irq *ls3auart_irq;
+	qemu_irq *ht_irq, *ls3auart_irq;
 	PCIBus **pci_bus;
 	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
@@ -908,12 +890,12 @@ static void mips_ls3a7a_init(MachineState *machine)
     }
 
 
-
+	ht_irq = ls3a_intctl_init(iomem_root, mycpu);
 
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0xe0010000000ULL, env->irq[3]);
+	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0xe0010000000ULL, ht_irq[0]);
 
 	ls3auart_irq = qemu_allocate_irqs(ls3auart_set_irq, env, 2);
 	if (serial_hd(0))
@@ -1728,3 +1710,359 @@ type_init(bonito_register_types)
 #define LS7A
 #define LOONGSON_3ASINGLE
 #include "loongson_bootparam.c"
+//-------------------------
+
+#include "hw/hw.h"
+#include "hw/pci/pci.h"
+#include "hw/pci/pci_host.h"
+
+#undef DPRINTF
+//#define DEBUG_IRQ
+
+#ifdef DEBUG_IRQ
+#define DPRINTF(fmt, args...) \
+do { printf("IRQ: " fmt , ##args); } while (0)
+#else
+#define DPRINTF(fmt, args...)
+#endif
+
+
+#define MAX_PILS 16
+
+
+#define HT_CONTROL_REGS_BASE   0xefdfb000000LL
+#define HT1LO_PCICFG_BASE      0xefdfe000000LL
+#define HT1LO_PCICFG_BASE_TP1  0xefdff000000LL
+#define HT1LO_PCICFG_BASE_ALIAS      0x1a000000
+#define INT_ROUTER_REGS_BASE   0x3ff01400
+
+
+#define INT_ROUTER_REGS_SYS_INT0	0x00
+#define INT_ROUTER_REGS_SYS_INT1	0x01
+#define INT_ROUTER_REGS_SYS_INT2	0x02
+#define INT_ROUTER_REGS_SYS_INT3	0x03
+#define INT_ROUTER_REGS_PCI_INT0	0x04
+#define INT_ROUTER_REGS_PCI_INT1	0x05
+#define INT_ROUTER_REGS_PCI_INT2	0x06
+#define INT_ROUTER_REGS_PCI_INT3	0x07
+#define INT_ROUTER_REGS_MATRIX_INT0	0x08
+#define INT_ROUTER_REGS_MATRIX_INT1	0x09
+#define INT_ROUTER_REGS_LPC_INT		0x0a
+#define INT_ROUTER_REGS_MC0		0x0B
+#define INT_ROUTER_REGS_MC1		0x0C
+#define INT_ROUTER_REGS_BARRIER		0x0d
+#define INT_ROUTER_REGS_RESERVE		0x0e
+#define INT_ROUTER_REGS_PCI_PERR	0x0f
+
+#define INT_ROUTER_REGS_HT0_INT0	0x10
+#define INT_ROUTER_REGS_HT0_INT1	0x11
+#define INT_ROUTER_REGS_HT0_INT2	0x12
+#define INT_ROUTER_REGS_HT0_INT3	0x13
+#define INT_ROUTER_REGS_HT0_INT4	0x14
+#define INT_ROUTER_REGS_HT0_INT5	0x15
+#define INT_ROUTER_REGS_HT0_INT6	0x16
+#define INT_ROUTER_REGS_HT0_INT7	0x17
+#define INT_ROUTER_REGS_HT1_INT0	0x18
+#define INT_ROUTER_REGS_HT1_INT1	0x19
+#define INT_ROUTER_REGS_HT1_INT2	0x1a
+#define INT_ROUTER_REGS_HT1_INT3	0x1b
+#define INT_ROUTER_REGS_HT1_INT4	0x1c
+#define INT_ROUTER_REGS_HT1_INT5	0x1d
+#define INT_ROUTER_REGS_HT1_INT6	0x1e
+#define INT_ROUTER_REGS_HT1_INT7	0x1f
+#define IO_CONTROL_REGS_INTISR  	0x20
+#define IO_CONTROL_REGS_INTEN		0x24	
+#define IO_CONTROL_REGS_INTENSET	0x28	
+#define IO_CONTROL_REGS_INTENCLR	0x2c	
+#define IO_CONTROL_REGS_INTEDGE		0x38	
+#define IO_CONTROL_REGS_CORE0_INTISR	0x40	
+#define IO_CONTROL_REGS_CORE1_INTISR	0x48	
+#define IO_CONTROL_REGS_CORE2_INTISR	0x50	
+#define IO_CONTROL_REGS_CORE3_INTISR	0x58	
+
+
+
+
+
+#define HT_LINK_CONFIG_REG  0x44
+#define HT_IRQ_VECTOR_REG0	0x80	
+#define HT_IRQ_VECTOR_REG1	0x84	
+#define HT_IRQ_VECTOR_REG2	0x88	
+#define HT_IRQ_VECTOR_REG3	0x8C	
+#define HT_IRQ_VECTOR_REG4	0x90	
+#define HT_IRQ_VECTOR_REG5	0x94	
+#define HT_IRQ_VECTOR_REG6	0x98	
+#define HT_IRQ_VECTOR_REG7	0x9C	
+
+#define HT_IRQ_ENABLE_REG0	0xA0	
+#define HT_IRQ_ENABLE_REG1	0xA4	
+#define HT_IRQ_ENABLE_REG2	0xA8	
+#define HT_IRQ_ENABLE_REG3	0xAC	
+#define HT_IRQ_ENABLE_REG4	0xB0	
+#define HT_IRQ_ENABLE_REG5	0xB4	
+#define HT_IRQ_ENABLE_REG6	0xB8	
+#define HT_IRQ_ENABLE_REG7	0xBC	
+
+#define HT_UNCACHE_ENABLE_REG0	0xF0
+#define HT_UNCACHE_BASE_REG0	0xF4
+#define HT_UNCACHE_ENABLE_REG1	0xF8
+#define HT_UNCACHE_BASE_REG1	0xFC
+
+
+
+typedef struct LS3a_INTCTLState {
+	unsigned char int_route_reg[0x100];
+	unsigned char ht_irq_reg[0x100];
+ 	CPUMIPSState **env;
+#ifdef DEBUG_IRQ_COUNT
+    uint64_t irq_count[32];
+#endif
+    uint32_t pil_out[MAX_CPUS];
+} LS3a_INTCTLState;
+
+typedef struct LS3a_func_args {
+ LS3a_INTCTLState *state;
+ uint64_t base;
+ uint32_t mask;
+ uint8_t *mem;
+} LS3a_func_args;
+
+
+static void ht_update_irq(void *opaque,int disable);
+
+// per-cpu interrupt controller
+static uint32_t ls3a_intctl_mem_readb(void *opaque, hwaddr addr)
+{
+	LS3a_func_args *a = opaque;
+    uint32_t ret;
+
+	addr &= a->mask;
+
+	ret=*(uint8_t *)(a->mem+addr);
+
+    DPRINTF("read reg 0x" TARGET_FMT_plx " = %x\n", addr + s->base, ret);
+
+    return ret;
+}
+
+static uint32_t ls3a_intctl_mem_readw(void *opaque, hwaddr addr)
+{
+	LS3a_func_args *a = opaque;
+    uint32_t ret;
+
+	addr &= a->mask;
+
+	ret=*(uint16_t *)(a->mem+addr);
+
+    DPRINTF("read reg 0x" TARGET_FMT_plx " = %x\n", addr + s->base, ret);
+
+    return ret;
+}
+
+static uint32_t ls3a_intctl_mem_readl(void *opaque, hwaddr addr)
+{
+	LS3a_func_args *a = opaque;
+    uint32_t ret;
+	static int linkcfg=0;
+
+	addr &= a->mask;
+
+	switch(a->base+addr)
+	{
+	case HT_CONTROL_REGS_BASE+HT_LINK_CONFIG_REG:
+		ret = linkcfg;
+		linkcfg =random();
+		//printf("ret=%x\n",ret);
+		break;
+	case HT_CONTROL_REGS_BASE + HT_IRQ_VECTOR_REG2:
+		address_space_read(&address_space_memory, 0xe00100003a0, MEMTXATTRS_UNSPECIFIED, &ret, 4);
+	break;
+	case HT_CONTROL_REGS_BASE + HT_IRQ_VECTOR_REG3:
+		address_space_read(&address_space_memory, 0xe00100003a4, MEMTXATTRS_UNSPECIFIED, &ret, 4);
+	break;
+	case INT_ROUTER_REGS_BASE + IO_CONTROL_REGS_CORE0_INTISR:
+	ret = 0x0f000000|((!!uart_irqstatus)<<10);
+	break;
+	default:
+	ret=*(uint32_t *)(a->mem+addr);
+	}
+
+    DPRINTF("read reg 0x" TARGET_FMT_plx " = %x\n", addr + s->base, ret);
+
+    return ret;
+}
+
+static void ls3a_intctl_mem_writeb(void *opaque, hwaddr addr, uint32_t val)
+{
+	LS3a_func_args *a = opaque;
+	LS3a_INTCTLState *s = a->state;
+
+	addr &= a->mask;
+
+	switch(a->base+addr)
+	{
+	case INT_ROUTER_REGS_BASE+INT_ROUTER_REGS_HT1_INT0 ... INT_ROUTER_REGS_BASE+INT_ROUTER_REGS_HT1_INT7:
+	{
+		uint32_t old;
+		old = *(uint8_t *)(a->mem + addr);
+		if (old != val)	
+		 ht_update_irq(s,1);
+		*(uint8_t *)(a->mem + addr) = val;
+		 ht_update_irq(s,0);
+	}
+	break;
+	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0 ...  HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0 + 7:
+	*(uint8_t *)(a->mem + addr) &= ~val;
+	ht_update_irq(s,0);
+	break;
+
+	case HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG0 ... HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG7:
+	*(uint8_t *)(a->mem + addr) = val;
+	ht_update_irq(s,0);
+	break;
+		
+	default:
+	*(uint8_t *)(a->mem + addr) = val;
+	break;
+	}
+}
+
+static void ls3a_intctl_mem_writew(void *opaque, hwaddr addr, uint32_t val)
+{
+	LS3a_func_args *a = opaque;
+
+	addr &= a->mask;
+	*(uint16_t *)(a->mem + addr) = val;
+}
+
+static void ls3a_intctl_mem_writel(void *opaque, hwaddr addr, uint32_t val)
+{
+	LS3a_func_args *a = opaque;
+	LS3a_INTCTLState *s = a->state;
+
+	addr &= a->mask;
+//	printf("base=%llx,addr=%llx,mask=%x,val=%08x\n",a->base,addr,a->mask,val);
+	switch(a->base+addr)
+	{
+	case INT_ROUTER_REGS_BASE+INT_ROUTER_REGS_HT1_INT0:
+	{
+		uint32_t old;
+		old = *(uint32_t *)(a->mem + addr);
+		if (old != val)	
+		 ht_update_irq(s,1);
+		*(uint32_t *)(a->mem + addr) = val;
+		 ht_update_irq(s,0);
+		
+	}
+	break;
+	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0:
+	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG1:
+	*(uint32_t *)(a->mem + addr) &= ~val;
+	ht_update_irq(s,0);
+	break;
+
+	case HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG0:
+	case HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG1:
+	*(uint32_t *)(a->mem + addr) = val;
+	ht_update_irq(s,0);
+	break;
+		
+	default:
+	*(uint32_t *)(a->mem + addr) = val;
+	break;
+	}
+}
+
+static const MemoryRegionOps ls3a_intctl_ops = {
+    .old_mmio = {
+	    .read = {
+		    ls3a_intctl_mem_readb,
+		    ls3a_intctl_mem_readw,
+		    ls3a_intctl_mem_readl,
+	    },
+	    .write = {
+		    ls3a_intctl_mem_writeb,
+		    ls3a_intctl_mem_writew,
+		    ls3a_intctl_mem_writel,
+	    }
+	}
+	,
+		.endianness = DEVICE_NATIVE_ENDIAN,
+};
+
+
+static void ht_update_irq(void *opaque,int disable)
+{
+	LS3a_INTCTLState *s = opaque;
+	uint64_t isr,ier;
+	uint32_t irtr,core,irq_nr;
+	isr = *(uint64_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG2);
+	ier = *(uint64_t *)(s->ht_irq_reg+HT_IRQ_ENABLE_REG2);
+
+	irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT2);
+	
+	core = irtr&0xf;
+	irq_nr = ((irtr>>4)&0xf);
+
+	if(core>0 && irq_nr>0)
+	{
+	if(isr&ier && !disable)
+		qemu_irq_raise(s->env[ffs(core)-1]->irq[ffs(irq_nr)+1]);
+	else
+		qemu_irq_lower(s->env[ffs(core)-1]->irq[ffs(irq_nr)+1]);
+	}
+}
+
+static void ht_set_irq(void *opaque, int irq, int level)
+{
+	LS3a_INTCTLState *s = opaque;
+	uint64_t isr;
+	address_space_read(&address_space_memory, 0xe00100003a0, MEMTXATTRS_UNSPECIFIED, &isr, 8);
+	*(uint64_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG2) = isr; 
+	printf("ht_set_irq %d %d 0x%llx\n", irq, level, (long long)isr);
+
+	ht_update_irq(opaque,0);
+}
+
+static qemu_irq *ls3a_intctl_init(MemoryRegion *iomem_root, CPUMIPSState *env[])
+{
+	qemu_irq *i8259,*ht_irq;
+	LS3a_INTCTLState *s;
+	LS3a_func_args *a_irqrouter,*a_htirq;
+
+	s = g_malloc0(sizeof(LS3a_INTCTLState));
+	if (!s)
+		return NULL;
+
+	a_irqrouter=g_malloc0(sizeof(LS3a_func_args));
+	a_htirq=g_malloc0(sizeof(LS3a_func_args));
+	a_irqrouter->state = s;
+	a_irqrouter->base = INT_ROUTER_REGS_BASE;
+	a_irqrouter->mem = s->int_route_reg;
+	a_irqrouter->mask = 0xff;
+	a_htirq->state = s;
+	a_htirq->base = HT_CONTROL_REGS_BASE;
+	a_htirq->mem = s->ht_irq_reg;
+	a_htirq->mask = 0xff;
+
+	{
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &ls3a_intctl_ops, a_irqrouter, "ls3a_intctl", 256);
+                memory_region_add_subregion(get_system_memory(), INT_ROUTER_REGS_BASE, iomem);
+	}
+
+	{
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &ls3a_intctl_ops, a_htirq, "ls3a_intctl", 256);
+                memory_region_add_subregion(get_system_memory(), HT_CONTROL_REGS_BASE, iomem);
+	}
+
+
+	s->env = env;
+
+	ht_irq = qemu_allocate_irqs(ht_set_irq, s, 1);
+
+
+
+    return ht_irq;
+}
