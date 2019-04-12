@@ -128,7 +128,7 @@ struct efi_memory_map_loongson * init_memory_map(void *g_map)
 {
 	struct efi_memory_map_loongson *emap = g_map;
 	int i = 0;
-	unsigned long long size = atoi(getenv("highmemsize"))<<20;
+	unsigned long long size = (long long)atoi(getenv("highmemsize"))<<20;
 
 #define EMAP_ENTRY(entry, node, type, start, size) \
 	emap->map[(entry)].node_id = (node), \
