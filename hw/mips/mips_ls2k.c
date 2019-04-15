@@ -726,7 +726,7 @@ static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_ir
 
 static const int sector_len = 32 * 1024;
 
-static PCIBus **pcibus_ls2k_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1);
+static PCIBus **pcibus_ls2k_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1, MemoryRegion *ram4);
 
 
 
@@ -839,8 +839,21 @@ static void mips_ls2k_init(MachineState *machine)
 	memory_region_init_alias(ram3, NULL, "lowmem2G", ram, 0, 0x80000000ULL);
 	memory_region_add_subregion(address_space_mem, 0x80000000ULL, ram3);
 	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
+	if(ram_size >= 0x40000000)
+	{
+		MemoryRegion *ram4 = g_new(MemoryRegion, 1);
+		memory_region_init_alias(ram4, NULL, "lowmem2G", ram, ram_size - 0x20000000, 0x20000000);
+		memory_region_add_subregion(address_space_mem, 0x20000000, ram4);
+	}
+
 	MemoryRegion *ram_pciram = g_new(MemoryRegion, 1);
 	MemoryRegion *ram_pciram1 = g_new(MemoryRegion, 1);
+	MemoryRegion *ram_pciram2 = NULL;
+	if(ram_size >= 0x40000000)
+	{
+	ram_pciram2 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram_pciram2, NULL, "gpumem", ram, ram_size - 0x20000000, 0x20000000);
+	}
 	memory_region_init_alias(ram_pciram1, NULL, "ddrlowmem", ram, 0, 0x10000000);
 	memory_region_init_alias(ram_pciram, NULL, "ddrmem", ram, 0, memory_region_size(ram));
 
@@ -923,7 +936,7 @@ static void mips_ls2k_init(MachineState *machine)
 
 
 
-	pci_bus =pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1);
+	pci_bus =pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1, ram_pciram2);
 
 
 
@@ -1492,7 +1505,7 @@ static const TypeInfo bonito_info = {
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 
 #define MAX_SATA_PORTS     6
-static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1)
+static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1, MemoryRegion *ram2)
 {
     DeviceState *dev;
     BonitoState *pcihost;
@@ -1627,6 +1640,8 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
 //pci-synopgmac
 
     memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
+    if (ram2)
+	    memory_region_add_subregion(&pcihost->iomem_mem, 0x20000000, ram2);
     memory_region_add_subregion(&pcihost->iomem_mem, 0x100000000UL, ram);
 
     ls2k_pci_bus = pcihost->bus;
