@@ -442,6 +442,8 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 	}
 	else if(cmd & CMD_READID)
 	{
+		int i, j;
+		unsigned char id;
 		s->chip->cmd = NAND_CMD_READID;
 		if(ACCESS_ME(s))
 		{
@@ -452,8 +454,22 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 		}
 		else
 			memset(s->chip->io,0xff,5);
-		s->regs.id_l = s->chip->io[4]|(s->chip->io[1]<<24)|(s->chip->io[2]<<16)|(s->chip->io[3]<<8);
-		s->regs.status_id_h = s->chip->io[0] | 0xe00000;
+		s->regs.id_l = 0;
+		s->regs.id_h = 0;
+		for(i=s->regs.paramter, j=0;i;i++, j++)
+		{
+			id = s->chip->io[j];
+			switch(i)
+			{
+			 case 6: s->regs.status_id_h |= id<<8; break;
+			 case 5: s->regs.status_id_h |= id; break;
+			 case 4: s->regs.id_l |= id<<24; break;
+			 case 3: s->regs.id_l |= id<<16; break;
+			 case 2: s->regs.id_l |= id<<8; break;
+			 case 1: s->regs.id_l |= id<<16; break;
+			}
+			
+		}
 		s->regs.cmd |= CMD_DONE;
 		s->regs.cmd &= ~CMD_VALID;
 	}
