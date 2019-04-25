@@ -57,6 +57,7 @@
 #include "hw/pci/pcie_port.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
+#include "hw/timer/hpet.h"
 #if 0
 void memory_region_ref(MemoryRegion *mr)
 {
@@ -881,6 +882,25 @@ static void mips_ls2h_init(MachineState *machine)
 		dev=sysbus_create_simple("ls1a_i2c",0x1fe91000, ls2h_irq[8]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
+	}
+
+	{
+        DeviceState *hpet = qdev_try_create(NULL, TYPE_HPET);
+        if (hpet) {
+            /* For pc-piix-*, hpet's intcap is always IRQ2. For pc-q35-1.7
+             * and earlier, use IRQ2 for compat. Otherwise, use IRQ16~23,
+             * IRQ8 and IRQ2.
+             */
+            uint8_t compat = object_property_get_uint(OBJECT(hpet),
+                    HPET_INTCAP, NULL);
+            if (!compat) {
+                qdev_prop_set_uint32(hpet, HPET_INTCAP, 1);
+            }
+            qdev_init_nofail(hpet);
+            sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0x1fec0000);
+
+            sysbus_connect_irq(SYS_BUS_DEVICE(hpet), 0, ls2h_irq[1]);
+        }
 	}
 
 
