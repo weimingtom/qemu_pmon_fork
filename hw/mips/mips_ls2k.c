@@ -1167,6 +1167,7 @@ static void mips_machine_init(MachineClass *mc)
     mc->desc = "mips ls2k platform";
     mc->init = mips_ls2k_init;
     mc->max_cpus = 2;
+    mc->block_default_type = IF_IDE;
     mc->default_cpu_type = MIPS_CPU_TYPE_NAME("loongson2k");
 }
 

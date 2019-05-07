@@ -1098,6 +1098,7 @@ static void mips_machine_init(MachineClass *mc)
     mc->desc = "mips ls3a7a platform";
     mc->init = mips_ls3a7a_init;
     mc->max_cpus = 4;
+    mc->block_default_type = IF_IDE;
     mc->default_cpu_type = MIPS_CPU_TYPE_NAME("godson3");
 }
 
