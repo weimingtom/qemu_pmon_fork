@@ -453,10 +453,10 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 				s->chip->io[4] = 0x54;
 		}
 		else
-			memset(s->chip->io,0xff,5);
+			memset(s->chip->io,0xff,6);
 		s->regs.id_l = 0;
-		s->regs.id_h = 0;
-		for(i=s->regs.paramter, j=0;i;i++, j++)
+		s->regs.status_id_h = 0;
+		for(i=(s->regs.paramter>>12)&0xf, j=0;i;i--, j++)
 		{
 			id = s->chip->io[j];
 			switch(i)
@@ -466,10 +466,11 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 			 case 4: s->regs.id_l |= id<<24; break;
 			 case 3: s->regs.id_l |= id<<16; break;
 			 case 2: s->regs.id_l |= id<<8; break;
-			 case 1: s->regs.id_l |= id<<16; break;
+			 case 1: s->regs.id_l |= id; break;
 			}
 			
 		}
+		s->regs.status_id_h = (s->regs.status_id_h&~0xff0000)|0xe00000;
 		s->regs.cmd |= CMD_DONE;
 		s->regs.cmd &= ~CMD_VALID;
 	}
@@ -477,7 +478,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 	{
 		s->chip->cmd = NAND_CMD_READSTATUS;
 		nand_command(s->chip);
-		s->regs.status_id_h &= 0xff;
+		s->regs.status_id_h = (s->regs.status_id_h&~0xff0000)|0xe00000;
 		memcpy((char *)(&s->regs.status_id_h)+2,s->chip->io,1);
 		s->regs.cmd |= CMD_DONE;
 		s->regs.cmd &= ~CMD_VALID;
@@ -515,12 +516,10 @@ static void nand_nand_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size
 		break;
 	  case NAND_STATUS_ID_H:
 		break;
-	  case NAND_NAND_PARAMETER:
-		break;
 	  case NAND_DMA_ADDRESS:
 		break;
 	  default:
-		*(int *)((void *)&s->regs + addr) = val;
+		*(int volatile *)((void *)&s->regs + addr) = val;
 		break;
 	}
 
