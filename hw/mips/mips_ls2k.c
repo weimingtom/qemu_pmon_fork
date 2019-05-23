@@ -493,7 +493,13 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 
 
 	ram_low_sz = loaderparams.ram_size>=0x0f000000?0x0ee00000:loaderparams.ram_size;
+	if(fdt_path_offset (fdt, "/soc/gpu@0x40080000") >= 0){
 	ram_high_sz = loaderparams.ram_size>0x30000000?loaderparams.ram_size-0x30000000:0;
+	}
+	else
+	{
+	ram_high_sz = loaderparams.ram_size>0x10000000?loaderparams.ram_size-0x10000000:0;
+	}
 	
 	qemu_fdt_setprop_sized_cells(fdt, "/memory", "reg",
 			2, 0x00200000, 2, ram_low_sz,
