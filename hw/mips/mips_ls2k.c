@@ -322,6 +322,9 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 0x1;
 		case 0x1fe10424:
 		return reg424;
+		default:
+		return	random();
+		break;
 	}
 	return 0;
 }
