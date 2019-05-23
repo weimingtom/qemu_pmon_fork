@@ -140,11 +140,11 @@ static unsigned int aui_boot_code[] = {
          //> 
 0xAD090004, //> sw $9,0x4($8)
          //> 
-         //PCI_CONFIG_WRITE_DEV 3,0,0x40000000,20
+         //PCI_CONFIG_WRITE_DEV 3,0,0x40040000,20
 0x3C08BA00, //> li $8,0xba000000|(3<<11)|(0<<8)
 0x35081800, //
          //> 
-0x3C094000, //> li $9,0x40000000
+0x3C094004, //> li $9,0x40040000
          //> 
 0xAD090010, //> sw $9,0x10($8)
          //> 
@@ -156,11 +156,11 @@ static unsigned int aui_boot_code[] = {
          //> 
 0xAD090004, //> sw $9,0x4($8)
          //> 
-         //PCI_CONFIG_WRITE_DEV 3,1,0x40010000,22
+         //PCI_CONFIG_WRITE_DEV 3,1,0x40050000,22
 0x3C08BA00, //> li $8,0xba000000|(3<<11)|(1<<8)
 0x35081900, //
          //> 
-0x3C094001, //> li $9,0x40010000
+0x3C094005, //> li $9,0x40050000
          //> 
 0xAD090010, //> sw $9,0x10($8)
          //> 
@@ -172,11 +172,11 @@ static unsigned int aui_boot_code[] = {
          //> 
 0xAD090004, //> sw $9,0x4($8)
          //> 
-         //PCI_CONFIG_WRITE_DEV 4,0,0x40020000,57
+         //PCI_CONFIG_WRITE_DEV 4,0,0x40000000,57
 0x3C08BA00, //> li $8,0xba000000|(4<<11)|(0<<8)
 0x35082000, //
          //> 
-0x3C094002, //> li $9,0x40020000
+0x3C094000, //> li $9,0x40000000
          //> 
 0xAD090010, //> sw $9,0x10($8)
          //> 
@@ -399,7 +399,7 @@ static unsigned int aui_boot_code[] = {
          //> 
 0xAD090004, //> sw $9,0x4($8)
          //> 
-         //PCI_CONFIG_WRITE_BRG 13,0,0x60000000,0x77ffffff,0x18040000,0x184fffff,44,0,16,16
+         //PCI_CONFIG_WRITE_BRG 13,0,0x60000000,0x77ffffff,0x18400000,0x184fffff,44,0,16,16
 0x3C08BA00, //> li $8,0xba000000|(13<<11)|(0<<8)
 0x35086800, //
          //> 
@@ -410,12 +410,12 @@ static unsigned int aui_boot_code[] = {
          //> 
 0xAD090024, //> sw $9,0x24($8)
          //> 
-0x3C09004F, //> li $9,((0x18040000>>16)&0xff)|(0x184fffff&0xff0000)
-0x35290004, //
+0x3C09004F, //> li $9,((0x18400000>>16)&0xff)|(0x184fffff&0xff0000)
+0x35290040, //
          //> 
 0xAD090030, //> sw $9,0x30($8)
          //> 
-0x240901F1, //> li $9,((0x18040000>>8)&0xf0)|(0x184fffff&0xf0)|0x101
+0x240901F1, //> li $9,((0x18400000>>8)&0xf0)|(0x184fffff&0xf0)|0x101
          //> 
 0xAD09001C, //> sw $9,0x1c($8)
          //> 
@@ -428,7 +428,7 @@ static unsigned int aui_boot_code[] = {
          //> 
 0xAD090004, //> sw $9,0x4($8)
          //> 
-         //PCI_CONFIG_WRITE_BRG 14,0,0x78000000,0x7fffffff,0x18040000,0x184fffff,45,0,16,16
+         //PCI_CONFIG_WRITE_BRG 14,0,0x78000000,0x7fffffff,0x18500000,0x185fffff,45,0,16,16
 0x3C08BA00, //> li $8,0xba000000|(14<<11)|(0<<8)
 0x35087000, //
          //> 
@@ -439,12 +439,12 @@ static unsigned int aui_boot_code[] = {
          //> 
 0xAD090024, //> sw $9,0x24($8)
          //> 
-0x3C09004F, //> li $9,((0x18040000>>16)&0xff)|(0x184fffff&0xff0000)
-0x35290004, //
+0x3C09005F, //> li $9,((0x18500000>>16)&0xff)|(0x185fffff&0xff0000)
+0x35290050, //
          //> 
 0xAD090030, //> sw $9,0x30($8)
          //> 
-0x240901F1, //> li $9,((0x18040000>>8)&0xf0)|(0x184fffff&0xf0)|0x101
+0x240901F1, //> li $9,((0x18500000>>8)&0xf0)|(0x185fffff&0xf0)|0x101
          //> 
 0xAD09001C, //> sw $9,0x1c($8)
          //> 
