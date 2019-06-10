@@ -55,7 +55,8 @@ _start:
 .set mips64
  mfc0    t2, $15, 1
  andi    t2, 0x3
- beqz t2, core0_start
+ lb t1, 8(ra)
+ beq t1, t2, core0_start
  nop
 .set mips3
 ########

@@ -814,6 +814,10 @@ static void mips_ls2k_init(MachineState *machine)
 	/* init CPUs */
 
 	gipiState * gipis =g_malloc0(sizeof(gipiState));
+	
+	int bootcore = 0;
+	if (getenv("BOOTCORE"))
+		bootcore = strtoul(getenv("BOOTCORE"), 0, 0);
 
 	for(i = 0; i < smp_cpus; i++) {
 	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
@@ -886,6 +890,7 @@ static void mips_ls2k_init(MachineState *machine)
         loaderparams.initrd_filename = initrd_filename;
         ((int64_t *)aui_boot_code)[1] = load_kernel(machine->dtb);
     }
+        ((int64_t *)aui_boot_code)[2] = bootcore;
 
     /* Try to load a BIOS image. If this fails, we continue regardless,
        but initialize the hardware ourselves. When a kernel gets

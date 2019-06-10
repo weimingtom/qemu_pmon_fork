@@ -8,7 +8,7 @@
 //
 
 static unsigned int aui_boot_code[] = {
-         //# 1 "boot.S"
+         //# 1 "ls2k1.S"
          //#include "regdef.h"
          //	
          //	
@@ -73,7 +73,8 @@ static unsigned int aui_boot_code[] = {
          //.set mips64
 0x400A7801, //mfc0    t2, $15, 1
 0x314A0003, //andi    t2, 0x3
-0x1140001A, //beqz t2, core0_start
+0x83E90008, //lb t1, 8(ra)
+0x112A001A, //beq t1, t2, core0_start
 0x00000000, //nop
          //.set mips3
          //########
@@ -460,6 +461,5 @@ static unsigned int aui_boot_code[] = {
 0xDFFF0000, //ld ra, (ra)
 0x03E00008, //jr ra
 0x00000000, //nop
-0x00000000, //
 0x00000000, //
 };
