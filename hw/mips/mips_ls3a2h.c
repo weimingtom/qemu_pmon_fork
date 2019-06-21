@@ -53,6 +53,7 @@
 #include "qemu/error-report.h"
 #include "hw/empty_slot.h"
 #include "hw/ssi/ssi.h"
+#include "hw/pci/pcie_host.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 
@@ -459,7 +460,7 @@ static void *ls1a_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq
 
 static const int sector_len = 32 * 1024;
 
-static PCIBus *pcibus_ls3a2h_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num),MemoryRegion *iomem_axi);
+static PCIBus *pcibus_ls3a2h_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num),MemoryRegion *iomem_axi,  MemoryRegion *ram, ram_addr_t ram_size);
 
 
 
@@ -668,6 +669,7 @@ static void mips_ls3a2h_init(MachineState *machine)
 	MemoryRegion *iomem_axi = g_new(MemoryRegion, 1);
 	MemoryRegion *iomem_axi1 = g_new(MemoryRegion, 1);
 	MemoryRegion *iomem_axi2 = g_new(MemoryRegion, 1);
+	MemoryRegion *iomem_axi3 = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
 	int i;
 
@@ -715,16 +717,15 @@ static void mips_ls3a2h_init(MachineState *machine)
         memory_region_init(iomem_axi, NULL,  "ls3a2h axi", UINT64_MAX);
 	address_space_init(as,iomem_axi, "ls3a2h axi memory");
 
-	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
 	MemoryRegion *ram4 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram2, NULL, "aximem", ram, 0, ram_size);
 	memory_region_init_alias(ram4, NULL, "aximem", ram, 0, ram_size);
-        memory_region_add_subregion(iomem_axi, 0, ram2);
 
 	memory_region_init_alias(iomem_axi1, NULL, "iosubmem", iomem_axi, 0x10000000, 0x09000000);
-	memory_region_init_alias(iomem_axi2, NULL, "iosubmem", iomem_axi, 0x1f000000, 0x01000000);
+	memory_region_init_alias(iomem_axi2, NULL, "iosubdev", iomem_axi, 0x1f000000, 0x01000000);
+	memory_region_init_alias(iomem_axi3, NULL, "iosubbigmem", iomem_axi, 0x40000000, 0x40000000);
 	memory_region_add_subregion(address_space_mem, 0x10000000ULL, iomem_axi1);
 	memory_region_add_subregion(address_space_mem, 0x1b000000ULL, iomem_axi2);
+	memory_region_add_subregion(address_space_mem, 0x40000000ULL, iomem_axi3);
 	memory_region_add_subregion(address_space_mem, 0x00000e0000000000ULL, ram4);
 
 
@@ -810,10 +811,10 @@ static void mips_ls3a2h_init(MachineState *machine)
 
 
 
-	pci_bus[0]=pcibus_ls3a2h_init(0, &ls3a2h_irq1[20],pci_ls3a2h_map_irq, iomem_axi);
-	pci_bus[1]=pcibus_ls3a2h_init(1, &ls3a2h_irq1[21],pci_ls3a2h_map_irq, iomem_axi);
-	pci_bus[2]=pcibus_ls3a2h_init(2, &ls3a2h_irq1[22],pci_ls3a2h_map_irq, iomem_axi);
-	pci_bus[3]=pcibus_ls3a2h_init(3, &ls3a2h_irq1[23],pci_ls3a2h_map_irq, iomem_axi);
+	pci_bus[0]=pcibus_ls3a2h_init(0, &ls3a2h_irq1[20],pci_ls3a2h_map_irq, iomem_axi, ram, ram_size);
+	pci_bus[1]=pcibus_ls3a2h_init(1, &ls3a2h_irq1[21],pci_ls3a2h_map_irq, iomem_axi, ram, ram_size);
+	pci_bus[2]=pcibus_ls3a2h_init(2, &ls3a2h_irq1[22],pci_ls3a2h_map_irq, iomem_axi, ram, ram_size);
+	pci_bus[3]=pcibus_ls3a2h_init(3, &ls3a2h_irq1[23],pci_ls3a2h_map_irq, iomem_axi, ram, ram_size);
 
 
 	{
@@ -900,6 +901,17 @@ static void mips_ls3a2h_init(MachineState *machine)
 			qdev_init_nofail(dev);
 			sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fe10000);
 			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls3a2h_irq1[3]);
+		}
+		{
+			DeviceState *dev;
+
+			dev = qdev_create(NULL, "sysbus-synopgmac");
+			qdev_set_nic_properties(dev, &nd_table[1]);
+			qdev_prop_set_ptr(dev, "as", as);
+			qdev_prop_set_int32(dev, "enh_desc", 1);
+			qdev_init_nofail(dev);
+			sysbus_mmio_map_iomem(iomem_axi, SYS_BUS_DEVICE(dev), 0, 0x1fe18000);
+			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls3a2h_irq1[4]);
 		}
 #endif
 	}
@@ -1147,14 +1159,17 @@ typedef struct PCIBonitoState
 } PCIBonitoState;
 
 struct BonitoState {
-    SysBusDevice busdev;
+    PCIExpressHost parent_obj;
     PCIBus *bus;
     qemu_irq *pic;
     PCIBonitoState *pci_dev;
     MemoryRegion iomem_mem;
     MemoryRegion iomem_submem;
+    MemoryRegion iomem_subbigmem;
     MemoryRegion iomem_io;
     AddressSpace as_mem;
+    AddressSpace as_dmamem;
+    MemoryRegion iomem_dmamem;
     AddressSpace as_io;
    int (*pci_map_irq)(PCIDevice *d, int irq_num);
 };
@@ -1362,7 +1377,7 @@ static const TypeInfo bonito_info = {
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 
-static PCIBus *pcibus_ls3a2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *iomem_axi)
+static PCIBus *pcibus_ls3a2h_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *iomem_axi, MemoryRegion *ram, ram_addr_t ram_size)
 {
     DeviceState *dev;
     BonitoState *pcihost;
@@ -1401,8 +1416,19 @@ static PCIBus *pcibus_ls3a2h_init(int busno, qemu_irq *pic, int (*board_map_irq)
      /*devices header*/
     sysbus_mmio_map_iomem(iomem_axi, sysbus, 2, LS3H_PCIE_DEV_HEAD_BASE_PORT(busno));
 
+    memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000UL+busno*0x2000000UL, 0x2000000UL);
+    memory_region_init_alias(&pcihost->iomem_subbigmem, NULL, "pcisubbigmem", &pcihost->iomem_mem, 0x40000000UL+busno*0x10000000UL, 0x10000000UL);
     memory_region_add_subregion(iomem_axi, 0x10000000UL+busno*0x2000000UL, &pcihost->iomem_submem);
+    memory_region_add_subregion(iomem_axi, 0x40000000UL+busno*0x10000000UL, &pcihost->iomem_subbigmem);
     memory_region_add_subregion(iomem_axi, 0x18100000UL+busno*0x400000UL, &pcihost->iomem_io);
+
+
+    MemoryRegion *ram_pciram = g_new(MemoryRegion, 1);
+    memory_region_init_alias(ram_pciram, NULL, "aximem", ram, 0, ram_size);
+    MemoryRegion *ram_pcilowram = g_new(MemoryRegion, 1);
+    memory_region_init_alias(ram_pcilowram, NULL, "axilowmem", ram, 0, 0x10000000);
+    memory_region_add_subregion(&pcihost->iomem_dmamem, 0x00000000UL, ram_pcilowram);
+    memory_region_add_subregion(&pcihost->iomem_dmamem, 0x80000000UL, ram_pciram);
 
     return bus2;
 }
@@ -1411,7 +1437,7 @@ static PCIBus *pcibus_ls3a2h_init(int busno, qemu_irq *pic, int (*board_map_irq)
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
 {
     BonitoState *pcihost = opaque;
-    return &pcihost->as_mem;
+    return &pcihost->as_dmamem;
 }
 
 
@@ -1427,10 +1453,12 @@ static int bonito_pcihost_initfn(SysBusDevice *dev)
     memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT64_MAX);
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
 
+    memory_region_init(&pcihost->iomem_dmamem, OBJECT(pcihost), "system", INT64_MAX);
+    address_space_init(&pcihost->as_dmamem, &pcihost->iomem_dmamem, "pcie memory");
+
     /* Host memory as seen from the PCI side, via the IOMMU.  */
 //    memory_region_init_iommu(&pcihost->iomem_mem, OBJECT(dev), &ls3a2h_pciedma_iommu_ops, "iommu-ls3a2hpcie", UINT64_MAX);
 
-    memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
 
     memory_region_init(&pcihost->iomem_io, OBJECT(pcihost), "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
