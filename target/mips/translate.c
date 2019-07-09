@@ -39,7 +39,7 @@
 #include "exec/translator.h"
 #include "exec/log.h"
 
-#define MIPS_DEBUG_DISAS 0
+#define MIPS_DEBUG_DISAS 1
 
 /* MIPS major opcodes */
 #define MASK_OP_MAJOR(op)  (op & (0x3F << 26))
@@ -4767,7 +4767,7 @@ static void gen_compute_branch (DisasContext *ctx, uint32_t opc,
         LOG_DISAS("Branch in delay / forbidden slot at PC 0x"
                   TARGET_FMT_lx "\n", ctx->base.pc_next);
 #endif
-        generate_exception_end(ctx, EXCP_RI);
+        //generate_exception_end(ctx, EXCP_RI);
         goto out;
     }
 
@@ -8937,7 +8937,7 @@ static void gen_compute_branch1_r6(DisasContext *ctx, uint32_t op,
         LOG_DISAS("Branch in delay / forbidden slot at PC 0x" TARGET_FMT_lx
                   "\n", ctx->base.pc_next);
 #endif
-        generate_exception_end(ctx, EXCP_RI);
+        //generate_exception_end(ctx, EXCP_RI);
         goto out;
     }
 
@@ -11379,7 +11379,7 @@ static void gen_compute_compact_branch(DisasContext *ctx, uint32_t opc,
         LOG_DISAS("Branch in delay / forbidden slot at PC 0x" TARGET_FMT_lx
                   "\n", ctx->base.pc_next);
 #endif
-        generate_exception_end(ctx, EXCP_RI);
+        //generate_exception_end(ctx, EXCP_RI);
         goto out;
     }
 
