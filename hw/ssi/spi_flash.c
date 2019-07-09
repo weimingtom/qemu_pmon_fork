@@ -346,7 +346,7 @@ static void spi_flash_realize(SSISlave *dev, Error **errp)
 	Error *local_err = NULL;
 
 	s->mode = SPI_FLASH_CMD;
-	memory_region_init_rom_device(&s->mem, OBJECT(dev), &spi_rom_ops , s, "spi flash rom", 0x800000, &local_err);
+	memory_region_init_rom_device_nomigrate(&s->mem, OBJECT(dev), &spi_rom_ops , s, "spi flash rom", 0x800000, &local_err);
   	s->buf = memory_region_get_ram_ptr(&s->mem);
 
         memory_region_init_alias(&s->mem1, OBJECT(dev), "spi bios", &s->mem, 0, s->size);
