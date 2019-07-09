@@ -202,6 +202,7 @@ enum MiiRegisters
   PHY_EXT_PHY_SPC_CTRL2     = 0x001a,		/*Extended Phy specific control 2*/
   PHY_EXT_PHY_SPC_STATUS    = 0x001b,		/*Extended Phy specific status*/
   PHY_CBL_DIAG_REG	    = 0x001c,		/*Cable diagnostic registers*/
+  PHY_SGMI_RGMI_STATUS_REG  = 0x00d8,
 };
 
 
@@ -1656,6 +1657,9 @@ static uint64_t gmac_mem_readl(void *ptr, hwaddr addr, unsigned size)
 		case GmacGmiiData:
 		val=s->mac.GmacGmiiData;
 		break;
+		case PHY_SGMI_RGMI_STATUS_REG:
+		val = 0xd;
+		break;
 		default:
 		if(addr<0xc0)
 		{
@@ -1695,7 +1699,7 @@ static uint64_t gmac_mem_readl(void *ptr, hwaddr addr, unsigned size)
 
 static void gmac32_transmit_demand(GMACState *s)
 {
-DmaDesc desc;
+static DmaDesc desc;
 uint8_t txbuffer[0x4000];
 uint32_t size = 0;
 int pos = 0;
@@ -1909,6 +1913,8 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 				break;
 			case PHY_LNK_PART_ABl_REG:
 				s->mac.GmacGmiiData = 1<<8;
+				break;
+			case PHY_SGMI_RGMI_STATUS_REG:
 				break;
 			default:
 				s->mac.GmacGmiiData = 0;
