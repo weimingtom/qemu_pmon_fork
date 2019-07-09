@@ -433,7 +433,16 @@ static void mips_ls1c_init (MachineState *machine)
 	sysbus_create_simple("sysbus-ahci",0x1fe30000, ls1c_irq1[4]);
 
 	if (nb_nics) {
-		gmac_sysbus_create(&nd_table[0], 0x1fe10000, ls1c_irq1[2]);
+	//	gmac_sysbus_create(&nd_table[0], 0x1fe10000, ls1c_irq1[3]);
+    DeviceState *dev;
+
+    dev = qdev_create(NULL, "sysbus-synopgmac");
+    qdev_set_nic_properties(dev, &nd_table[0]);
+    qdev_prop_set_int32(dev, "enh_desc", 0);
+    qdev_prop_set_int32(dev, "buswidth", 64);
+    qdev_init_nofail(dev);
+    sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe10000);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls1c_irq1[3]);
 	}
 
 #if 1
