@@ -232,6 +232,10 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 1<<24;
 		case 0xefdfb000044:
 		return random();
+		case 0x1fd000c8:
+		return 0x10;
+		case 0x1ff10000 ... 0x1ff1000b:
+		return 0;
 	}
 	return 0;
 }
@@ -1005,6 +1009,15 @@ static void mips_ls3a2h_init(MachineState *machine)
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd00800, "0x1fd00800", 0x34);
                 memory_region_add_subregion(iomem_axi, 0x1fd00800, iomem);
+
+		/*gpio*/
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fd000c8, "0x1fd000c8", 0x8);
+                memory_region_add_subregion(iomem_axi, 0x1fd000c8, iomem);
+		/*lpc*/
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1ff10000, "0x1ff10000", 0x12);
+                memory_region_add_subregion(iomem_axi, 0x1ff10000, iomem);
 	}
 
 
