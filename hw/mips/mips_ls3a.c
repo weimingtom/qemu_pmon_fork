@@ -144,7 +144,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	*parg_env++=0;
 
 	//env
-	sprintf(memenv,"memsize=%d",loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20));
+	sprintf(memenv,"memsize=%d",loaderparams.ram_size>0x0f000000?240:(loaderparams.ram_size>>20));
 	sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
 
 
@@ -210,7 +210,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 
 	//env
 
-	sprintf(memenv,"%d",loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20));
+	sprintf(memenv,"%d",loaderparams.ram_size>0x0f000000?240:(loaderparams.ram_size>>20));
 	sprintf(highmemenv,"%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
 	setenv("memsize", memenv, 1);
 	setenv("highmemsize", highmemenv, 1);

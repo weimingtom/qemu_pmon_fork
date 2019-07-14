@@ -214,8 +214,8 @@ struct efi_memory_map_loongson * init_memory_map(void *g_map)
   emap->map[0].node_id = 0;
   //strcpy(emap->map[0].mem_name, "node0_low");
   emap->map[0].mem_type = 1;
-  emap->map[0].mem_start = 0x01000000;
-  emap->map[0].mem_size = atoi(getenv("memsize"));
+  emap->map[0].mem_start = 0x00200000;
+  emap->map[0].mem_size = atoi(getenv("memsize")) - 0x00200000;;
 #endif
 
   emap->map[1].node_id = 0;
