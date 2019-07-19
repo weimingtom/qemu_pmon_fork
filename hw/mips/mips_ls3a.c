@@ -45,8 +45,6 @@
 #include "hw/pci/pci_host.h"
 #include "hw/ssi/ssi.h"
 #include "loongson_bootparam.h"
-#include "sysemu/device_tree.h"
-#include "dtc/libfdt/libfdt.h"
 
 #ifdef DEBUG_LS3A
 #define DPRINTF(fmt, ...) \
@@ -146,7 +144,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	*parg_env++=0;
 
 	//env
-	sprintf(memenv,"memsize=%d",loaderparams.ram_size>=0xf000000?240:(int)(loaderparams.ram_size>>20));
+	sprintf(memenv,"memsize=%d",loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20));
 	sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
 
 
@@ -173,7 +171,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 return 0;
 }
 
-static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
+static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 {
 	char memenv[32];
 	char highmemenv[32];
@@ -181,7 +179,6 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	void *params_buf;
 	unsigned int *parg_env;
 	int ret;
-	char *cmdline;
 
 	/* Store command line.  */
 	params_size = 0x100000;
@@ -201,7 +198,6 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	ret +=1+snprintf(params_buf+ret,256-ret,"g");
 	//argv1
 	*parg_env++=BOOTPARAM_ADDR+ret;
-	cmdline = params_buf+ret;
 	if (initrd_size > 0) {
 		ret +=1+snprintf(params_buf+ret,256-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
 				PHYS_TO_VIRT((uint32_t)initrd_offset),
@@ -214,7 +210,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 
 	//env
 
-	sprintf(memenv,"%d",loaderparams.ram_size>0x10000000?224:(loaderparams.ram_size>>20));
+	sprintf(memenv,"%d",loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20));
 	sprintf(highmemenv,"%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
 	setenv("memsize", memenv, 1);
 	setenv("highmemsize", highmemenv, 1);
@@ -227,58 +223,17 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	init_boot_param(boot_params_buf);
 	printf("param len=%ld\n", boot_params_p-params_buf);
 
-	loaderparams.a0 = 2;
-	loaderparams.a1 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR;
-#if 0
-	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
-        printf("env %x\n", BOOTPARAM_PHYADDR + ret);
-	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
-#else
-	loaderparams.a2 = 0;
-
-	if(dtb)
-	{
-	int size;
-	void *fdt;
-	int err;
-        uint64_t ram_low_sz, ram_high_sz;
-	
-	ret = boot_params_p-params_buf;
-	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
-	fdt = load_device_tree(dtb, &size);
-        printf("fdt %x %p\n", BOOTPARAM_PHYADDR + ret, fdt);
-
-	err = qemu_fdt_setprop_string(fdt, "/chosen", "bootargs", cmdline);
-	if (err < 0) {
-		fprintf(stderr, "couldn't set /chosen/bootargs\n");
-		exit(-1);
-	}
-
-
-	ram_low_sz = loaderparams.ram_size>=0x0f000000?0x0ee00000:loaderparams.ram_size;
-	if(fdt_path_offset (fdt, "/soc/gpu@0x40080000") >= 0){
-	ram_high_sz = loaderparams.ram_size>0x30000000?loaderparams.ram_size-0x30000000:0;
-	}
-	else
-	{
-	ram_high_sz = loaderparams.ram_size>0x10000000?loaderparams.ram_size-0x10000000:0;
-	}
-	
-	qemu_fdt_setprop_sized_cells(fdt, "/memory", "reg",
-			2, 0x00200000, 2, ram_low_sz,
-			2, 0x110000000, 2,  ram_high_sz);
-	memcpy(boot_params_p, fdt, size);
-
-	qemu_fdt_dumpdtb(fdt, size);
-	}
-#endif
 	rom_add_blob_fixed("params", params_buf, params_size,
 			BOOTPARAM_PHYADDR);
+	loaderparams.a0 = 2;
+	loaderparams.a1 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR;
+	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
+        printf("env %x\n", BOOTPARAM_PHYADDR + ret);
 return 0;
 }
 
 
-static int64_t load_kernel(char *dtb)
+static int64_t load_kernel(void)
 {
     int64_t entry, kernel_low, kernel_high;
     long kernel_size, initrd_size;
@@ -330,7 +285,7 @@ static int64_t load_kernel(char *dtb)
 	if(getenv("OLDENV"))
 	 set_bootparam(initrd_offset, initrd_size);
 	else
-	 set_bootparam1(initrd_offset, initrd_size, dtb);
+	 set_bootparam1(initrd_offset, initrd_size);
 	
 return entry;
 }
@@ -753,7 +708,7 @@ static void mips_ls3a_init (MachineState *machine)
         loaderparams.kernel_filename = kernel_filename;
         loaderparams.kernel_cmdline = kernel_cmdline;
         loaderparams.initrd_filename = initrd_filename;
-        reset_info[0]->vector = load_kernel(machine->dtb);
+        reset_info[0]->vector = load_kernel();
     }
 
 
