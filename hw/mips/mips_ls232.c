@@ -414,6 +414,18 @@ static void mips_ls232_init (MachineState *machine)
 	}
 #endif
 
+    if (nb_nics) {
+        DeviceState *dev;
+
+        dev = qdev_create(NULL, "sysbus-synopgmac");
+        qdev_set_nic_properties(dev, &nd_table[0]);
+        qdev_prop_set_int32(dev, "enh_desc", 0);
+        qdev_prop_set_int32(dev, "buswidth", 64);
+        qdev_init_nofail(dev);
+        sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1ff00000);
+        sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, env->irq[6]);
+    }
+
 
 	{
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);

@@ -62,6 +62,7 @@
 #include "loongson2k_rom.h"
 #include "hw/timer/hpet.h"
 #include "sysemu/device_tree.h"
+#include "dtc/libfdt/libfdt.h"
 extern target_ulong mypc;
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
@@ -473,7 +474,9 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 
 	loaderparams.a0 = 2;
 	loaderparams.a1 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR;
-	//loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
+#if 0
+	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
+#else
 	loaderparams.a2 = 0;
 
 	if(dtb)
@@ -511,6 +514,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 
 	qemu_fdt_dumpdtb(fdt, size);
 	}
+#endif
 
 	rom_add_blob_fixed("params", params_buf, params_size,
 			BOOTPARAM_PHYADDR);
