@@ -65,7 +65,7 @@ static struct _loaderparams {
 	const char *initrd_filename;
 } loaderparams;
 
-static int clkreg[2];
+static int clkreg[2] = { 0x3, 0x86184000 };
 static MemoryRegion *ddrcfg_iomem;
 static int reg0420[2]={0,0x100000};
 

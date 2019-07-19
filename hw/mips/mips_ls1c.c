@@ -71,7 +71,7 @@ static struct _loaderparams {
 #define	PLL_M			0x40
 #define  FRAC_N         0xff	
 #define	SDRAM_DIV		SDRAM_DIV_4
-static int clkreg[2] = {0x800050ac ,0x00008283};//{0x800050ac ,0x8d0082b3 };
+static int clkreg[2] = {0x800050ac ,0x00018283};//{0x800050ac ,0x8d0082b3 };
 static MemoryRegion *ddrcfg_iomem;
 static int reg0420[2]={0,0x100000};
 
