@@ -1172,7 +1172,7 @@ static int pci_ls3a7a_map_irq(PCIDevice *d, int pin)
 
 		case 8:
 		/*SATA*/
-		 return 19;
+		 return (fn == 0)?16:(fn == 1)?17:18;
 		break;
 
 		case 9:
