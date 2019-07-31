@@ -1862,8 +1862,9 @@ static uint32_t ls3a_intctl_mem_readw(void *opaque, hwaddr addr)
 static uint32_t ls3a_intctl_mem_readl(void *opaque, hwaddr addr)
 {
 	LS3a_func_args *a = opaque;
-    uint32_t ret;
+	uint32_t ret;
 	static int linkcfg=0;
+	LS3a_INTCTLState *s = a->state;
 
 	addr &= a->mask;
 
@@ -1875,10 +1876,12 @@ static uint32_t ls3a_intctl_mem_readl(void *opaque, hwaddr addr)
 		//printf("ret=%x\n",ret);
 		break;
 	case HT_CONTROL_REGS_BASE + HT_IRQ_VECTOR_REG2:
-		address_space_read(&address_space_memory, 0xe00100003a0, MEMTXATTRS_UNSPECIFIED, &ret, 4);
+		ret = *(uint32_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG2);
+		//address_space_read(&address_space_memory, 0xe00100003a0, MEMTXATTRS_UNSPECIFIED, &ret, 4);
 	break;
 	case HT_CONTROL_REGS_BASE + HT_IRQ_VECTOR_REG3:
-		address_space_read(&address_space_memory, 0xe00100003a4, MEMTXATTRS_UNSPECIFIED, &ret, 4);
+		ret = *(uint32_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG3);
+		//address_space_read(&address_space_memory, 0xe00100003a4, MEMTXATTRS_UNSPECIFIED, &ret, 4);
 	break;
 	case INT_ROUTER_REGS_BASE + IO_CONTROL_REGS_CORE0_INTISR:
 	ret = 0x0f000000|((!!uart_irqstatus)<<10);
@@ -1911,7 +1914,7 @@ static void ls3a_intctl_mem_writeb(void *opaque, hwaddr addr, uint32_t val)
 		 ht_update_irq(s,0);
 	}
 	break;
-	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0 ...  HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0 + 7:
+	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0 ...  HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG7:
 	*(uint8_t *)(a->mem + addr) &= ~val;
 	ht_update_irq(s,0);
 	break;
@@ -1955,14 +1958,12 @@ static void ls3a_intctl_mem_writel(void *opaque, hwaddr addr, uint32_t val)
 		
 	}
 	break;
-	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0:
-	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG1:
+	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0 ... HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG7:
 	*(uint32_t *)(a->mem + addr) &= ~val;
 	ht_update_irq(s,0);
 	break;
 
-	case HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG0:
-	case HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG1:
+	case HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG0 ... HT_CONTROL_REGS_BASE+HT_IRQ_ENABLE_REG7:
 	*(uint32_t *)(a->mem + addr) = val;
 	ht_update_irq(s,0);
 	break;
