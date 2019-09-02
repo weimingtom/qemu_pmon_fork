@@ -416,6 +416,18 @@ struct irq_source_routing_table *init_irq_source(void *g_irq_source)
 	irq_info->node_id = 0;
 #endif
 
+#if defined(LOONGSON_3BSINGLE) || defined(LOONGSON_3BSERVER)
+	irq_info->pci_io_start_addr = 0x00001efdfc000000;
+#elif defined(LOONGSON_2G5536)
+	irq_info->pci_io_start_addr = 0xffffffffbfd00000;
+#elif defined(LOONGSON_2G1A)
+	irq_info->pci_io_start_addr = 0xffffffffbfd00000;
+#elif defined(LOONGSON_2F1A)
+	irq_info->pci_io_start_addr = 0xffffffffbfd00000;
+#else
+	irq_info->pci_io_start_addr = 0x00000efdfc000000;
+#endif
+
 	irq_info->pci_mem_start_addr = 0x40000000ul;
 	irq_info->pci_mem_end_addr = 0x7ffffffful;
 #if (defined RS780E || defined LS7A)
