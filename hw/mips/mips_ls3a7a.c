@@ -270,14 +270,14 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 			if(ddrcfg_iomem->container == get_system_memory())
 				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
 
-			if((val&0x210) != 0x210)
+			if((val&0x10) != 0x10)
 			{
 				memory_region_add_subregion_overlap(get_system_memory(), 0x0ff00000, ddrcfg_iomem, 1);
 			}
 
 			memory_region_transaction_commit();
 			break;
-		case 0xe0010010424:
+		case 0x10010424:
 			reg424 = val;
 			memory_region_transaction_begin();
 			if(iomem160->container == get_system_memory())
@@ -285,7 +285,7 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 			if((val&0x10000000) != 0x10000000)
 			{
-				memory_region_add_subregion_overlap(get_system_memory(), 0xe0040000160, iomem160, 1);
+				memory_region_add_subregion_overlap(get_system_memory(), 0x40000000, iomem160, 1);
 			}
 
 			memory_region_transaction_commit();
@@ -304,7 +304,7 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		case 0x0ff00960:
 		return 0x100;
 		case 0x0ff00160:
-		return 1<<24;
+		return random();
 		case CONFBASE+0x4b0+4:
 		return random();
 		case CONFBASE+0x4c0+4:
@@ -318,55 +318,57 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 8;
 		case 0xefdfe0001f4:
 		return 8;
-		case 0xe0010013ff8:
+		case 0x10013ff8:
 		return 0x7a000000;
-		case 0xe0010010484:
-		case 0xe0010010494:
-		case 0xe00100104a4:
-		case 0xe00100104b4:
-		case 0xe00100104c4:
+		case 0x10010484:
+		case 0x10010494:
+		case 0x100104a4:
+		case 0x100104b4:
+		case 0x100104c4:
 		return 0x80;
-		case 0xe0010010424:
+		case 0x10010424:
 		return 0xfff00;
-		case 0xe0010010594:
-		case 0xe0010010694:
-		case 0xe0010010794:
-		case 0xe0010010894:
-		case 0xe00100105b4:
-		case 0xe00100106b4:
-		case 0xe00100107b4:
-		case 0xe00100108b4:
+		case 0x10010594:
+		case 0x10010694:
+		case 0x10010794:
+		case 0x10010894:
+		case 0x100105b4:
+		case 0x100106b4:
+		case 0x100107b4:
+		case 0x100108b4:
 		return 4;
-		case 0xe00100105d4:
-		case 0xe00100106d4:
-		case 0xe00100107d4:
-		case 0xe00100108d4:
-		case 0xe00100105dc:
-		case 0xe00100106dc:
-		case 0xe00100107dc:
-		case 0xe00100108dc:
-		case 0xe00100105f4:
-		case 0xe00100106f4:
-		case 0xe00100107f4:
-		case 0xe00100108f4:
-		case 0xe00100105fc:
-		case 0xe00100106fc:
-		case 0xe00100107fc:
-		case 0xe00100108fc:
+		case 0x100105d4:
+		case 0x100106d4:
+		case 0x100107d4:
+		case 0x100108d4:
+		case 0x100105dc:
+		case 0x100106dc:
+		case 0x100107dc:
+		case 0x100108dc:
+		case 0x100105f4:
+		case 0x100106f4:
+		case 0x100107f4:
+		case 0x100108f4:
+		case 0x100105fc:
+		case 0x100106fc:
+		case 0x100107fc:
+		case 0x100108fc:
 
-		case 0xe0010010614:
-		case 0xe0010010714:
-		case 0xe0010010814:
-		case 0xe0010010914:
-		case 0xe001001061c:
-		case 0xe001001071c:
-		case 0xe001001081c:
-		case 0xe001001091c:
+		case 0x10010614:
+		case 0x10010714:
+		case 0x10010814:
+		case 0x10010914:
+		case 0x1001061c:
+		case 0x1001071c:
+		case 0x1001081c:
+		case 0x1001091c:
 		return 4;
 		case 0xe0040000160:
 		return 1<<24;
 		case 0x1fe00100:
 		return 0x10000;
+		default:
+		return random();
 	}
 	return 0;
 }
@@ -818,6 +820,13 @@ static void mips_ls3a7a_init(MachineState *machine)
 	
 	env = mycpu[0];
 
+	MemoryRegion *htmem = g_new(MemoryRegion, 1);
+	memory_region_init_alias(htmem, NULL, "lowpcimem", address_space_mem, 0x10000000, 0x10000000ULL);
+	MemoryRegion *htmem1 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(htmem1, NULL, "lowpcimem1", address_space_mem, 0x40000000, 0x40000000ULL);
+	memory_region_add_subregion(address_space_mem, 0xe0010000000, htmem);
+	memory_region_add_subregion(address_space_mem, 0xe0040000000, htmem1);
+
 		/* allocate RAM */
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 
@@ -895,7 +904,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0xe0010000000ULL, ht_irq[0]);
+	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0x10000000ULL, ht_irq[0]);
 
 	ls3auart_irq = qemu_allocate_irqs(ls3auart_set_irq, env, 2);
 	if (serial_hd(0))
@@ -1013,7 +1022,7 @@ static void mips_ls3a7a_init(MachineState *machine)
                 qdev_prop_set_uint32(hpet, HPET_INTCAP, 1);
             }
             qdev_init_nofail(hpet);
-            sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0xe0010001000);
+            sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0x10001000);
 
             sysbus_connect_irq(SYS_BUS_DEVICE(hpet), 0, ls3a7a_irq[55]);
         }
@@ -1030,7 +1039,7 @@ static void mips_ls3a7a_init(MachineState *machine)
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe00180, "0x1fe00180", 0x8);
                 memory_region_add_subregion(address_space_mem, 0x1fe00180, iomem);
-		mips_qemu_writel((void *)0x1fe00180, 0, 0xff003180, 4);
+		mips_qemu_writel((void *)0x1fe00180, 0, 0xff003390, 4);
 	}
 
 
@@ -1053,37 +1062,37 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 	SIMPLE_OPS(0xefdfe0001f4, 4);
 
-	SIMPLE_OPS(0xe0010013ff8, 4);
+	SIMPLE_OPS(0x10013ff8, 4);
 
-	SIMPLE_OPS(0xe0010010480, 0x50);
+	SIMPLE_OPS(0x10010480, 0x50);
 
-	SIMPLE_OPS(0xe0010010594, 4);
-	SIMPLE_OPS(0xe0010010694, 4);
-	SIMPLE_OPS(0xe0010010794, 4);
-	SIMPLE_OPS(0xe0010010894, 4);
+	SIMPLE_OPS(0x10010594, 4);
+	SIMPLE_OPS(0x10010694, 4);
+	SIMPLE_OPS(0x10010794, 4);
+	SIMPLE_OPS(0x10010894, 4);
 
-	SIMPLE_OPS(0xe00100105b4, 4);
-	SIMPLE_OPS(0xe00100106b4, 4);
-	SIMPLE_OPS(0xe00100107b4, 4);
-	SIMPLE_OPS(0xe00100108b4, 4);
+	SIMPLE_OPS(0x100105b4, 4);
+	SIMPLE_OPS(0x100106b4, 4);
+	SIMPLE_OPS(0x100107b4, 4);
+	SIMPLE_OPS(0x100108b4, 4);
 
-	SIMPLE_OPS(0xe0010010424, 4);
-	iomem160 = SIMPLE_OPS(0xe0040000160, 8);
+	SIMPLE_OPS(0x10010424, 4);
+	iomem160 = SIMPLE_OPS(0x40000000, 0x1000);
 
-	SIMPLE_OPS(0xe00100105d0,0x10);
-	SIMPLE_OPS(0xe00100106d0,0x10);
-	SIMPLE_OPS(0xe00100107d0,0x10);
-	SIMPLE_OPS(0xe00100108d0,0x10);
+	SIMPLE_OPS(0x100105d0,0x10);
+	SIMPLE_OPS(0x100106d0,0x10);
+	SIMPLE_OPS(0x100107d0,0x10);
+	SIMPLE_OPS(0x100108d0,0x10);
 
-	SIMPLE_OPS(0xe00100105f0,0x10);
-	SIMPLE_OPS(0xe00100106f0,0x10);
-	SIMPLE_OPS(0xe00100107f0,0x10);
-	SIMPLE_OPS(0xe00100108f0,0x10);
+	SIMPLE_OPS(0x100105f0,0x10);
+	SIMPLE_OPS(0x100106f0,0x10);
+	SIMPLE_OPS(0x100107f0,0x10);
+	SIMPLE_OPS(0x100108f0,0x10);
 
-	SIMPLE_OPS(0xe0010010610,0x10);
-	SIMPLE_OPS(0xe0010010710,0x10);
-	SIMPLE_OPS(0xe0010010810,0x10);
-	SIMPLE_OPS(0xe0010010910,0x10);
+	SIMPLE_OPS(0x10010610,0x10);
+	SIMPLE_OPS(0x10010710,0x10);
+	SIMPLE_OPS(0x10010810,0x10);
+	SIMPLE_OPS(0x10010910,0x10);
 	SIMPLE_OPS(0x1fe00100,0x4);
 
 
@@ -1622,9 +1631,9 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     memory_region_add_subregion(get_system_memory(), 0x10000000UL, &pcihost->iomem_submem);
     memory_region_add_subregion(get_system_memory(), 0x40000000UL, &pcihost->iomem_subbigmem);
     memory_region_add_subregion(get_system_memory(), 0x18000000UL, &pcihost->iomem_io);
-    MemoryRegion *iomem_subbigmem1 = g_new(MemoryRegion, 1);
-    memory_region_init_alias(iomem_subbigmem1, NULL, "pcisubmem1", &pcihost->iomem_mem, 0x40000000, 0x40000000);
-    memory_region_add_subregion(get_system_memory(), 0xe0040000000UL, iomem_subbigmem1);
+//    MemoryRegion *iomem_subbigmem1 = g_new(MemoryRegion, 1);
+//    memory_region_init_alias(iomem_subbigmem1, NULL, "pcisubmem1", &pcihost->iomem_mem, 0x40000000, 0x40000000);
+//    memory_region_add_subregion(get_system_memory(), 0xe0040000000UL, iomem_subbigmem1);
 
 //pci-synopgmac
 
@@ -1877,11 +1886,11 @@ static uint32_t ls3a_intctl_mem_readl(void *opaque, hwaddr addr)
 		break;
 	case HT_CONTROL_REGS_BASE + HT_IRQ_VECTOR_REG2:
 		ret = *(uint32_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG2);
-		//address_space_read(&address_space_memory, 0xe00100003a0, MEMTXATTRS_UNSPECIFIED, &ret, 4);
+		//address_space_read(&address_space_memory, 0x100003a0, MEMTXATTRS_UNSPECIFIED, &ret, 4);
 	break;
 	case HT_CONTROL_REGS_BASE + HT_IRQ_VECTOR_REG3:
 		ret = *(uint32_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG3);
-		//address_space_read(&address_space_memory, 0xe00100003a4, MEMTXATTRS_UNSPECIFIED, &ret, 4);
+		//address_space_read(&address_space_memory, 0x100003a4, MEMTXATTRS_UNSPECIFIED, &ret, 4);
 	break;
 	case INT_ROUTER_REGS_BASE + IO_CONTROL_REGS_CORE0_INTISR:
 	ret = 0x0f000000|((!!uart_irqstatus)<<10);
@@ -2018,7 +2027,7 @@ static void ht_set_irq(void *opaque, int irq, int level)
 {
 	LS3a_INTCTLState *s = opaque;
 	uint64_t isr;
-	address_space_read(&address_space_memory, 0xe00100003a0, MEMTXATTRS_UNSPECIFIED, &isr, 8);
+	address_space_read(&address_space_memory, 0x100003a0, MEMTXATTRS_UNSPECIFIED, &isr, 8);
 	*(uint64_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG2) = isr; 
 	//printf("ht_set_irq %d %d 0x%llx\n", irq, level, (long long)isr);
 
