@@ -994,7 +994,7 @@ static void mips_ls2k_init(MachineState *machine)
 		DeviceState *dev,*dev1;
 		void *bus;
 		qemu_irq cs_line;
-		dev=sysbus_create_simple("ls1a_spi",0x1fe70000, ls2k_irq[8]);
+		dev=sysbus_create_simple("ls1a_spi",0x1fff0220, ls2k_irq[8]);
 		bus = qdev_get_child_bus(dev, "ssi");
 		if(flash_dinfo)
 		{
@@ -1042,7 +1042,7 @@ static void mips_ls2k_init(MachineState *machine)
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
 		sysbus_mmio_map(s, 0, 0x1fe06000);
-		sysbus_connect_irq(s, 0, ls2k_irq[12]);
+		sysbus_connect_irq(s, 0, ls2k_irq1[12]);
 	}
 
 	{
