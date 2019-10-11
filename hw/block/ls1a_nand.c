@@ -456,7 +456,7 @@ static void ls1a_nand_do_cmd(NandState *s,uint32_t cmd)
 			memset(s->chip->io,0xff,6);
 		s->regs.id_l = 0;
 		s->regs.status_id_h = 0;
-		for(i=(s->regs.paramter>>12)&0xf, j=0;i;i--, j++)
+		for(i=(((s->regs.paramter>>12)&0xf)?:5), j=0;i;i--, j++)
 		{
 			id = s->chip->io[j];
 			switch(i)
