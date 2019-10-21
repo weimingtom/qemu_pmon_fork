@@ -620,11 +620,13 @@ static void mips_ls2h_init(MachineState *machine)
 
 		/* allocate RAM */
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
+	MemoryRegion *ram0 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram0, NULL, "aximem", ram, 0, ram_size);
 
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
 	memory_region_add_subregion(address_space_mem, 0, ram1);
-	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
+	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram0);
 
 
         memory_region_init(iomem_root, NULL,  "ls2h axi", UINT32_MAX);
@@ -805,6 +807,17 @@ static void mips_ls2h_init(MachineState *machine)
 			qdev_init_nofail(dev);
 			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe10000);
 			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[3]);
+		}
+		{
+			DeviceState *dev;
+
+			dev = qdev_create(NULL, "sysbus-synopgmac");
+			qdev_set_nic_properties(dev, &nd_table[1]);
+			qdev_prop_set_ptr(dev, "as", as);
+			qdev_prop_set_int32(dev, "enh_desc", 1);
+			qdev_init_nofail(dev);
+			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe18000);
+			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[4]);
 		}
 #endif
 	}
