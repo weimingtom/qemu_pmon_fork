@@ -1591,7 +1591,8 @@ typedef struct gmacDmaRegisters
  uint32_t DmaControl        ;    /*= 0x0018 CSR6 - Dma Operation Mode Register                */
  uint32_t DmaInterrupt      ;    /*= 0x001C CSR7 - Interrupt enable                           */
  uint32_t DmaMissedFr       ;    /*= 0x0020 CSR8 - Missed Frame & Buffer overflow Counter     */
- uint32_t unused[9]         ;    /*unused registers*/
+ uint32_t DmaRxWatchdog	    ;	 /*= 0x0024 CSR9 - Rx Watchdog */
+ uint32_t unused[8]         ;    /*unused registers*/
  uint32_t DmaTxCurrDesc     ;    /*= 0x0048      - Current host Tx Desc Register              */ 
  uint32_t DmaRxCurrDesc     ;    /*= 0x004C      - Current host Rx Desc Register              */ 
  uint32_t DmaTxCurrAddr     ;    /*= 0x0050 CSR20 - Current host transmit buffer address      */
@@ -2045,7 +2046,7 @@ static ssize_t gmac32_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 
 	if(last)
 	{
-	if((desc.length&RxDisIntCompl)==0)
+	if((desc.length&RxDisIntCompl)==0 || s->dma.DmaRxWatchdog)
 	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
 
 	gmac_check_irq(s);
@@ -2136,7 +2137,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 
 	if(last)
 	{
-	if((desc.length&RxDisIntCompl)==0)
+	if((desc.length&RxDisIntCompl)==0 || s->dma.DmaRxWatchdog)
 	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
 
 	gmac_check_irq(s);
