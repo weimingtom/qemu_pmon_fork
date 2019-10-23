@@ -804,6 +804,7 @@ static void mips_ls2h_init(MachineState *machine)
 			qdev_set_nic_properties(dev, &nd_table[0]);
 			qdev_prop_set_ptr(dev, "as", as);
 			qdev_prop_set_int32(dev, "enh_desc", 1);
+			qdev_prop_set_uint32(dev, "hwcap", 0x190d2fbf);
 			qdev_init_nofail(dev);
 			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe10000);
 			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[3]);
@@ -815,6 +816,7 @@ static void mips_ls2h_init(MachineState *machine)
 			qdev_set_nic_properties(dev, &nd_table[1]);
 			qdev_prop_set_ptr(dev, "as", as);
 			qdev_prop_set_int32(dev, "enh_desc", 1);
+			qdev_prop_set_uint32(dev, "hwcap", 0x190d2fbf);
 			qdev_init_nofail(dev);
 			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1fe18000);
 			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls2h_irq1[4]);
