@@ -64,7 +64,7 @@
 #include "sysemu/device_tree.h"
 extern target_ulong mypc;
 
-#define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
+#define PHYS_TO_VIRT(x) ((x)>=0x20000000?((x) | 0x9800000000000000ULL):((x) | ~(target_ulong)0x7fffffff))
 
 #define VIRT_TO_PHYS_ADDEND (-((int64_t)(int32_t)0x80000000))
 
@@ -381,7 +381,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	*parg_env++=BOOTPARAM_ADDR+ret;
 	if (initrd_size > 0) {
 		ret +=1+snprintf(params_buf+ret,256-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
-				PHYS_TO_VIRT((uint32_t)initrd_offset),
+				PHYS_TO_VIRT(initrd_offset),
 				initrd_size, loaderparams.kernel_cmdline);
 	} else {
 		ret +=1+snprintf(params_buf+ret, 256-ret, "%s", loaderparams.kernel_cmdline);
@@ -448,7 +448,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	cmdline = params_buf+ret;
 	if (initrd_size > 0) {
 		ret +=1+snprintf(params_buf+ret,256-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
-				PHYS_TO_VIRT((uint32_t)initrd_offset),
+				PHYS_TO_VIRT(initrd_offset),
 				initrd_size, loaderparams.kernel_cmdline);
 	} else {
 		ret +=1+snprintf(params_buf+ret, 256-ret, "%s", loaderparams.kernel_cmdline);
@@ -851,7 +851,9 @@ static void mips_ls2k_init(MachineState *machine)
 	MemoryRegion *ram3 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram3, NULL, "lowmem2G", ram, 0, 0x80000000ULL);
 	memory_region_add_subregion(address_space_mem, 0x80000000ULL, ram3);
-	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram);
+	MemoryRegion *ram0 =  g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram0, NULL, "lowmem", ram, 0, ram_size);
+	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram0);
 	if(ram_size >= 0x40000000)
 	{
 		MemoryRegion *ram4 = g_new(MemoryRegion, 1);
