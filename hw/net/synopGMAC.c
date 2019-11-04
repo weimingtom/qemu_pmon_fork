@@ -1958,6 +1958,8 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		case 0x1000+DmaControl:
 		s->dma.DmaControl = val;
 		break;
+		case 0x1000+DmaRxCurDesc64Lo:
+		break;
 		default:
 		p=(void *)&s->dma;
 		p[(addr-0x1000)>>2]=val;
