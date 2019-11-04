@@ -1573,6 +1573,8 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     if(nd_table[0].used)
     qdev_set_nic_properties(dev, &nd_table[0]);
     qdev_prop_set_int32(dev, "enh_desc", 1);
+    qdev_prop_set_uint32(dev, "version", 0xd137);
+    qdev_prop_set_uint32(dev, "hwcap", 0x1b0d2fbf);
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
@@ -1582,6 +1584,8 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     if(nd_table[1].used)
     qdev_set_nic_properties(dev, &nd_table[1]);
     qdev_prop_set_int32(dev, "enh_desc", 1);
+    qdev_prop_set_uint32(dev, "version", 0xd137);
+    qdev_prop_set_uint32(dev, "hwcap", 0x1b0d2fbf);
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
