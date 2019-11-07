@@ -152,9 +152,9 @@ typedef struct Dma64DescStruct
   uint32_t   status;         /* Status 									*/
   uint32_t   length;         /* Buffer 1  and Buffer 2 length 						*/
   uint64_t   buffer1;        /* Network Buffer 1 pointer (Dma-able) 							*/
+  uint32_t   exstatus;
+  uint32_t   reserved;
   uint64_t   buffer2;        /* Network Buffer 2 pointer or next descriptor pointer (Dma-able)in chain structure 	*/
-  uint32_t   timestamplow;
-  uint32_t   timestamphigh;
   			/* This data below is used only by driver					*/
 } Dma64Desc;
 #endif
@@ -2095,7 +2095,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	dma_memory_read(s->as,s->dma.Dma64RxCurrDesc,&desc,sizeof(desc));
 	if(desc.status&DescOwnByDma)
 	{
-	  //printf("desc.length=0x%x\n", desc.length);
+	  //printf("desc.length=0x%x buffer1=0x%llx\n", desc.length, (long long)desc.buffer1);
 	  if(desc_rxlen(s, desc))
 	  {
 		  once=min(desc_rxlen(s, desc),size);
@@ -2142,10 +2142,10 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	if((desc.length&RxDisIntCompl)==0 || s->dma.DmaRxWatchdog)
 	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
 
+	//printf("size: %d\n", size_ - size);
 	gmac_check_irq(s);
 	break;
 	}
-	//printf("size: %d\n", size);
 
 	}
 	else
