@@ -237,6 +237,7 @@ const mips_def_t mips_defs[] =
                        (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA),
+	.CP0_Config5_rw_bitmask = (1 << CP0C5_MSAEn),
 	.CP0_PageGrain = (1 << CP0PG_ELPA),
         .SYNCI_Step = 32,
         .CCRes = 2,
@@ -249,7 +250,7 @@ const mips_def_t mips_defs[] =
            in some places...
         .PABITS = 59, */ /* the architectural limit */
         .PABITS = 48,
-        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F | INSN_LOONGSON3A,
+        .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D | INSN_LOONGSON2F | INSN_LOONGSON3A | ASE_MSA,
         .mmu_type = MMU_TYPE_R4000,
     },
     {
