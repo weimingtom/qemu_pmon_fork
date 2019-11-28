@@ -257,13 +257,53 @@ static MemoryRegion *ddrcfg_iomem;
 static MemoryRegion *iomem160;
 static int reg180;
 static int reg424;
+static unsigned char mem200[256];
+static MemoryRegion *cachelock_iomem[4];
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
+	int i, j;
+	unsigned long long base;
+	unsigned long long mask, bsize;
+	unsigned int old;
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case 0x3ff00200 ... 0x3ff002ff:
+		old = *(unsigned int *)(mem200+addr-0x3ff00200);
+		memcpy(mem200 + addr-0x3ff00200, &val, size);
+		 for(i = 0,j = 0;i < 0x20;i += 8, j += 1)
+		 {
+			
+			if(addr == 0x3ff00200+i+4 && ((old ^ val) & 0x80000000))
+			{ 
+				base = *(unsigned long long *)(mem200+i) & 0x7fffffffffffffffULL;
+				mask = *(unsigned long long *)(mem200+i+0x40);
+				bsize = ~mask + 1;
+
+				memory_region_transaction_begin();
+				if(val & 0x80000000)
+				{
+					printf("base = 0x%llx size = 0x%llx\n", base, bsize);
+					if(!cachelock_iomem[j]) cachelock_iomem[j] = g_new(MemoryRegion, 1);
+					memory_region_init_ram_nomigrate(cachelock_iomem[j], NULL, "mips_r4k.cachemem", bsize, &error_fatal);
+					memory_region_add_subregion_overlap(get_system_memory(), base, cachelock_iomem[j], 1);
+				}
+				else if(cachelock_iomem[j])
+				{
+					memory_region_del_subregion(get_system_memory(), cachelock_iomem[j]);
+					memory_region_unref(cachelock_iomem[j]);
+				}
+
+				memory_region_transaction_commit();
+
+
+
+
+			}
+		}
+		break;
 		case 0x1fe00180:
 			reg180 = val;
 			memory_region_transaction_begin();
@@ -295,10 +335,16 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 {
+	uint64_t val;
 	addr=((hwaddr)(long)opaque) + addr;
 //	printf("%s 0x%llx\n", __FUNCTION__, (long long)addr);
 	switch(addr)
 	{
+		case 0x3ff00200 ... 0x3ff002ff:
+		 val = 0;
+		 memcpy(&val, mem200 + addr-0x3ff00200, size);
+		 return val;
+		break;
 		case 0x1fe00180:
 		return reg180;
 		case 0x0ff00960:
@@ -1042,6 +1088,12 @@ static void mips_ls3a7a_init(MachineState *machine)
 		mips_qemu_writel((void *)0x1fe00180, 0, 0xff003390, 4);
 	}
 
+	{
+		MemoryRegion *iomem;
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x3ff00200, "cachelock", 0x100);
+                memory_region_add_subregion(address_space_mem, 0x3ff00200, iomem);
+	}
 
 	{
 	#define ADDR 0xe000f000000
