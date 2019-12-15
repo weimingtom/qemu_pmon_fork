@@ -1938,6 +1938,7 @@ static void ohci_die(OHCIState *ohci)
 
     ohci_set_interrupt(ohci, OHCI_INTR_UE);
     ohci_bus_stop(ohci);
+    if (dev->parent_obj.config)
     pci_set_word(dev->parent_obj.config + PCI_STATUS,
                  PCI_STATUS_DETECTED_PARITY);
 }
