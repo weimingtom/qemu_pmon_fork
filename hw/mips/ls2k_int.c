@@ -1,3 +1,5 @@
+#include <strings.h>
+#include "hw/pci/msi.h"
 //#define DEBUG_IRQ
 
 #ifdef DEBUG_IRQ
@@ -18,6 +20,7 @@ typedef struct GS232_INTCTLState {
 	uint32_t intreg_pending;
 	uint32_t intreg_bce;
 	uint32_t intreg_auto;
+	uint32_t intreg_msien;
 	char irqroute[32];
 #ifdef DEBUG_IRQ_COUNT
 	uint64_t irq_count[32];
@@ -39,6 +42,7 @@ typedef struct GS232_INTCTLState {
 #define CPU_IRQ_INT15_MASK 0x80000000
 
 static void ls2k_check_interrupts(void *opaque);
+static void ls2k_set_irq(void *opaque, int irq, int level);
 
 // per-cpu interrupt controller
 static uint64_t ls2k_intctl_mem_readl(void *opaque, hwaddr addr, unsigned size)
@@ -107,7 +111,7 @@ static void ls2k_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 			ls2k_check_interrupts(s);
 			break;
 		case 0x2c: //clr
-			s->intreg_pending &= ~val;
+			s->intreg_pending &= ~(val & s->intreg_edge);
 			s->intreg_en &= ~val;
 			ls2k_check_interrupts(s);
 			break;
@@ -135,6 +139,48 @@ static void ls2k_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 static const MemoryRegionOps ls2k_intctl_mem_ops = {
     .read = ls2k_intctl_mem_readl,
     .write = ls2k_intctl_mem_writel,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
+static uint64_t ls2k_msi_mem_readl(void *opaque, hwaddr addr, unsigned size)
+{
+	GS232_INTCTLState *s = opaque;
+	uint64_t ret = 0;
+
+	switch (addr) {
+	case 0:
+		ret = 0;
+		break;
+	case 4:
+		ret = s->intreg_msien;
+		break;
+	}
+	return ret;
+}
+
+static void ls2k_msi_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
+{
+	GS232_INTCTLState *s = opaque;
+	int irq;
+
+	//printf("write reg 0x" TARGET_FMT_plx "= %x, size %d\n", addr, (unsigned int)val, size);
+	switch (addr) {
+	case 0:
+		if (s->intreg_msien & (1<<val)) {
+			irq = val;
+			ls2k_set_irq(s, irq, 1);
+			ls2k_set_irq(s, irq, 0);
+		}
+		break;
+	case 4:
+	 	s->intreg_msien = val;
+		break;
+	}
+}
+
+static const MemoryRegionOps ls2k_msi_mem_ops = {
+    .read = ls2k_msi_mem_readl,
+    .write = ls2k_msi_mem_writel,
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
@@ -224,7 +270,7 @@ static void ls2k_set_irq(void *opaque, int irq, int level)
 	if (level) {
 		s->intreg_pending |= mask;
 	} else {
-		s->intreg_pending &= ~mask;
+		s->intreg_pending &= ~mask | s->intreg_edge;
 	}
 	ls2k_check_interrupts(s);
 }
@@ -240,7 +286,7 @@ static void ls2k_intctl_reset(void *opaque)
 }
 
 
-static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq)
+static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq, MemoryRegion *pcimr)
 {
 	qemu_irq *irqs;
 	GS232_INTCTLState *s;
@@ -254,6 +300,17 @@ static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_ir
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &ls2k_intctl_mem_ops, s, "ls2k_int", INTCTL_SIZE);
                 memory_region_add_subregion(mr, addr, iomem);
+	}
+
+	{
+		/*need add this subregion to ls2k pcihost->memory region*/
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &ls2k_msi_mem_ops, s, "ls2k_int", 8);
+                memory_region_add_subregion(mr, addr+0xb0, iomem);
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &ls2k_msi_mem_ops, s, "ls2k_int", 8);
+                memory_region_add_subregion(pcimr, addr+0xb0, iomem);
+		msi_nonbroken = true;
 	}
 
 	s->cpu_irq = parent_irq;

@@ -755,7 +755,7 @@ static int godson_ipi_init(qemu_irq parent_irq , unsigned long index, gipiState 
 
 
 
-static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq);
+static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq, MemoryRegion *pcimr);
 
 static const int sector_len = 32 * 1024;
 
@@ -958,8 +958,9 @@ static void mips_ls2k_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls2k_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, cpu_irq);
-	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, cpu_irq1);
+	pci_bus =pcibus_ls2k_init(0, NULL,pci_ls2k_map_irq, ram_pciram, ram_pciram1, ram_pciram2);
+	ls2k_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, cpu_irq, ls2k_pci_bus->address_space_mem);
+	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, cpu_irq1, ls2k_pci_bus->address_space_mem);
 
 
 	if (serial_hd(0))
@@ -976,7 +977,6 @@ static void mips_ls2k_init(MachineState *machine)
 
 
 
-	pci_bus =pcibus_ls2k_init(0, &ls2k_irq1[20],pci_ls2k_map_irq, ram_pciram, ram_pciram1, ram_pciram2);
 
 
 
