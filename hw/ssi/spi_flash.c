@@ -36,6 +36,7 @@
 #else
 #define dprintf(fs,...)
 #endif
+#define FLASH_SIZE 0x1000000
 
 typedef enum {
 	SPI_FLASH_CMD,
@@ -205,7 +206,7 @@ static uint32_t spi_flash_transfer(SSISlave *dev, uint32_t val)
 			break;
 		case SPI_FLASH_READ_DATA:
 			dprintf("READ DATA mode,addr:0x%x\n",state_count);
-			if(state_count >= 0x7fffff) {
+			if(state_count >= FLASH_SIZE-1) {
 				state_count = 0;
 			}
 			ret = s->buf[state_count];
@@ -221,7 +222,7 @@ static uint32_t spi_flash_transfer(SSISlave *dev, uint32_t val)
 				case 2:
 					return 0x20;
 				case 3:
-					return 0x17;
+					return FLASH_SIZE==0x800000?0x17:0x18;
 				default:
 					s->mode = SPI_FLASH_CMD;
 					return 0xff;
@@ -338,7 +339,6 @@ static Property spi_flash_properties[] = {
 };
 
 
-
 static void spi_flash_realize(SSISlave *dev, Error **errp)
 {
 	SPIFlashState *s = FROM_SSI_SLAVE(SPIFlashState, dev);
@@ -346,7 +346,7 @@ static void spi_flash_realize(SSISlave *dev, Error **errp)
 	Error *local_err = NULL;
 
 	s->mode = SPI_FLASH_CMD;
-	memory_region_init_rom_device_nomigrate(&s->mem, OBJECT(dev), &spi_rom_ops , s, "spi flash rom", 0x800000, &local_err);
+	memory_region_init_rom_device_nomigrate(&s->mem, OBJECT(dev), &spi_rom_ops , s, "spi flash rom", FLASH_SIZE, &local_err);
   	s->buf = memory_region_get_ram_ptr(&s->mem);
 
         memory_region_init_alias(&s->mem1, OBJECT(dev), "spi bios", &s->mem, 0, s->size);
@@ -355,11 +355,11 @@ static void spi_flash_realize(SSISlave *dev, Error **errp)
 	{
 		blk_set_perm(s->blk, BLK_PERM_ALL, BLK_PERM_ALL, errp);
 		len = blk_getlength(s->blk);
-		if(len != 0x800000) {
+		if(len != FLASH_SIZE) {
 			printf("length=%d must be 8 mega bytes,run command bellow to trucate file to size:\n", len);
-		blk_pwrite(s->blk, 0x800000-1, s->buf, 1, 0);
+		blk_pwrite(s->blk, FLASH_SIZE-1, s->buf, 1, 0);
 		}
-		len = MIN(0x800000,len);
+		len = MIN(FLASH_SIZE,len);
 		blk_pread(s->blk, (int64_t)0LL, s->buf, len);
 	}
 
