@@ -1333,8 +1333,6 @@ typedef struct PCIBonitoState
 	BonitoState *pcihost;
 	MemoryRegion iomem;
 	MemoryRegion conf_mem;
-	MemoryRegion data_mem;
-	MemoryRegion data_mem1;
 	struct pcilocalreg{
 		/*0*/
 		unsigned int portctr0;
@@ -1384,42 +1382,11 @@ struct BonitoState {
     MemoryRegion iomem_io;
     AddressSpace as_mem;
     AddressSpace as_io;
+    MemoryRegion data_mem;
+    MemoryRegion data_mem1;
    int (*pci_map_irq)(PCIDevice *d, int irq_num);
 };
 
-static void pci_ls2k_config_writel (void *opaque, hwaddr addr,
-		uint64_t val, unsigned size)
-{
-	PCIBonitoState *s = opaque;
-	//   PCIDevice *d = PCI_DEVICE(s);
-	BonitoState *phb = s->pcihost;
-
-	addr &= 0xffffff;
-
-	pci_data_write(phb->bus,  addr, val, size);
-}
-
-static uint64_t pci_ls2k_config_readl (void *opaque, hwaddr addr, unsigned size)
-{
-	PCIBonitoState *s = opaque;
-	//  PCIDevice *d = PCI_DEVICE(s);
-	BonitoState *phb = s->pcihost;
-	uint32_t val;
-
-	addr &= 0xffffff;
-
-
-	val = pci_data_read(phb->bus, addr, size);
-	//printf("pci_ls2k_config_readl 0x%x 0x%x\n", (int)addr, val);
-	return val;
-}
-
-
-static const MemoryRegionOps pci_ls2k_config_ops = {
-    .read = pci_ls2k_config_readl,
-    .write = pci_ls2k_config_writel,
-    .endianness = DEVICE_NATIVE_ENDIAN,
-};
 
 
 static void bonito_pciconf_writel(void *opaque, hwaddr addr,
@@ -1465,14 +1432,6 @@ static void bonito_initfn(PCIDevice *dev, Error **errp)
                           "north-bridge-pci-config", 0x100);
     sysbus_init_mmio(sysbus, &s->conf_mem);
 
-    /* set the south bridge pci configure  mapping */
-    memory_region_init_io(&s->data_mem, NULL, &pci_ls2k_config_ops, s,
-                          "south-bridge-pci-config", 0x2000000);
-    sysbus_init_mmio(sysbus, &s->data_mem);
-
-    memory_region_init_io(&s->data_mem1, NULL, &pci_ls2k_config_ops, s,
-                          "south-bridge-pci-config", 0x200000000);
-    sysbus_init_mmio(sysbus, &s->data_mem1);
 
     pci_config_set_prog_interface(dev->config, PCI_CLASS_BRIDGE_PCI_INF_SUB);
     /* set the default value of north bridge pci config */
@@ -1653,12 +1612,10 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
 
     pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
 
-    sysbus = SYS_BUS_DEVICE(s->pcihost);
-     /*self header*/
-    sysbus_mmio_map(sysbus, 0, 0xfe00004800);
+    sysbus = SYS_BUS_DEVICE(pcihost);
      /*devices header*/
-    sysbus_mmio_map(sysbus, 1, 0x1a000000);
-    sysbus_mmio_map(sysbus, 2, 0xfe00000000ULL);
+    sysbus_mmio_map(sysbus, 0, 0x1a000000);
+    sysbus_mmio_map(sysbus, 1, 0xfe00000000ULL);
 
     memory_region_add_subregion(get_system_memory(), 0x10000000UL, &pcihost->iomem_submem);
     memory_region_add_subregion(get_system_memory(), 0x40000000UL, &pcihost->iomem_subbigmem);
@@ -1683,6 +1640,36 @@ static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
     return &pcihost->as_mem;
 }
 
+static void pci_ls2k_config_writel (void *opaque, hwaddr addr,
+		uint64_t val, unsigned size)
+{
+	BonitoState *phb = opaque;
+
+	addr &= 0xffffff;
+
+	pci_data_write(phb->bus,  addr, val, size);
+}
+
+static uint64_t pci_ls2k_config_readl (void *opaque, hwaddr addr, unsigned size)
+{
+	BonitoState *phb = opaque;
+	uint32_t val;
+
+	addr &= 0xffffff;
+
+
+	val = pci_data_read(phb->bus, addr, size);
+	//printf("pci_ls2k_config_readl 0x%x 0x%x\n", (int)addr, val);
+	return val;
+}
+
+
+static const MemoryRegionOps pci_ls2k_config_ops = {
+    .read = pci_ls2k_config_readl,
+    .write = pci_ls2k_config_writel,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
 
 /*
 two way to translate pci dma address:
@@ -1696,7 +1683,9 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 {
     BonitoState *pcihost;
     PCIHostState *phb;
+    SysBusDevice *sysbus;
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
+    sysbus = SYS_BUS_DEVICE(pcihost);
 
     memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT64_MAX);
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
@@ -1718,6 +1707,14 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
 
+    /* set the south bridge pci configure  mapping */
+    memory_region_init_io(&pcihost->data_mem, NULL, &pci_ls2k_config_ops, pcihost,
+                          "south-bridge-pci-config", 0x2000000);
+    sysbus_init_mmio(sysbus, &pcihost->data_mem);
+
+    memory_region_init_io(&pcihost->data_mem1, NULL, &pci_ls2k_config_ops, pcihost,
+                          "south-bridge-pci-config", 0x200000000);
+    sysbus_init_mmio(sysbus, &pcihost->data_mem1);
 }
 
 static const char *ls2k_host_root_bus_path(PCIHostState *host_bridge,
