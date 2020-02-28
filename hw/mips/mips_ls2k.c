@@ -252,6 +252,11 @@ void __attribute__((weak)) ls1gpa_sdio_set_dmaaddr(uint32_t val)
 static MemoryRegion *ddrcfg_iomem;
 static int reg424 = 0x100;
 
+#ifdef DEBUG_PCIEDMA
+static AddressSpace *ls2k_pci_as;
+static unsigned int ls2k_pci_addr;
+#endif
+
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
@@ -274,14 +279,33 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 			memory_region_transaction_commit();
 			break;
+#ifdef DEBUG_PCIEDMA
+		case 0x1fef0000:
+		dma_memory_write(ls2k_pci_as, ls2k_pci_addr, &val, 4);
+		break;
+		case 0x1fef0004:
+		ls2k_pci_addr = val;
+		break;
+#endif
 	}
 }
 
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 {
+	uint64_t val = 0;
+
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+#ifdef DEBUG_PCIEDMA
+		case 0x1fef0000:
+		dma_memory_read(ls2k_pci_as, ls2k_pci_addr, &val, 4);
+		return val;
+		break;
+		case 0x1fef0004:
+		return ls2k_pci_addr;
+		break;
+#endif
 		case GPUBASE+4:
 		case GPUBASE+0:
 		case GPUBASE+0x100:
@@ -1172,6 +1196,11 @@ static void mips_ls2k_init(MachineState *machine)
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10424, "0x1fe10424", 0x4);
                 memory_region_add_subregion(address_space_mem, 0x1fe10424, iomem);
+#ifdef DEBUG_PCIEDMA
+                iomem = g_new(MemoryRegion, 1);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fef0000, "0x1fef0000", 0x8);
+                memory_region_add_subregion(address_space_mem, 0x1fef0000, iomem);
+#endif
 	}
 
 
@@ -1725,6 +1754,9 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 
     memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT64_MAX);
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
+#ifdef DEBUG_PCIEDMA
+    ls2k_pci_as = &pcihost->as_mem;
+#endif
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
 
