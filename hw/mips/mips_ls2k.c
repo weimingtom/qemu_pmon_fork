@@ -250,7 +250,7 @@ void __attribute__((weak)) ls1gpa_sdio_set_dmaaddr(uint32_t val)
 
 #define GPUBASE 0xd0000000
 static MemoryRegion *ddrcfg_iomem;
-static int reg424;
+static int reg424 = 0x100;
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
