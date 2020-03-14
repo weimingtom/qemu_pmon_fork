@@ -1564,6 +1564,7 @@ typedef struct gmacMacRegisters
  uint32_t GmacAddr14Low        	  ;    /*= 0x00B4 Mac address14 low Register                */
  uint32_t GmacAddr15High     	  ;    /*= 0x00B8 Mac address15 high Register               */
  uint32_t GmacAddr15Low  	  ;    /*= 0x00BC Mac address15 low Register                */
+ uint32_t GmacRgmiiStatus;             /*= 0x00d8*/
 
  /*Time Stamp Register Map*/
  uint32_t GmacTSControl	          ;  /*= 0x0700 Controls the Timestamp update logic                         : only when IEEE 1588 time stamping is enabled in corekit            */
@@ -1660,7 +1661,7 @@ static uint64_t gmac_mem_readl(void *ptr, hwaddr addr, unsigned size)
 		val=s->mac.GmacGmiiData;
 		break;
 		case PHY_SGMI_RGMI_STATUS_REG:
-		val = 0xd;
+		val = s->mac.GmacRgmiiStatus;
 		break;
 		default:
 		if(addr<0xc0)
@@ -1904,6 +1905,9 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		break;
 		case GmacGmiiData:
 		break;
+		case PHY_SGMI_RGMI_STATUS_REG:
+		s->mac.GmacRgmiiStatus = val;
+		break;
 		default:
 		if(addr<0xc0)
 		{
@@ -2095,7 +2099,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	dma_memory_read(s->as,s->dma.Dma64RxCurrDesc,&desc,sizeof(desc));
 	if(desc.status&DescOwnByDma)
 	{
-	  //printf("desc.length=0x%x buffer1=0x%llx\n", desc.length, (long long)desc.buffer1);
+	  printf("desc.length=0x%x buffer1=0x%llx\n", desc.length, (long long)desc.buffer1);
 	  if(desc_rxlen(s, desc))
 	  {
 		  once=min(desc_rxlen(s, desc),size);
@@ -2142,7 +2146,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	if((desc.length&RxDisIntCompl)==0 || s->dma.DmaRxWatchdog)
 	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
 
-	//printf("size: %d\n", size_ - size);
+	printf("size: %d\n", size_ - size);
 	gmac_check_irq(s);
 	break;
 	}
@@ -2208,6 +2212,7 @@ static GMACState *gmac_new(GMACState *s,const char *model, const char *name)
 
     s->nic = qemu_new_nic(&net_gmac_info, &s->conf,model,name, s);
     qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
+    s->mac.GmacRgmiiStatus = 0xd;
 
 	return s;
 }
@@ -2310,6 +2315,7 @@ static int gmac_sysbus_init(SysBusDevice *dev)
 
     sysbus_init_irq(dev, &d->gmac.irq);
     sysbus_init_mmio(dev, &d->gmac.iomem);
+   	
 
     return 0;
 }
