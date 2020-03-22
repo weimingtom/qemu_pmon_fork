@@ -1090,6 +1090,40 @@ static void mips_ls2k_init(MachineState *machine)
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 	}
+#if 1
+{
+	DeviceState *dev;
+	SysBusDevice *s;
+	Object *obj;	
+	Error *err = NULL;
+
+
+	dev = qdev_create(NULL, "ls2k_can");
+	obj = object_new("can-bus");
+	object_property_add_child(object_get_objects_root(), "canbus0", obj, &err);
+	object_property_parse(OBJECT(dev), "canbus0", "canbus", &err);
+	s = SYS_BUS_DEVICE(dev);
+	qdev_init_nofail(dev);
+	sysbus_connect_irq(s, 0, ls2k_irq[16]);
+	sysbus_mmio_map(s, 0, 0x1fe00c00);
+}
+#endif
+{
+	DeviceState *dev;
+	SysBusDevice *s;
+	Object *obj;	
+	Error *err = NULL;
+
+
+	dev = qdev_create(NULL, "ls2k_can");
+	obj = object_new("can-bus");
+	object_property_add_child(object_get_objects_root(), "canbus1", obj, &err);
+	object_property_parse(OBJECT(dev), "canbus1", "canbus", &err);
+	s = SYS_BUS_DEVICE(dev);
+	qdev_init_nofail(dev);
+	sysbus_connect_irq(s, 0, ls2k_irq[17]);
+	sysbus_mmio_map(s, 0, 0x1fe00d00);
+}
 
 	{
         DeviceState *hpet = qdev_try_create(NULL, TYPE_HPET);
@@ -1507,6 +1541,7 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     /* set the pcihost pointer before bonito_initfn is called */
     //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS2K_Bonito");
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9, 0), true, "LS2K_Bonito");
+    qdev_set_id(DEVICE(d), g_strdup("pcie-9.0"));
 
     s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
     s->pcihost = pcihost;
@@ -1520,6 +1555,7 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     pci_bus[0] = bus2;
 
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(0xa, 0), true, "LS2K_Bonito");
+    qdev_set_id(DEVICE(d), g_strdup("pcie-10.0"));
 
     s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
     s->pcihost = pcihost;
