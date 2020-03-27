@@ -36,7 +36,31 @@
 #else
 #define dprintf(fs,...)
 #endif
-#define FLASH_SIZE 0x1000000
+#define FLASH_TYPE s->ftype
+#define FLASH_SIZE spiflashs[FLASH_TYPE].erasesize*spiflashs[FLASH_TYPE].nsector
+#define SECTOR_SIZE (spiflashs[FLASH_TYPE].sect4k?0x1000:spiflashs[FLASH_TYPE].erasesize)
+#define PAGE_SIZE 256
+#define FLASH_ID spiflashs[FLASH_TYPE].id
+
+#define INFO(jedec_id, _ext_id, _sector_size, _n_sectors, _flags) jedec_id, _sector_size, _n_sectors, _flags
+#define SECT_4K 1
+
+struct spiflash_info 
+{
+const char *name;
+unsigned int id;
+unsigned int erasesize;
+unsigned int nsector;
+unsigned int sect4k;
+} spiflashs[] = {
+	{ "gd25q128", INFO(0xc84018, 0, 64 * 1024, 256, SECT_4K) },
+	{ "m25p64",  INFO(0x202017,  0,  64 * 1024, 128, 0) },
+	{ "m25p128", INFO(0x202018,  0, 256 * 1024,  64, 0) },
+	{ "gd25q80", INFO(0xc84014, 0, 64 * 1024,  16,  SECT_4K) },
+	{ "gd25q32", INFO(0xc84016, 0, 64 * 1024,  64,  SECT_4K) },
+	{ "gd25q64", INFO(0xc84017, 0, 64 * 1024, 128, SECT_4K) },
+	{ "gd25q256", INFO(0xc84019, 0, 64 * 1024,  512,  SECT_4K) },
+};
 
 typedef enum {
 	SPI_FLASH_CMD,
@@ -85,6 +109,7 @@ typedef struct SPIFlashState {
 	MemoryRegion mem1;
 	uint64_t addr;
 	int isram;
+	int ftype;
 } SPIFlashState;
 
 static void program_page(SPIFlashState *s, int addr, unsigned char value, int count)
@@ -101,20 +126,20 @@ static void program_page(SPIFlashState *s, int addr, unsigned char value, int co
 
 static void sector_erase(SPIFlashState *s, int addr)
 {
-	unsigned char * buf = g_malloc0(0x10000);
-	memset(buf, -1, 0x10000);
-	int sec_addr = addr & 0xff0000;
-	memcpy(s->buf+sec_addr, buf, 0x10000);
+	unsigned char * buf = g_malloc0(SECTOR_SIZE);
+	memset(buf, -1, SECTOR_SIZE);
+	int sec_addr = (addr & (FLASH_SIZE - 1)) & ~(SECTOR_SIZE -1);
+	memcpy(s->buf+sec_addr, buf, SECTOR_SIZE);
 	if(s->blk)
-		blk_pwrite(s->blk, sec_addr, buf, 128<<BDRV_SECTOR_BITS, 0);
+		blk_pwrite(s->blk, sec_addr, buf, SECTOR_SIZE, 0);
 	g_free(buf);
 }
 
 static void bulk_erase(SPIFlashState *s)
 {
 	int sector;
-	for(sector = 0; sector <= 0x7f; sector++) {
-		sector_erase(s, sector << 16);
+	for(sector = 0; sector < FLASH_SIZE/SECTOR_SIZE; sector++) {
+		sector_erase(s, sector*SECTOR_SIZE);
 	}
 }
 
@@ -218,11 +243,11 @@ static uint32_t spi_flash_transfer(SSISlave *dev, uint32_t val)
 			state_count++;
 			switch(state_count) {
 				case 1:
-					return 0x20;
+					return (FLASH_ID>>16)&0xff;
 				case 2:
-					return 0x20;
+					return (FLASH_ID>>8)&0xff;
 				case 3:
-					return FLASH_SIZE==0x800000?0x17:0x18;
+					return (FLASH_ID)&0xff;
 				default:
 					s->mode = SPI_FLASH_CMD;
 					return 0xff;
@@ -335,6 +360,7 @@ static Property spi_flash_properties[] = {
     DEFINE_PROP_UINT64("addr", SPIFlashState, addr, 0),
     DEFINE_PROP_DRIVE("drive", SPIFlashState, blk),
     DEFINE_PROP_INT32("isram", SPIFlashState, isram, 0),
+    DEFINE_PROP_INT32("ftype", SPIFlashState, ftype, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
