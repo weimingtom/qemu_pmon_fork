@@ -59,7 +59,7 @@
 #include "hw/pci/pcie_port.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
-#include "loongson2k_rom.h"
+#include "loongson3a_rom.h"
 #include "hw/timer/hpet.h"
 extern target_ulong mypc;
 
@@ -709,12 +709,16 @@ static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 			break;
 		case CORE0_SET_OFF:
 			s->core[no].status |= val;
+            if (s->core[no].status != 0) {
 			qemu_irq_raise(s->core[no].irq);
+            }
 			break;
 		case CORE0_CLEAR_OFF:
 			//if((cpu->mem_io_vaddr&0xff)!=addr) break;
 			s->core[no].status ^= val;
+            if (s->core[no].status == 0) {
 			qemu_irq_lower(s->core[no].irq);
+            }
 			break;
 		case 0x20 ... 0x3c:
 			s->core[no].buf[(addr-0x20)/4] = val;
@@ -839,7 +843,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 	gipiState * gipis =g_malloc0(sizeof(gipiState));
 	gipi_iomem = g_new(MemoryRegion, 1);
-	memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x200);
+	memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x400);
 
 	/* init CPUs */
 
