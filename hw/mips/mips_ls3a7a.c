@@ -568,6 +568,10 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 return 0;
 }
 
+static uint64_t cpu_mips_kseg0_to_phys1(void *opaque, uint64_t addr)
+{
+    return (addr & 0x1fffffffll) + (unsigned long long)opaque;
+}
 
 static int64_t load_kernel(void)
 {
@@ -584,12 +588,18 @@ static int64_t load_kernel(void)
 	}
 	else
 	{
-	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
+	char *s;
+	unsigned long long offset;
+	s = getenv("LOADOFFSET");
+	offset = s?strtoull(s, 0, 0) : 0;
+	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys1, offset,
                            (uint64_t *)&entry, (uint64_t *)&kernel_low,
                            (uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
+	if (offset)
+	    entry = cpu_mips_kseg0_to_phys1(offset, entry) + 0x9800000000000000ULL;
     } else {
         fprintf(stderr, "qemu: could not load kernel '%s'\n",
                 loaderparams.kernel_filename);
@@ -640,6 +650,8 @@ static void main_cpu_reset(void *opaque)
 	env->active_tc.gpr[4]=loaderparams.a0;
 	env->active_tc.gpr[5]=loaderparams.a1;
 	env->active_tc.gpr[6]=loaderparams.a2;
+	if (env->active_tc.PC < 0xFFFFFFFF80000000ULL)
+		env->CP0_Status |= 0xe0;
 }
 
 static int uart_irqstatus = 0;
@@ -1150,6 +1162,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	SIMPLE_OPS(0x10010810,0x10);
 	SIMPLE_OPS(0x10010910,0x10);
 	SIMPLE_OPS(0x1fe00100,0x4);
+	SIMPLE_OPS(0xcfdfb000000,0x1000);
 
 
 	//mips_qemu_writel((void *)0xe0040000160, 0, 1<<24, 4);
