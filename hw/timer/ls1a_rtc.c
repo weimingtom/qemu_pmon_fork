@@ -137,8 +137,8 @@ static uint64_t ls1a_rtc_read(void *opaque, hwaddr offset, unsigned size)
 	((tm.tm_sec) << 4) | \
 	(((tm.tm_min)%60) << 10) | \
 	(((tm.tm_hour)%24) << 16) | \
-	(((tm.tm_mday-1) & 0x1f) << 21) | \
-	((tm.tm_mon & 0x3f) << 26);
+	(((tm.tm_mday) & 0x1f) << 21) | \
+	(((tm.tm_mon + 1) & 0x3f) << 26);
 	break;
     case TOYREAD1:
 	qemu_get_timedate(&tm, s->offset);
@@ -188,8 +188,8 @@ static void ls1a_rtc_write(void *opaque, hwaddr offset, uint64_t val, unsigned s
 	tm.tm_sec = (val>>4)&0x3f;
 	tm.tm_min = (val>>10)&0x3f;
 	tm.tm_hour = (val >> 16)&0x1f;
-	tm.tm_mday = ((val>>21) & 0x1f)+1;
-	tm.tm_mon  = (val>>26) & 0x3f;
+	tm.tm_mday = ((val>>21) & 0x1f);
+	tm.tm_mon  = ((val>>26) & 0x3f) - 1;
 
         s->offset = qemu_timedate_diff(&tm);
         break;
