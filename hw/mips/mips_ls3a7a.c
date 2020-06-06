@@ -672,12 +672,12 @@ static void ls3auartpci_set_irq(void *opaque, int irq, int level)
 
 static void ls7auart_set_irq(void *opaque, int irq, int level)
 {
-	qemu_irq  ls3airq = opaque;
-	static int uart_irqstatus = 0;
-	if(level) uart_irqstatus |= 1<<irq;
-	else uart_irqstatus &= ~(1<<irq);
+	qemu_irq  ls7airq = opaque;
+	static int ls7auart_irqstatus = 0;
+	if(level) ls7auart_irqstatus |= 1<<irq;
+	else ls7auart_irqstatus &= ~(1<<irq);
 
-	qemu_set_irq(ls3airq, !!uart_irqstatus);
+	qemu_set_irq(ls7airq, !!ls7auart_irqstatus);
 }
 
 #define MAX_CPUS 4
@@ -1231,86 +1231,119 @@ static int pci_ls3a7a_map_irq(PCIDevice *d, int pin)
 {
 	int dev=(d->devfn>>3)&0x1f;
 	int fn=d->devfn& 7;
+	int irq;
 
 	if(pci_get_bus(d) != ls3a7a_pci_bus)
 		return pin;
 
-	  switch(dev)
-	  {
+	switch(dev)
+	{
+		default:
 		case 2:
 		/*APB 2*/
+		irq = 0;
 		break;
 
 		case 3:
 		/*GMAC0 3 0*/
 		/*GMAC1 3 1*/
-		return (fn==0)?12:14;
+		irq = (fn == 0) ? 12 : 14;
+		break;
 
 		case 4:
-		/*
-		OHCI: 4 0
-		EHCI: 4 1
-		*/
-		 return (fn == 0)? 49:48;
+		/* ohci:4 0 */
+		/* ehci:4 1 */
+		irq = (fn == 0) ? 49 : 48;
 		break;
 
 		case 5:
-		/*GPU*/
-		 return 29;
+		/* ohci:5 0 */
+		/* ehci:5 1 */
+		irq = (fn == 0) ? 51 : 50;
 		break;
 
 		case 6:
-		/*DC*/
-		 return 28;
+		/* DC: 6 1 28 */
+		/* GPU:6 0 29 */
+		irq = (fn == 0) ? 29 : 28;
 		break;
 
 		case 7:
-		/*HDA*/
-		 return 4;
+		/*HDA: 7 0 58 */
+		irq = 58;
 		break;
 
 		case 8:
-		/*SATA*/
-		 return (fn == 0)?16:(fn == 1)?17:18;
+		/* sata */
+		if (fn == 0)
+			irq = 16;
+		if (fn == 1)
+			irq = 17;
+		if (fn == 2)
+			irq = 18;
 		break;
 
 		case 9:
-		/*PCIE PORT 0*/
-		 return 32;;
+		/* pcie_f0 port0 */
+		irq = 32;
 		break;
 
 		case 10:
-		/*PCIE PORT 1*/
-		 return 33;
+		/* pcie_f0 port1 */
+		irq = 33;
 		break;
 
 		case 11:
-		/*PCIE PORT 2*/
-		 return 34;
+		/* pcie_f0 port2 */
+		irq = 34;
 		break;
 
 		case 12:
-		 return 35;
-		/*PCIE PORT 3*/
+		/* pcie_f0 port3 */
+		irq = 35;
 		break;
 
 		case 13:
-		 return 36;
-		/*PCIE1 PORT 0*/
+		/* pcie_f1 port0 */
+		irq = 36;
 		break;
 
 		case 14:
-		/*PCIE1 PORT 1*/
-		 return 37;
+		/* pcie_f1 port1 */
+		irq = 37;
 		break;
 
 		case 15:
-		/*DMA*/
+		/* pcie_g0 port0 */
+		irq = 40;
 		break;
 
-	  }
-	
-	return  0;
+		case 16:
+		/* pcie_g0 port1 */
+		irq = 41;
+		break;
+
+		case 17:
+		/* pcie_g1 port0 */
+		irq = 42;
+		break;
+
+		case 18:
+		/* pcie_g1 port1 */
+		irq = 43;
+		break;
+
+		case 19:
+		/* pcie_h port0 */
+		irq = 38;
+		break;
+
+		case 20:
+		/* pcie_h port1 */
+		irq = 39;
+		break;
+	}
+	return irq;
 }
 
 static void pci_ls3a7a_set_irq(void *opaque, int irq_num, int level)
