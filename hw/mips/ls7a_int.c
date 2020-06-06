@@ -1,3 +1,4 @@
+#include "ls7a_int.h"
 //#define DEBUG_IRQ
 
 #ifdef DEBUG_IRQ
@@ -6,26 +7,6 @@
 #else
 #define DPRINTF(fmt, args...)
 #endif
-
-typedef struct GS232_INTCTLState {
-	uint64_t baseaddr;
-	uint64_t int_pol;
-	uint64_t int_mask;
-	uint64_t htmsi_en;
-	uint64_t int_edge;
-	uint64_t int_pending;
-	uint64_t soft_int;
-	uint64_t int_auto_ctrl0;
-	uint64_t int_auto_ctrl1;
-	uint64_t intreg_pending;
-	char irqroute[64];
-	char msiroute[64];
-#ifdef DEBUG_IRQ_COUNT
-	uint64_t irq_count[32];
-#endif
-	qemu_irq cpu_irq;
-	uint64_t pil_out;
-} GS232_INTCTLState;
 
 #define INTCTL_SIZE 0x400
 #define INTCTLM_MAXADDR 0x13
@@ -43,7 +24,7 @@ static void ls7a_check_interrupts(void *opaque);
 // per-cpu interrupt controller
 static uint64_t ls7a_intctl_mem_readl(void *opaque, hwaddr addr, unsigned size)
 {
-	GS232_INTCTLState *s = opaque;
+	LS7A_INTCTLState *s = opaque;
 	uint64_t ret = 0, val = 0;
 
 	switch (addr) {
@@ -98,18 +79,18 @@ static uint64_t ls7a_intctl_mem_readl(void *opaque, hwaddr addr, unsigned size)
 			ret = 0;
 			break;
 	}
-	DPRINTF("read cpu %d reg 0x" TARGET_FMT_plx " = %x\n", cpu, addr, ret);
+	DPRINTF("read reg 0x" TARGET_FMT_plx " = %lx\n", addr, ret);
 
 	return ret;
 }
 
 static void ls7a_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
-	GS232_INTCTLState *s = opaque;
-	uint32_t saddr;
+	LS7A_INTCTLState *s = opaque;
+	//uint32_t saddr;
 	int i, j;
 
-	//printf("write reg 0x" TARGET_FMT_plx " %x= %x\n", addr, saddr, (unsigned int)val);
+	DPRINTF("write reg 0x" TARGET_FMT_plx " = %x\n", addr, (unsigned int)val);
 	switch (addr) {
 		case 0x20 ... 0x27:
 			memcpy(((char *)&s->int_mask)+(addr-0x20), &val, size);
@@ -123,6 +104,7 @@ static void ls7a_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 		case 0x80 ... 0x87: //int_clr
 			for(i=addr - 0x80, j = 0;j<size;i++, j++)
 				((char *)&s->int_mask)[i] &= ~((char *)&val)[j];
+	                ls7a_check_interrupts(s);
 			break;
 		case 0xa0 ... 0xa7:
 			memcpy(((char *)&s->soft_int)+(addr-0xa0), &val, size);
@@ -135,9 +117,18 @@ static void ls7a_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 			break;
 		case 0x100 ... 0x13f:
 			memcpy(s->irqroute+addr-0x100, &val, size);
+			if (val == 1)
+				s->route_int[0] |= 1ULL<<(addr-0x100); 
+			else if(val == 2)
+				s->route_int[1] |= 1ULL<<(addr-0x100); 
+			else {
+				s->route_int[0] &= ~(1ULL<<(addr-0x100)); 
+				s->route_int[1] &= ~(1ULL<<(addr-0x100)); 
+			}
 			break;
 		case 0x200 ... 0x23f:
-			memcpy(s->msiroute+addr-0x200, &val, size);
+			j = addr-0x200;
+			memcpy(s->msiroute + j, &val, size);
 			break;
 		case 0x300 ... 0x30f: //intn0 isr
 			break;
@@ -163,11 +154,9 @@ static const MemoryRegionOps ls7a_intctl_mem_ops = {
 
 static void ls7a_check_interrupts(void *opaque)
 {
-	GS232_INTCTLState *s = opaque;
+	LS7A_INTCTLState *s = opaque;
 	uint64_t pil_pending;
 	pil_pending = s->intreg_pending & ~s->int_mask;
-	
-
 
 	if (pil_pending) {
 		qemu_irq_raise(s->cpu_irq);
@@ -185,11 +174,10 @@ static void ls7a_check_interrupts(void *opaque)
  */
 static void ls7a_set_irq(void *opaque, int irq, int level)
 {
-	GS232_INTCTLState *s = opaque;
+	LS7A_INTCTLState *s = opaque;
 	uint64_t mask = 1ULL << irq;
 
-	DPRINTF("Set cpu %d irq %d level %d\n", s->target_cpu, irq,
-			level);
+	DPRINTF("Set irq %d level %d\n", irq, level);
 	if (level) {
 		s->intreg_pending |= mask;
 	} else {
@@ -202,19 +190,18 @@ static void ls7a_set_irq(void *opaque, int irq, int level)
 
 static void ls7a_intctl_reset(void *opaque)
 {
-	GS232_INTCTLState *s = opaque;
+	LS7A_INTCTLState *s = opaque;
 
 	s->intreg_pending = 0;
 	ls7a_check_interrupts(s);
 }
 
 
-static void *ls7a_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq)
+static LS7A_INTCTLState *ls7a_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq)
 {
-	qemu_irq *irqs;
-	GS232_INTCTLState *s;
+	LS7A_INTCTLState *s;
 
-	s = g_malloc0(sizeof(GS232_INTCTLState));
+	s = g_malloc0(sizeof(LS7A_INTCTLState));
 	if (!s)
 		return NULL;
 
@@ -228,8 +215,8 @@ static void *ls7a_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq
 	s->baseaddr=addr;
 
 	qemu_register_reset(ls7a_intctl_reset, s);
-	irqs = qemu_allocate_irqs(ls7a_set_irq, s, 64);
+	s->irqs = qemu_allocate_irqs(ls7a_set_irq, s, 64);
 
 	ls7a_intctl_reset(s);
-	return irqs;
+	return s;
 }

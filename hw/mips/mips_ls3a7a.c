@@ -61,6 +61,9 @@
 #include <stdlib.h>
 #include "loongson3a_rom.h"
 #include "hw/timer/hpet.h"
+#include "ls7a_int.h"
+
+static LS7A_INTCTLState *ls7a;
 extern target_ulong mypc;
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
@@ -250,6 +253,14 @@ if(((opcode & 0xffe00000) == OP_MTC0) || ((opcode & 0xffe00000) == OP_DMTC0))
                 memory_region_add_subregion_overlap(address_space_mem, ADDR, iomem, 1);\
 		iomem;\
 	})
+
+#define ALIAS_REGION(ADDR,SIZE,ALIAS) \
+({\
+    MemoryRegion *alias_mr = g_new(MemoryRegion, 1); \
+    memory_region_init_alias(alias_mr, NULL, NULL, address_space_mem, ADDR, SIZE); \
+    memory_region_add_subregion(address_space_mem, ALIAS, alias_mr); \
+})
+
 
 #define CONFBASE 0xc0000000
 #define GPUBASE 0xd0000000
@@ -819,11 +830,6 @@ static int godson_ipi_init(qemu_irq parent_irq , unsigned long index, gipiState 
 }
 
 
-
-
-
-static void *ls7a_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq parent_irq);
-
 static const int sector_len = 32 * 1024;
 
 static PCIBus **pcibus_ls3a7a_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1);
@@ -846,6 +852,8 @@ static void mips_ls3a7a_do_unassigned_access(CPUState *cpu, hwaddr addr,
 struct hpet_fw_config hpet_cfg = {.count = UINT8_MAX};
 
 static DriveInfo *flash_dinfo=NULL;
+static unsigned long *cpu_irqset_bitmap; 
+static unsigned long *cpu_irqclr_bitmap; 
 static void ht_set_irq(void *opaque, int irq, int level);
 static qemu_irq *ls3a_intctl_init(MemoryRegion *iomem_root, CPUMIPSState *env[]);
 static void mips_ls3a7a_init(MachineState *machine)
@@ -982,7 +990,11 @@ static void mips_ls3a7a_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0x10000000ULL, ht_irq[0]);
+	cpu_irqset_bitmap = bitmap_new(smp_cpus*8);
+	cpu_irqclr_bitmap = bitmap_new(smp_cpus*8);
+	ls7a	=ls7a_intctl_init(address_space_mem, 0x10000000ULL, ht_irq[0]);
+	ls3a7a_irq = ls7a->irqs;
+	ALIAS_REGION(0x10000000ULL, 0x10000000ULL, 0xe0010000000UL);
 
 	ls3auartpci_irq = qemu_allocate_irqs(ls3auartpci_set_irq, env, 3);
 	ls7auart_irq = qemu_allocate_irqs(ls7auart_set_irq, ls3a7a_irq[8], 4);
@@ -2090,6 +2102,13 @@ static void ls3a_intctl_mem_writel(void *opaque, hwaddr addr, uint32_t val)
 		
 	}
 	break;
+	case INT_ROUTER_REGS_BASE + IO_CONTROL_REGS_INTENSET:
+	*(uint32_t *)(a->mem + IO_CONTROL_REGS_INTEN) |= val;
+	break;
+	case INT_ROUTER_REGS_BASE + IO_CONTROL_REGS_INTENCLR:
+	*(uint32_t *)(a->mem + IO_CONTROL_REGS_INTEN) &= ~val;
+	break;
+
 	case HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG0 ... HT_CONTROL_REGS_BASE+HT_IRQ_VECTOR_REG7:
 	*(uint32_t *)(a->mem + addr) &= ~val;
 	ht_update_irq(s,0);
@@ -2123,36 +2142,91 @@ static const MemoryRegionOps ls3a_intctl_ops = {
 		.endianness = DEVICE_NATIVE_ENDIAN,
 };
 
+static cpu_irqs[4][8];
+
+int ls_raise_cpuirq(LS3a_INTCTLState *s, int introute, uint64_t isr, uint64_t ier, int disable)
+{
+
+	uint32_t core,irq_nr;
+	core = introute&0xf;
+	irq_nr = ((introute>>4)&0xf);
+
+	//printf("ht_update_irq%d core:%d irq_nr:%d disable %d\n", i, core, irq_nr, disable);
+
+	if(core>0 && irq_nr>0)
+	{
+		if(isr&ier && !disable)
+			set_bit((ffs(core)-1)*8 + ffs(irq_nr)+1, cpu_irqset_bitmap);
+		else
+			set_bit((ffs(core)-1)*8 + ffs(irq_nr)+1, cpu_irqclr_bitmap);
+	}
+}
+
+int ls_process_cpuirq(LS3a_INTCTLState *s)
+{
+	int bit;
+	while (1) {
+		bit = find_first_bit(cpu_irqset_bitmap, smp_cpus * 8);
+		if (bit == smp_cpus * 8)
+			break;
+		qemu_irq_raise(s->env[bit/8]->irq[bit%8]);
+		clear_bit(bit, cpu_irqset_bitmap);
+		clear_bit(bit, cpu_irqclr_bitmap);
+	}
+	while (1) {
+		bit = find_first_bit(cpu_irqclr_bitmap, smp_cpus * 8);
+		if (bit == smp_cpus * 8)
+			break;
+		qemu_irq_lower(s->env[bit/8]->irq[bit%8]);
+		clear_bit(bit, cpu_irqclr_bitmap);
+	}
+
+}
 
 static void ht_update_irq(void *opaque,int disable)
 {
 	LS3a_INTCTLState *s = opaque;
 	uint64_t isr,ier;
 	uint32_t irtr,core,irq_nr;
-	isr = *(uint64_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG2);
-	ier = *(uint64_t *)(s->ht_irq_reg+HT_IRQ_ENABLE_REG2);
+	int i;
+	isr = ls7a->intreg_pending & ~ls7a->int_mask;
+	ier = (*(uint32_t *)(s->int_route_reg + IO_CONTROL_REGS_INTEN) & 1)?ls7a->route_int[0] :0;
+	irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_SYS_INT0);
+	ls_raise_cpuirq(s, irtr, isr, ier, disable);
 
-	irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT2);
-	
-	core = irtr&0xf;
-	irq_nr = ((irtr>>4)&0xf);
+	ier = (*(uint32_t *)(s->int_route_reg + IO_CONTROL_REGS_INTEN) & 2)?ls7a->route_int[1] :0;
+	irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_SYS_INT1);
+	ls_raise_cpuirq(s, irtr, isr, ier, disable);
 
-	if(core>0 && irq_nr>0)
+	for (i = 0; i < 8; i++)
+		ls7a->msiroute_ht[i] = 0;
+
+	for(i=0;i<64;i++)
 	{
-	if(isr&ier && !disable)
-		qemu_irq_raise(s->env[ffs(core)-1]->irq[ffs(irq_nr)+1]);
-	else
-		qemu_irq_lower(s->env[ffs(core)-1]->irq[ffs(irq_nr)+1]);
+		if (isr & ls7a->htmsi_en & (1ULL<<i)) {
+		unsigned char t;
+		t = ls7a->msiroute[i];
+		ls7a->msiroute_ht[t/32] |= 1<<(t%32);
+		}
 	}
+
+	//*(uint64_t *) s->ht_irq_reg + 0x58
+	for (i =0;i < 8; i++) {
+		*(uint32_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG0 + i*4) = ls7a->msiroute_ht[i]; 
+		ier = *(uint32_t *)(s->ht_irq_reg+HT_IRQ_ENABLE_REG0 + i *4);
+		irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT0 + (i/2)*4);
+		isr = ls7a->msiroute_ht[i];
+
+		ls_raise_cpuirq(s, irtr, isr, ier, disable);
+	}
+
+	ls_process_cpuirq(s);
 }
 
 static void ht_set_irq(void *opaque, int irq, int level)
 {
 	LS3a_INTCTLState *s = opaque;
 	uint64_t isr;
-	address_space_read(&address_space_memory, 0x100003a0, MEMTXATTRS_UNSPECIFIED, &isr, 8);
-	*(uint64_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG2) = isr; 
-	//printf("ht_set_irq %d %d 0x%llx\n", irq, level, (long long)isr);
 
 	ht_update_irq(opaque,0);
 }
