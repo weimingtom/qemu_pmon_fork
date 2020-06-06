@@ -655,13 +655,29 @@ static void main_cpu_reset(void *opaque)
 }
 
 static int uart_irqstatus = 0;
-static void ls3auart_set_irq(void *opaque, int irq, int level)
+static int pci_irqstatus = 0;
+static void ls3auartpci_set_irq(void *opaque, int irq, int level)
 {
 	CPUMIPSState *env = opaque;
+	if (irq < 2) {
+	if(level) uart_irqstatus |= 1<<irq;
+	else uart_irqstatus &= ~(1<<irq);
+	} else {
+	if(level) pci_irqstatus |= 1<<(irq - 2);
+	else pci_irqstatus &= ~(1<<(irq - 2));
+	}
+	qemu_set_irq(env->irq[2],(!!uart_irqstatus) | (!!pci_irqstatus));
+
+}
+
+static void ls7auart_set_irq(void *opaque, int irq, int level)
+{
+	qemu_irq  ls3airq = opaque;
+	static int uart_irqstatus = 0;
 	if(level) uart_irqstatus |= 1<<irq;
 	else uart_irqstatus &= ~(1<<irq);
 
-	qemu_set_irq(env->irq[2],!!uart_irqstatus);
+	qemu_set_irq(ls3airq, !!uart_irqstatus);
 }
 
 #define MAX_CPUS 4
@@ -846,7 +862,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	MIPSCPU *cpu;
 	CPUMIPSState *env;
 	ResetData *reset_info[2];
-	qemu_irq *ht_irq, *ls3auart_irq;
+	qemu_irq *ht_irq, *ls3auartpci_irq, *ls7auart_irq;
 	PCIBus **pci_bus;
 	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
@@ -968,24 +984,29 @@ static void mips_ls3a7a_init(MachineState *machine)
 	//isa_mem_base = 0x10000000;
 	ls3a7a_irq =ls7a_intctl_init(address_space_mem, 0x10000000ULL, ht_irq[0]);
 
-	ls3auart_irq = qemu_allocate_irqs(ls3auart_set_irq, env, 2);
+	ls3auartpci_irq = qemu_allocate_irqs(ls3auartpci_set_irq, env, 3);
+	ls7auart_irq = qemu_allocate_irqs(ls7auart_set_irq, ls3a7a_irq[8], 4);
+
+    	pci_bus = bonito_init(ls3auartpci_irq[2]);
+    	pci_create_simple(pci_bus, PCI_DEVFN(2, 0), "e1000e");
+
 	if (serial_hd(0))
-		serial_mm_init(address_space_mem, 0x1fe001e0, 0,ls3auart_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe001e0, 0,ls3auartpci_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(1))
-		serial_mm_init(address_space_mem, 0x1fe001e8, 0,ls3auart_irq[1] ,115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1fe001e8, 0,ls3auartpci_irq[1] ,115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(2))
-		serial_mm_init(address_space_mem, 0x10080000, 0,ls3a7a_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080000, 0,ls7auart_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(3))
-		serial_mm_init(address_space_mem, 0x10080100, 0,ls3a7a_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080100, 0,ls7auart_irq[1],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(4))
-		serial_mm_init(address_space_mem, 0x10080200, 0,ls3a7a_irq[0],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080200, 0,ls7auart_irq[2],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(5))
-		serial_mm_init(address_space_mem, 0x10080300, 0,ls3a7a_irq[0],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x10080300, 0,ls7auart_irq[3],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
 
 	{
 		DeviceState *dev,*dev1;
@@ -1962,7 +1983,7 @@ static uint32_t ls3a_intctl_mem_readl(void *opaque, hwaddr addr)
 		//address_space_read(&address_space_memory, 0x100003a4, MEMTXATTRS_UNSPECIFIED, &ret, 4);
 	break;
 	case INT_ROUTER_REGS_BASE + IO_CONTROL_REGS_CORE0_INTISR:
-	ret = 0x0f000000|((!!uart_irqstatus)<<10);
+	ret = 0x0f000000|((!!uart_irqstatus)<<10)|(pci_irqstatus << 4);
 	break;
 	default:
 	ret=*(uint32_t *)(a->mem+addr);
