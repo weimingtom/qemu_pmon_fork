@@ -641,7 +641,7 @@ static const MemoryRegionOps bonito_spciconf_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-#define BONITO_IRQ_BASE 32
+#define BONITO_IRQ_BASE 0
 
 static void pci_bonito_set_irq(void *opaque, int irq_num, int level)
 {
@@ -653,11 +653,7 @@ static void pci_bonito_set_irq(void *opaque, int irq_num, int level)
     if (bonito_state->regs[BONITO_INTEDGE] & (1 << internal_irq)) {
         qemu_irq_pulse(*pic);
     } else {   /* level triggered */
-        if (bonito_state->regs[BONITO_INTPOL] & (1 << internal_irq)) {
-            qemu_irq_raise(*pic);
-        } else {
-            qemu_irq_lower(*pic);
-        }
+	qemu_set_irq(*pic, (bonito_state->regs[BONITO_INTPOL] & (1 << internal_irq))? level : !level);
     }
 }
 

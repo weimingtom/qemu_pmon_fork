@@ -994,13 +994,26 @@ static void mips_ls3a7a_init(MachineState *machine)
 	cpu_irqclr_bitmap = bitmap_new(smp_cpus*8);
 	ls7a	=ls7a_intctl_init(address_space_mem, 0x10000000ULL, ht_irq[0]);
 	ls3a7a_irq = ls7a->irqs;
-	ALIAS_REGION(0x10000000ULL, 0x10000000ULL, 0xe0010000000UL);
+	//ALIAS_REGION(0x10000000ULL, 0x10000000ULL, 0xe0010000000UL);
 
 	ls3auartpci_irq = qemu_allocate_irqs(ls3auartpci_set_irq, env, 3);
 	ls7auart_irq = qemu_allocate_irqs(ls7auart_set_irq, ls3a7a_irq[8], 4);
 
-    	pci_bus = bonito_init(ls3auartpci_irq[2]);
-    	pci_create_simple(pci_bus, PCI_DEVFN(2, 0), "e1000e");
+    	pci_bus = bonito_init(&ls3auartpci_irq[2]);
+	i = -1;
+	address_space_write(&address_space_memory, 0x1fe0012c, MEMTXATTRS_UNSPECIFIED, &i, 4);
+	{
+
+	PCIDevice *pci_dev = pci_create_multifunction(pci_bus,  PCI_DEVFN(2, 0), false, "e1000e");
+	DeviceState *dev = DEVICE(pci_dev);
+	if(nd_table[3].used)
+		qdev_set_nic_properties(dev, &nd_table[3]);
+	DeviceClass *dc = DEVICE_GET_CLASS(dev);
+	PCIDeviceClass *k = PCI_DEVICE_CLASS(DEVICE_CLASS(dc));
+	k->romfile = NULL;
+	dc->vmsd = NULL;
+	qdev_init_nofail(dev);
+	}
 
 	if (serial_hd(0))
 		serial_mm_init(address_space_mem, 0x1fe001e0, 0,ls3auartpci_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
