@@ -38,6 +38,13 @@
 #include "trace-tcg.h"
 #include "exec/translator.h"
 #include "exec/log.h"
+extern int debug_st;
+#if TARGET_LONG_BITS == 32
+#define tcg_gen_qemu_st_tl(t1, t0, mem_idx, flags)  do {tcg_gen_qemu_st_i32(t1, t0, mem_idx, flags); if (debug_st) {TCGv_i32 mt0 = tcg_const_i32(mem_idx); gen_helper_myst(t1, t0, mt0, cpu_env); tcg_temp_free_i32(mt0);}} while(0)
+#else
+#define tcg_gen_qemu_st_tl(t1, t0, mem_idx, flags)  do {tcg_gen_qemu_st_i64(t1, t0, mem_idx, flags); if (debug_st) {TCGv_i32 mt0 = tcg_const_i32(mem_idx);  gen_helper_myst(t1, t0, mt0, cpu_env);  tcg_temp_free_i32(mt0);}} while(0)
+#endif
+
 
 #define MIPS_DEBUG_DISAS 1
 
