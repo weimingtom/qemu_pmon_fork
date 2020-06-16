@@ -31,12 +31,36 @@ target_ulong mypc, mypc0;
 target_ulong mypcs[MAX_CPUS];
 void (*mypc_callback)( target_ulong pc, uint32_t opcode);
 int debug_st;
+int debug_mypc;
+static int debug_tlb;
 static void debug_st_types(void)
 {
-	if(getenv("DEBUG_ST")) debug_st = 1;
+	if(getenv("DEBUG_ST")) {
+	debug_st = 1;
+	debug_mypc = 1;
+	}
 }
 
 trace_init(debug_st_types)
+
+static void debug_tlb_types(void)
+{
+	if(getenv("DEBUG_TLB")) {
+		debug_tlb = 1;
+		debug_mypc = 1;
+	}
+}
+
+trace_init(debug_tlb_types)
+
+static void debug_mypc_types(void)
+{
+	if(getenv("DEBUG_MYPC")) debug_mypc = 1;
+}
+
+trace_init(debug_mypc_types)
+
+
 void helper_mypc( target_ulong pc, uint32_t opcode)
 {
 mypc0 = mypc;
@@ -2096,8 +2120,8 @@ static void r4k_fill_tlb(CPUMIPSState *env, int idx)
     tlb->XI1 = (env->CP0_EntryLo1 >> CP0EnLo_XI) & 1;
     tlb->RI1 = (env->CP0_EntryLo1 >> CP0EnLo_RI) & 1;
     tlb->PFN[1] = (get_tlb_pfn_from_entrylo(env->CP0_EntryLo1) & ~mask) << 12;
-
-    printf("vaddr 0x%llx lo0 0x%llx lo1 0x%llx at 0x%llx, D0 0x%x D1 0x%x C0 0x%x C1 0x%x V0 0x%x V1 0x%x ra 0x%llx ebase "  TARGET_FMT_lx  "\n", (long long)env->CP0_EntryHi&~0x1fffULL,(env->CP0_EntryLo0&~0x3fULL)<<6, (env->CP0_EntryLo1&~0x3fULL)<<6, (unsigned long long)mypc, tlb->D0, tlb->D1, tlb->C0, tlb->C1, tlb->V0, tlb->V1, env->active_tc.gpr[31], env->CP0_EBase);
+    if(debug_tlb)
+	    printf("vaddr 0x%llx lo0 0x%llx lo1 0x%llx at 0x%llx, D0 0x%x D1 0x%x C0 0x%x C1 0x%x V0 0x%x V1 0x%x ra 0x%llx ebase "  TARGET_FMT_lx  "\n", (long long)env->CP0_EntryHi&~0x1fffULL,(env->CP0_EntryLo0&~0x3fULL)<<6, (env->CP0_EntryLo1&~0x3fULL)<<6, (unsigned long long)mypc, tlb->D0, tlb->D1, tlb->C0, tlb->C1, tlb->V0, tlb->V1, env->active_tc.gpr[31], env->CP0_EBase);
 }
 
 void r4k_helper_tlbinv(CPUMIPSState *env)

@@ -20001,6 +20001,7 @@ static void gen_msa(CPUMIPSState *env, DisasContext *ctx)
 
 }
 
+extern int debug_mypc;
 static void decode_opc(CPUMIPSState *env, DisasContext *ctx)
 {
     int32_t offset;
@@ -20031,6 +20032,7 @@ static void decode_opc(CPUMIPSState *env, DisasContext *ctx)
     rd = (ctx->opcode >> 11) & 0x1f;
     sa = (ctx->opcode >> 6) & 0x1f;
     imm = (int16_t)ctx->opcode;
+    if (debug_mypc)
     gen_helper_2i(mypc, ctx->base.pc_next, ctx->opcode);
     switch (op) {
     case OPC_SPECIAL:
