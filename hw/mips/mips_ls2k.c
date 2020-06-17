@@ -71,6 +71,13 @@ extern target_ulong mypc;
 #define MAX_IDE_BUS 2
 #define TARGET_REALPAGE_MASK (TARGET_PAGE_MASK<<2)
 
+#define ALIAS_REGION_FROM_RAS_TO_RA(REGIONA,ADDR,SIZE,REGIONB,ALIAS) \
+({\
+    MemoryRegion *alias_mr = g_new(MemoryRegion, 1); \
+    memory_region_init_alias(alias_mr, NULL, NULL, REGIONA, ADDR, SIZE); \
+    memory_region_add_subregion(REGIONB, ALIAS, alias_mr); \
+})
+
 static const int ide_iobase[2] = { 0x1f0, 0x170 };
 static const int ide_iobase2[2] = { 0x3f6, 0x376 };
 static const int ide_irq[2] = { 14, 15 };
@@ -975,6 +982,12 @@ static void mips_ls2k_init(MachineState *machine)
 	if (serial_hd(3))
 		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls2k_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
 
+	if (serial_hd(4))
+		serial_mm_init(address_space_mem, 0x1fe00400, 0,ls2k_irq[1],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
+
+	if (serial_hd(5))
+		serial_mm_init(address_space_mem, 0x1fe00500, 0,ls2k_irq[1],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
+
 
 
 
@@ -1687,6 +1700,8 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     memory_region_add_subregion(get_system_memory(), 0x18000000UL, &pcihost->iomem_io);
 
 //pci-synopgmac
+
+    ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, 0x80000000, &pcihost->iomem_mem, 0x80000000);
 
     memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
     if (ram2)
