@@ -537,7 +537,7 @@ static void raise_mmu_exception(CPUMIPSState *env, target_ulong address,
     {
 	    extern target_ulong mypc;
 	    env->active_tc.PC = mypc;
-	    do_raise_exception(env, EXCP_DEBUG, mypc);
+	    do_raise_exception(env, EXCP_DEBUG, GETPC());
     }
 }
 
