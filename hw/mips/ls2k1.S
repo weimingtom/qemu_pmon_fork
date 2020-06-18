@@ -87,15 +87,8 @@ waitforinit:
  nop
 1:
 	
- dli      t1, 0xffffffff00000000 
- 
- or       v0, t1
- dli      t1, 0x9800000000000000 
- 
  ld      sp, SP_OFF(t0)
- or      sp, t1
  ld      gp, GP_OFF(t0)
- or      gp, t1
  ld      a1, A1_OFF(t0)
  jalr    v0  #byebye 
  nop
