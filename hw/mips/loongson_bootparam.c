@@ -350,6 +350,7 @@ struct efi_cpuinfo_loongson *init_cpu_info(void *g_cpuinfo_loongson)
   c->total_node = 1;
   c->nr_cpus = smp_cpus;
   c->cpu_startup_core_id = 0;
+  c->reserved_cores_mask = 0xffff ^ ((1<<smp_cpus) - 1);
 
 return c;
 }
