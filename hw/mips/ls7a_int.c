@@ -58,11 +58,11 @@ static uint64_t ls7a_intctl_mem_readl(void *opaque, hwaddr addr, unsigned size)
 			memcpy(&ret, s->msiroute+addr-0x200, size);
 			break;
 		case 0x300 ... 0x30f: //intn0 isr
-			val = s->intreg_pending & ~s->int_mask;
+			val = s->intreg_pending & ~s->int_mask & s->route_int[0];
 			memcpy(&ret, (char *)&val+(addr-0x300), size);
 			break;
 		case 0x320 ... 0x32f: //intn1 isr
-			val  = s->intreg_pending & ~s->int_mask;
+			val  = s->intreg_pending & ~s->int_mask & s->route_int[1];
 			memcpy(&ret, (char *)&val+(addr-0x320), size);
 			break;
 		case 0x380 ... 0x38f:
