@@ -1048,6 +1048,18 @@ static void mips_ls2k_init(MachineState *machine)
 		//else dev1 = ssi_create_slave(bus, "ssi-sd");
 	}
 
+	{
+    hwaddr flash_base   = 0x1c000000;
+    size_t flash_sector_size        = 256 * KiB;
+    size_t flash_size               = 32 * MiB;
+    DriveInfo *dinfo = drive_get(IF_PFLASH, 0, 1);
+    /* Spansion S29NS128P */
+    pflash_cfi02_register(flash_base, NULL, "lioflash", flash_size,
+                          dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
+                          flash_sector_size, flash_size / flash_sector_size,
+                          1, 2, 0x89, 0x227e, 0x2248, 0x2201, 0x555, 0x2aa, 0);
+	}
+
 
 
 #if 0
