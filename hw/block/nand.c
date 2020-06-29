@@ -192,6 +192,7 @@ static const struct {
     [0xdc] = { 512,	8,	0, 0, LP_OPTIONS },
     [0xbc] = { 512,	16,	0, 0, LP_OPTIONS16 },
     [0xcc] = { 512,	16,	0, 0, LP_OPTIONS16 },
+    [0xb4] = { 512,	8,	12, 6, LP_OPTIONS, 128 },
 
     /* 8 Gigabit */
     [0xa3] = { 1024,	8,	0, 0, LP_OPTIONS },
@@ -401,8 +402,8 @@ static void nand_realize(DeviceState *dev, Error **errp)
     s->buswidth = nand_flash_ids[s->chip_id].width >> 3;
     s->size = nand_flash_ids[s->chip_id].size << 20;
     if (nand_flash_ids[s->chip_id].options & NAND_SAMSUNG_LP) {
-        s->page_shift = 11;
-        s->erase_shift = 6;
+        s->page_shift = nand_flash_ids[s->chip_id].page_shift?:11;
+        s->erase_shift = nand_flash_ids[s->chip_id].erase_shift?:6;
     } else {
         s->page_shift = nand_flash_ids[s->chip_id].page_shift;
         s->erase_shift = nand_flash_ids[s->chip_id].erase_shift;
