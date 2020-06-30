@@ -1046,6 +1046,16 @@ static void mips_ls2k_init(MachineState *machine)
 		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 1 , cs_line);
 		}
 		//else dev1 = ssi_create_slave(bus, "ssi-sd");
+		
+    		DriveInfo *spinand = drive_get(IF_MTD, 0, 1);
+		if (spinand)
+		{
+			dev1 = ssi_create_slave_no_init(bus, "spi-nand");
+			qdev_prop_set_int32(dev1, "ftype", 0x2);
+			qdev_init_nofail(dev1);
+		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
+		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 2 , cs_line);
+		}
 	}
 
 	{
