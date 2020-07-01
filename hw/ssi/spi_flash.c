@@ -197,6 +197,8 @@ static uint32_t spi_flash_transfer(SSISlave *dev, uint32_t val)
 					s->mode = SPI_FLASH_PP_ADDR;
 					break;
 				case FLASH_SE:
+					spi_addr = 0;
+					state_count = 0;
 					s->mode = SPI_FLASH_SE_ADDR;
 					break;
 				case FLASH_BE:
