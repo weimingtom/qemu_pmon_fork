@@ -22,7 +22,11 @@ void nand_getpins(DeviceState *dev, int *rb);
 void nand_setio(DeviceState *dev, uint32_t value);
 uint32_t nand_getio(DeviceState *dev);
 uint32_t nand_getbuswidth(DeviceState *dev);
+#undef type_init
+#define type_init(...)
 #include "nand.c"
+#undef type_init
+#define type_init(function) module_init(function, MODULE_INIT_QOM)
 
 struct dma_desc{
 	uint32_t orderad;
