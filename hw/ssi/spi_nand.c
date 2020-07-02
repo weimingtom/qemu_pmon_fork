@@ -39,6 +39,7 @@
 	#endif
 	#define FLASH_TYPE s->ftype
 	#define FLASH_SIZE (spiflashs[FLASH_TYPE].mainsize + spiflashs[FLASH_TYPE].oobsize) * spiflashs[FLASH_TYPE].pages * spiflashs[FLASH_TYPE].blocks
+	#define FLASH_MSIZE ((spiflashs[FLASH_TYPE].mainsize) * spiflashs[FLASH_TYPE].pages * spiflashs[FLASH_TYPE].blocks)
 	#define SECTOR_SIZE (spiflashs[FLASH_TYPE].mainsize + spiflashs[FLASH_TYPE].oobsize)
 	#define SECTOR_MSIZE (spiflashs[FLASH_TYPE].mainsize)
 	#define FLASH_ID spiflashs[FLASH_TYPE].id
@@ -357,7 +358,8 @@ static int spi_nand_cs(SSISlave *dev, bool select)
 				nand_setio(s->nand, (naddr>>8)&0xff);
 				nand_setio(s->nand, (naddr>>16)&0xff);
 				nand_setio(s->nand, (naddr>>24)&0xff);
-				nand_setio(s->nand, (naddr>>32)&0xff);
+				if (FLASH_MSIZE >= 256*0x100000)
+					nand_setio(s->nand, (naddr>>32)&0xff);
 				nand_setpins(s->nand, CLE_0, ALE_0, CE_0, 1, 0);
 				for (i=0;i<s->iolen;i++)
 					nand_setio(s->nand, s->iocache[i]);
@@ -387,7 +389,8 @@ static int spi_nand_cs(SSISlave *dev, bool select)
 				nand_setio(s->nand, (naddr>>8)&0xff);
 				nand_setio(s->nand, (naddr>>16)&0xff);
 				nand_setio(s->nand, (naddr>>24)&0xff);
-				nand_setio(s->nand, (naddr>>32)&0xff);
+				if (FLASH_MSIZE >= 256*0x100000)
+					nand_setio(s->nand, (naddr>>32)&0xff);
 				nand_setpins(s->nand, CLE_0, ALE_0, CE_0, 1, 0);
 				for (i=0; i< SECTOR_SIZE; i++)
 					s->iocache[i] = nand_getio(s->nand);
