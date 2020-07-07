@@ -56,6 +56,7 @@ typedef struct {
 
     int index;
     int syncing;
+    int reg[0x354/4];
 } ls1a_fb_state;
 
 
@@ -207,7 +208,8 @@ OF_DBLBUF=0x340,
 static void ls1a_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
  ls1a_fb_state *s = opaque;
-
+ if (addr < sizeof(s->reg))
+	s->reg[addr/4] = val;
 addr=0x1c301240 + addr;
  switch(addr)
  {
@@ -259,7 +261,9 @@ addr=0x1c301240 + addr;
 
 static uint64_t ls1a_fb_readl (void *opaque, hwaddr addr, unsigned size)
 {
-// ls1a_fb_state *s = opaque;
+ls1a_fb_state *s = opaque;
+ if (addr < sizeof(s->reg))
+	return s->reg[addr/4];
     return 0;
 }
 
