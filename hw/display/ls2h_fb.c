@@ -65,6 +65,7 @@ typedef struct {
 
     int index;
     int syncing;
+    int reg[(0x1594-0x1240)/4];
 } ls1a_fb_state;
 
 
@@ -210,6 +211,8 @@ static void ls2h_fb_reset(ls1a_fb_state *s)
 static void ls2h_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
  ls1a_fb_state *s = opaque;
+ if (addr >= 0x1240 && (addr - 0x1240) < sizeof(s->reg))
+	s->reg[(addr - 0x1240)/4] = val;
 
  switch(addr)
  {
@@ -266,7 +269,9 @@ static void ls2h_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned si
 
 static uint64_t ls2h_fb_readl (void *opaque, hwaddr addr, unsigned size)
 {
-// ls1a_fb_state *s = opaque;
+ ls1a_fb_state *s = opaque;
+ if (addr >= 0x1240 && (addr - 0x1240) < sizeof(s->reg))
+	 return	s->reg[(addr - 0x1240)/4];
     return 0;
 }
 
