@@ -1062,21 +1062,24 @@ static void mips_ls3a7a_init(MachineState *machine)
 	sysbus_create_simple("ls3a7a_acpi",0x1fe7c000, ls3a7a_irq[0]);
 #endif
 
+	if (!getenv("E6882"))
 	{
-#if 1
-
-	PCIDevice *pci_dev = pci_create_multifunction(ppci_bus[1], -1, false, "e1000e");
-	DeviceState *dev = DEVICE(pci_dev);
-	if(nd_table[2].used)
-		qdev_set_nic_properties(dev, &nd_table[2]);
-	DeviceClass *dc = DEVICE_GET_CLASS(dev);
-	PCIDeviceClass *k = PCI_DEVICE_CLASS(DEVICE_CLASS(dc));
-	k->romfile = NULL;
-	dc->vmsd = NULL;
-	qdev_init_nofail(dev);
-
-
-#endif
+		PCIDevice *pci_dev = pci_create_multifunction(ppci_bus[1], -1, false, "e1000e");
+		DeviceState *dev = DEVICE(pci_dev);
+		if(nd_table[2].used)
+			qdev_set_nic_properties(dev, &nd_table[2]);
+		DeviceClass *dc = DEVICE_GET_CLASS(dev);
+		PCIDeviceClass *k = PCI_DEVICE_CLASS(DEVICE_CLASS(dc));
+		k->romfile = NULL;
+		dc->vmsd = NULL;
+		qdev_init_nofail(dev);
+	} else {
+		PCIDevice *d = pci_create_multifunction(ppci_bus[1], -1, true, "pciram");
+		qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x08000000-1)|0x4);
+		qdev_init_nofail(DEVICE(d));
+		pci_set_word(d->config + PCI_CLASS_DEVICE, 0x0380);
+		pci_set_word(d->config + PCI_VENDOR_ID, 0x1002);
+		pci_set_word(d->config + PCI_DEVICE_ID, 0x6822);
 	}
 
 #if 0
