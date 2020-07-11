@@ -78,7 +78,17 @@ extern target_ulong mypc;
     MemoryRegion *alias_mr = g_new(MemoryRegion, 1); \
     memory_region_init_alias(alias_mr, NULL, NULL, REGIONA, ADDR, SIZE); \
     memory_region_add_subregion(REGIONB, ALIAS, alias_mr); \
-})
+alias_mr;})
+
+#define _str(x) #x
+#define str(x) _str(x)
+#define SIMPLE_OPS(ADDR,SIZE) \
+	({\
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);\
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)ADDR, str(ADDR) , SIZE);\
+                memory_region_add_subregion_overlap(address_space_mem, ADDR, iomem, 1);\
+		iomem;\
+	})
 
 static const int ide_iobase[2] = { 0x1f0, 0x170 };
 static const int ide_iobase2[2] = { 0x3f6, 0x376 };
@@ -266,12 +276,28 @@ static AddressSpace *ls2k_pci_as;
 static unsigned int ls2k_pci_addr;
 #endif
 
+static uint64_t gpio_ov;
+SysBusDevice *liodev[2];
+MemoryRegion *liomr;
+
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case 0x1fe10510 ... 0x1fe10517:
+		memcpy((void *)&gpio_ov + addr - 0x1fe10510, (void *)&val, size);
+		{
+			int i = (gpio_ov >> 48) & 1;
+			if (liomr->alias != liodev[i]->mmio[0].memory || liomr->alias_offset !=(((gpio_ov>>44)&7)*0x2000000) ) {
+				memory_region_del_subregion(get_system_memory(), liomr);
+    g_free(liomr);
+
+    liomr = ALIAS_REGION_FROM_RAS_TO_RA(liodev[i]->mmio[0].memory, ((gpio_ov>>44)&7)*0x2000000, 0x2000000, get_system_memory(), 0x1c000000);
+			}
+		}
+		break;
 		case 0x1fe10c10:
 		ls1gpa_sdio_set_dmaaddr(val);
 		break;
@@ -301,9 +327,14 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 {
+	uint64_t val = 0;
+
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case 0x1fe10510 ... 0x1fe10517:
+		memcpy((void *)&val , (void *)&gpio_ov + addr - 0x1fe10510, size);
+		break;
 #ifdef DEBUG_PCIEDMA
 		case 0x1fef0000:
 		dma_memory_read(ls2k_pci_as, ls2k_pci_addr, &val, 4);
@@ -357,7 +388,7 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return	random();
 		break;
 	}
-	return 0;
+	return val;
 }
 
 static const MemoryRegionOps mips_qemu_ops = {
@@ -946,7 +977,7 @@ static void mips_ls2k_init(MachineState *machine)
 
         load_image_targphys(filename, 0x1fc00000, BIOS_SIZE);
 	ddr2config = 1;
-    } else if ((flash_dinfo = drive_get_next(IF_PFLASH)))
+    } else if ((flash_dinfo = drive_get(IF_PFLASH,0,0)))
 	ddr2config = 1;
     else {
         bios = g_new(MemoryRegion, 1);
@@ -1060,14 +1091,27 @@ static void mips_ls2k_init(MachineState *machine)
 
 	{
     hwaddr flash_base   = 0x1c000000;
-    size_t flash_sector_size        = 256 * KiB;
-    size_t flash_size               = 32 * MiB;
+    size_t flash_sector_size        = 128 * KiB;
+    size_t flash_size               = 64 * MiB;
     DriveInfo *dinfo = drive_get(IF_PFLASH, 0, 1);
     /* Spansion S29NS128P */
-    pflash_cfi02_register(flash_base, NULL, "lioflash", flash_size,
+    liodev[0] = pflash_cfi02_register(0, NULL, "lioflash", flash_size,
                           dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
                           flash_sector_size, flash_size / flash_sector_size,
                           1, 2, 0x89, 0x227e, 0x2248, 0x2201, 0x555, 0x2aa, 0);
+
+        memory_region_del_subregion(get_system_memory(), liodev[0]->mmio[0].memory);
+	flash_size               = 128 * MiB;
+
+	dinfo = drive_get(IF_PFLASH, 0, 2);
+    liodev[1] = pflash_cfi02_register(0, NULL, "lioflash1", flash_size,
+                          dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
+                          flash_sector_size, flash_size / flash_sector_size,
+                          1, 2, 0x1, 0x227e, 0x2248, 0x2201, 0x555, 0x2aa, 0);
+        memory_region_del_subregion(get_system_memory(), liodev[1]->mmio[0].memory);
+
+    liomr = ALIAS_REGION_FROM_RAS_TO_RA(liodev[0]->mmio[0].memory, ((gpio_ov>>44)&7)*0x2000000, 0x2000000, get_system_memory(), 0x1c000000);
+mips_qemu_writel (0x1fe10510, 0, 0, 8);
 	}
 
 
@@ -1271,6 +1315,12 @@ static void mips_ls2k_init(MachineState *machine)
 		qdev_init_nofail(codec);
 	}
 #endif
+	{
+		MemoryRegion *iomem = g_new(MemoryRegion, 1);
+		memory_region_init_ram(iomem, NULL, "ls2k.gpio", 0x40, &error_fatal);
+		memory_region_add_subregion(get_system_memory(), 0x1fe10500, iomem);
+		SIMPLE_OPS(0x1fe10510,8);
+	}
 
 	mypc_callback =  mypc_callback_for_net;
 }
