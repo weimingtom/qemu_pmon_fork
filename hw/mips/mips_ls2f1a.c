@@ -119,12 +119,13 @@ static int64_t load_kernel(void)
     }
 
     /* Store command line.  */
-    params_size = 264;
+#define PBUF_SIZE 256
+    params_size = PBUF_SIZE + 8;
 	params_buf = g_malloc(params_size);
 
 	
 
-#define BOOTPARAM_PHYADDR ((64 << 20) - 264)
+#define BOOTPARAM_PHYADDR ((64 << 20) - PBUF_SIZE - 8)
 #define BOOTPARAM_ADDR (0x80000000+BOOTPARAM_PHYADDR)
 // should set argc,argv
 //env->gpr[REG][env->current_tc]
@@ -147,15 +148,15 @@ static int64_t load_kernel(void)
 		ret +=(3+sizeof(pmonenv)/sizeof(char *)+1)*4;
 		//argv0
 		*parg_env++=BOOTPARAM_ADDR+ret;
-		ret +=1+snprintf(params_buf+ret,256-ret,"g");
+		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret,"g");
 		//argv1
 		*parg_env++=BOOTPARAM_ADDR+ret;
 		if (initrd_size > 0) {
-			ret +=1+snprintf(params_buf+ret,256-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
+			ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
 					PHYS_TO_VIRT((uint32_t)initrd_offset),
 					initrd_size, loaderparams.kernel_cmdline);
 		} else {
-			ret +=1+snprintf(params_buf+ret, 256-ret, "%s", loaderparams.kernel_cmdline);
+			ret +=1+snprintf(params_buf+ret, PBUF_SIZE-ret, "%s", loaderparams.kernel_cmdline);
 		}
 		//argv2
 		*parg_env++=0;
@@ -168,14 +169,14 @@ static int64_t load_kernel(void)
 		for(i=0;i<sizeof(pmonenv)/sizeof(char *);i++)
 		{
 			*parg_env++=BOOTPARAM_ADDR+ret;
-			ret +=1+snprintf(params_buf+ret,256-ret,"%s",pmonenv[i]);
+			ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret,"%s",pmonenv[i]);
 		}
 
 		for(i=0;environ[i];i++)
 		{
 			if(!strncmp(environ[i],"ENV_",4)){
 				*parg_env++=BOOTPARAM_ADDR+ret;
-				ret +=1+snprintf(params_buf+ret,256-ret,"%s",&environ[i][4]);
+				ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret,"%s",&environ[i][4]);
 			}
 		}
 		*parg_env++=0;

@@ -459,7 +459,8 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	int ret;
 
 	/* Store command line.  */
-	params_size = 264;
+#define PBUF_SIZE 1024
+	params_size = PBUF_SIZE + 8;
 	params_buf = g_malloc(params_size);
 
 	parg_env=(void *)params_buf;
@@ -477,15 +478,15 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	ret +=(3+sizeof(pmonenv)/sizeof(char *)+1)*4;
 	//argv0
 	*parg_env++=BOOTPARAM_ADDR+ret;
-	ret +=1+snprintf(params_buf+ret,256-ret,"g");
+	ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret,"g");
 	//argv1
 	*parg_env++=BOOTPARAM_ADDR+ret;
 	if (initrd_size > 0) {
-		ret +=1+snprintf(params_buf+ret,256-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
+		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
 				PHYS_TO_VIRT((uint32_t)initrd_offset),
 				initrd_size, loaderparams.kernel_cmdline);
 	} else {
-		ret +=1+snprintf(params_buf+ret, 256-ret, "%s", loaderparams.kernel_cmdline);
+		ret +=1+snprintf(params_buf+ret, PBUF_SIZE-ret, "%s", loaderparams.kernel_cmdline);
 	}
 	//argv2
 	*parg_env++=0;
@@ -498,14 +499,14 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	for(i=0;i<sizeof(pmonenv)/sizeof(char *);i++)
 	{
 		*parg_env++=BOOTPARAM_ADDR+ret;
-		ret +=1+snprintf(params_buf+ret,256-ret,"%s",pmonenv[i]);
+		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret,"%s",pmonenv[i]);
 	}
 
 	for(i=0;environ[i];i++)
 	{
 		if(!strncmp(environ[i],"ENV_",4)){
 			*parg_env++=BOOTPARAM_ADDR+ret;
-			ret +=1+snprintf(params_buf+ret,256-ret,"%s",&environ[i][4]);
+			ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret,"%s",&environ[i][4]);
 		}
 	}
 	*parg_env++=0;
@@ -528,7 +529,9 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 	int ret;
 
 	/* Store command line.  */
-	params_size = 0x100000;
+#undef PBUF_SIZE
+#define PBUF_SIZE 0x100000
+	params_size = PBUF_SIZE;
 	params_buf = g_malloc(params_size);
 
 	parg_env=(void *)params_buf;
@@ -542,15 +545,15 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 	ret =(3+1)*4;
 	//argv0
 	*parg_env++=BOOTPARAM_ADDR+ret;
-	ret +=1+snprintf(params_buf+ret,256-ret,"g");
+	ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret,"g");
 	//argv1
 	*parg_env++=BOOTPARAM_ADDR+ret;
 	if (initrd_size > 0) {
-		ret +=1+snprintf(params_buf+ret,256-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
+		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
 				PHYS_TO_VIRT((uint32_t)initrd_offset),
 				initrd_size, loaderparams.kernel_cmdline);
 	} else {
-		ret +=1+snprintf(params_buf+ret, 256-ret, "%s", loaderparams.kernel_cmdline);
+		ret +=1+snprintf(params_buf+ret, PBUF_SIZE-ret, "%s", loaderparams.kernel_cmdline);
 	}
 	//argv2
 	*parg_env++=0;
