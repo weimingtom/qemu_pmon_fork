@@ -1,45 +1,45 @@
 [submodule "roms/seabios"]
 	path = roms/seabios
-	url = https://gitee.com/loongsonlab/seabios
+	url = https://gitee.com/tinylab/qemu-seabios.git/
 [submodule "roms/SLOF"]
 	path = roms/SLOF
-	url = https://gitee.com/loongsonlab/SLOF.git
+	url = https://gitee.com/tinylab/qemu-SLOF.git
 [submodule "roms/ipxe"]
 	path = roms/ipxe
-	url = https://gitee.com/loongsonlab/ipxe.git
+	url = https://gitee.com/tinylab/qemu-ipxe.git
 [submodule "roms/openbios"]
 	path = roms/openbios
-	url = https://gitee.com/loongsonlab/openbios.git
+	url = https://gitee.com/tinylab/qemu-openbios.git
 [submodule "roms/openhackware"]
 	path = roms/openhackware
-	url = https://gitee.com/loongsonlab/openhackware.git
+	url = https://gitee.com/tinylab/qemu-openhackware.git
 [submodule "roms/qemu-palcode"]
 	path = roms/qemu-palcode
-	url = https://gitee.com/loongsonlab/qemu-palcode.git
+	url = https://gitee.com/tinylab/qemu-palcode.git
 [submodule "roms/sgabios"]
 	path = roms/sgabios
-	url = https://gitee.com/loongsonlab/sgabios.git
+	url = https://gitee.com/tinylab/qemu-sgabios.git
 [submodule "dtc"]
 	path = dtc
-	url = https://gitee.com/loongsonlab/dtc
+	url = https://gitee.com/tinylab/qemu-dtc.git
 [submodule "roms/u-boot"]
 	path = roms/u-boot
-	url = https://gitee.com/loongsonlab/u-boot.git
+	url = https://gitee.com/tinylab/qemu-u-boot.git
 [submodule "roms/skiboot"]
 	path = roms/skiboot
-	url = https://gitee.com/loongsonlab/skiboot.git
+	url = https://gitee.com/tinylab/qemu-skiboot.git
 [submodule "roms/QemuMacDrivers"]
 	path = roms/QemuMacDrivers
-	url = https://gitee.com/loongsonlab/QemuMacDrivers.git
+	url = https://gitee.com/tinylab/qemu-QemuMacDrivers.git
 [submodule "ui/keycodemapdb"]
 	path = ui/keycodemapdb
-	url = https://gitee.com/loongsonlab/keycodemapdb.git
+	url = https://gitee.com/tinylab/qemu-keycodemapdb.git
 [submodule "capstone"]
 	path = capstone
-	url = https://gitee.com/mirrors/capstone
+	url = https://gitee.com/tinylab/qemu-capstone.git
 [submodule "roms/seabios-hppa"]
 	path = roms/seabios-hppa
-	url = git://github.com/hdeller/seabios-hppa.git
+	url = https://gitee.com/tinylab/qemu-seabios-hppa.git
 [submodule "roms/u-boot-sam460ex"]
 	path = roms/u-boot-sam460ex
-	url = https://gitee.com/loongsonlab/u-boot-sam460ex.git
+	url = https://gitee.com/tinylab/qemu-u-boot-sam460ex.git
