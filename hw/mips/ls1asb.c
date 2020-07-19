@@ -14,6 +14,7 @@
 #include "hw/i2c/i2c.h"
 #include "exec/address-spaces.h"
 #include "cpu.h"
+#include "hw/input/i8042.h"
 
 #define PCI_VENDOR_ID_LS1A 0x104a
 #define PCI_DEVICE_ID_LS1A 0x0
@@ -611,7 +612,7 @@ static void bonito_iommu_memory_region_class_init(ObjectClass *klass,
 {
     IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
 
-    imrc->translate = ls1a_pcidma_translate_iommu;
+    imrc->translate = (void*)ls1a_pcidma_translate_iommu;
 }
 
 static const TypeInfo typhoon_iommu_memory_region_info = {

@@ -403,8 +403,8 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	*parg_env++=0;
 
 	//env
-	sprintf(memenv,"memsize=%d",loaderparams.ram_size>=0xf000000?240:(loaderparams.ram_size>>20));
-	sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+	sprintf(memenv,"memsize=%d",(int)(loaderparams.ram_size>=0xf000000?240:(loaderparams.ram_size>>20)));
+	sprintf(highmemenv,"highmemsize=%d",(int)(loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0));
 
 
 	for(i=0;i<sizeof(pmonenv)/sizeof(char *);i++)
@@ -473,8 +473,8 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 
 	//env
 
-	sprintf(memenv,"%d",loaderparams.ram_size>0xf000000?240:(loaderparams.ram_size>>20));
-	sprintf(highmemenv,"%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+	sprintf(memenv,"%d",(int)(loaderparams.ram_size>0xf000000?240:(loaderparams.ram_size>>20)));
+	sprintf(highmemenv,"%d",(int)(loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0));
 	setenv("memsize", memenv, 1);
 	setenv("highmemsize", highmemenv, 1);
 
@@ -1238,7 +1238,6 @@ static void bonito_initfn(PCIDevice *dev, Error **errp)
 {
     LS2HBonitoState *s = OBJECT_CHECK(LS2HBonitoState, dev, "LS2H_Bonito");
     SysBusDevice *sysbus = SYS_BUS_DEVICE(s->pcihost);
-    PCIEPort *p = PCIE_PORT(dev);
     int busno = s->pcihost->busno;
 
     pci_bridge_initfn(dev, TYPE_PCI_BUS);
@@ -1408,7 +1407,7 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
 
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
 
-    return 0;
+    return;
 }
 
 static const char *ls2k_host_root_bus_path(PCIHostState *host_bridge,
@@ -1442,7 +1441,7 @@ static void bonito_iommu_memory_region_class_init(ObjectClass *klass,
 {
     IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
 
-    imrc->translate = ls2h_pciedma_translate_iommu;
+    imrc->translate = (void*)ls2h_pciedma_translate_iommu;
 }
 
 static const TypeInfo typhoon_iommu_memory_region_info = {

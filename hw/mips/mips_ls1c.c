@@ -44,6 +44,7 @@
 #include "hw/i2c/i2c.h"
 #include "exec/address-spaces.h"
 #include "hw/ide/internal.h"
+#include "hw/input/i8042.h"
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
 
@@ -210,9 +211,9 @@ static int64_t load_kernel(void)
 		 *argv[0] argv[1] 0 env[0] env[1] ...env[i] ,0, argv[0]'s data , argv[1]'s data ,env[0]'data,...,env[i]'s dat,0
 		 */
 		
-		sprintf(memenv,"%d",loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20));
+		sprintf(memenv,"%d",(int)(loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20)));
 		setenv("ENV_memsize", memenv, 1);
-		sprintf(memenv,"%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+		sprintf(memenv,"%d",(int)(loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0));
 		setenv("ENV_highmemsize", memenv, 1);
 		setenv("ENV_cpuclock", "2000000", 0);
 		setenv("ENV_busclock", "33333333", 0);

@@ -720,17 +720,18 @@ static const TypeInfo bonito_info = {
     },
 };
 
-
 /* Handle PCI-to-system address translation.  */
 /* TODO: A translation failure here ought to set PCI error codes on the
    Pchip and generate a machine check interrupt.  */
-static IOMMUTLBEntry ls2f_pcidma_translate_iommu(IOMMUMemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag)
+static IOMMUTLBEntry ls2f_pcidma_translate_iommu(IOMMUMemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag, int idx)
 {
     BonitoState *pcihost = container_of(iommu, BonitoState, iommu);
     IOMMUTLBEntry ret;
 
     int i;
     hwaddr offset;
+
+    (void)idx;
 
     ret.perm = IOMMU_NONE;
 
@@ -749,7 +750,6 @@ static IOMMUTLBEntry ls2f_pcidma_translate_iommu(IOMMUMemoryRegion *iommu, hwadd
         .addr_mask = 0ULL,
         .perm = IOMMU_RW,
     };
-
 
     return ret;
 }

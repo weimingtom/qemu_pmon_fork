@@ -73,12 +73,14 @@ mypc_callback(pc, opcode);
 
 void helper_mysp( target_ulong newsp,CPUMIPSState *env)
 {
+#if TARGET_LONG_SIZE == 8
 	if(newsp>0x40000000 && newsp<0x100000000ULL)
 	{
 	printf("new sp is 0x%llx, mypc=0x%llx\n",(unsigned long long)newsp,(unsigned long long)mypc);
 	env->active_tc.PC = mypc;
 	do_raise_exception(env, EXCP_DEBUG, GETPC());
 	}
+#endif
 }
 
 void helper_myst( target_ulong value,target_ulong addr,uint32_t mmu_idx, CPUMIPSState *env)
@@ -93,6 +95,7 @@ void helper_myst( target_ulong value,target_ulong addr,uint32_t mmu_idx, CPUMIPS
     paddr =(env->iotlb[mmu_idx][index].addr & TARGET_PAGE_MASK)  + addr;
 
     haddr = addr + env->tlb_table[mmu_idx][index].addend;
+#if TARGET_LONG_SIZE == 8
     if ((env->CP0_EBase & 0xf) == 1 && paddr < 0xc0000000 && !(paddr >= 0x40000000 && paddr < 0x80000000) && (mypcs[1] >= 0xC000000000000000ULL || mypcs[1] < 0x9000000000000000ULL) ) {
 	    static int bp;
 	    if (!bp) {
@@ -103,6 +106,10 @@ void helper_myst( target_ulong value,target_ulong addr,uint32_t mmu_idx, CPUMIPS
 	   else
 	    bp = 0;
     }
+#else
+    (void)paddr;
+    (void)haddr;
+#endif
 }
 
 /*****************************************************************************/
@@ -2121,7 +2128,7 @@ static void r4k_fill_tlb(CPUMIPSState *env, int idx)
     tlb->RI1 = (env->CP0_EntryLo1 >> CP0EnLo_RI) & 1;
     tlb->PFN[1] = (get_tlb_pfn_from_entrylo(env->CP0_EntryLo1) & ~mask) << 12;
     if(debug_tlb)
-	    printf("vaddr 0x%llx lo0 0x%llx lo1 0x%llx at 0x%llx, D0 0x%x D1 0x%x C0 0x%x C1 0x%x V0 0x%x V1 0x%x ra 0x%llx ebase "  TARGET_FMT_lx  "\n", (long long)env->CP0_EntryHi&~0x1fffULL,(env->CP0_EntryLo0&~0x3fULL)<<6, (env->CP0_EntryLo1&~0x3fULL)<<6, (unsigned long long)mypc, tlb->D0, tlb->D1, tlb->C0, tlb->C1, tlb->V0, tlb->V1, env->active_tc.gpr[31], env->CP0_EBase);
+	    printf("vaddr 0x%llx lo0 0x%llx lo1 0x%llx at 0x%llx, D0 0x%x D1 0x%x C0 0x%x C1 0x%x V0 0x%x V1 0x%x ra 0x%llx ebase "  TARGET_FMT_lx  "\n", (long long)env->CP0_EntryHi&~0x1fffULL,(env->CP0_EntryLo0&~0x3fULL)<<6, (env->CP0_EntryLo1&~0x3fULL)<<6, (unsigned long long)mypc, tlb->D0, tlb->D1, tlb->C0, tlb->C1, tlb->V0, tlb->V1, (long long)env->active_tc.gpr[31], env->CP0_EBase);
 }
 
 void r4k_helper_tlbinv(CPUMIPSState *env)

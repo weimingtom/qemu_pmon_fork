@@ -90,7 +90,6 @@ static uint64_t ls2k_intctl_mem_readl(void *opaque, hwaddr addr, unsigned size)
 static void ls2k_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
 	GS232_INTCTLState *s = opaque;
-	uint32_t saddr;
 
 	//printf("write reg 0x" TARGET_FMT_plx " %x= %x\n", addr, saddr, (unsigned int)val);
 	switch (addr) {

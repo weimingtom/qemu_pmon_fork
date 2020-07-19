@@ -62,6 +62,8 @@
 #include "loongson2k_rom.h"
 #include "hw/timer/hpet.h"
 #include "sysemu/device_tree.h"
+#include "libfdt.h"
+#include "monitor/qdev.h"
 extern target_ulong mypc;
 
 #define PHYS_TO_VIRT(x) ((x)>=0x20000000?((x) | 0x9800000000000000ULL):((x) | ~(target_ulong)0x7fffffff))
@@ -299,8 +301,6 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 {
-	uint64_t val = 0;
-
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
@@ -412,7 +412,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	//argv1
 	*parg_env++=BOOTPARAM_ADDR+ret;
 	if (initrd_size > 0) {
-		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
+		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret, "rd_start=0x%llx rd_size=%li %s",
 				PHYS_TO_VIRT(initrd_offset),
 				initrd_size, loaderparams.kernel_cmdline);
 	} else {
@@ -422,8 +422,8 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	*parg_env++=0;
 
 	//env
-	sprintf(memenv,"memsize=%d",loaderparams.ram_size>=0xf000000?240:(int)(loaderparams.ram_size>>20));
-	sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(int)(loaderparams.ram_size>>20)-256:0);
+	sprintf(memenv,"memsize=%d",(int)(loaderparams.ram_size>=0xf000000?240:(int)(loaderparams.ram_size>>20)));
+	sprintf(highmemenv,"highmemsize=%d",(int)(loaderparams.ram_size>0x10000000?(int)(loaderparams.ram_size>>20)-256:0));
 
 
 	for(i=0;i<sizeof(pmonenv)/sizeof(char *);i++)
@@ -482,7 +482,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	*parg_env++=BOOTPARAM_ADDR+ret;
 	cmdline = params_buf+ret;
 	if (initrd_size > 0) {
-		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
+		ret +=1+snprintf(params_buf+ret,PBUF_SIZE-ret, "rd_start=0x%llx rd_size=%li %s",
 				PHYS_TO_VIRT(initrd_offset),
 				initrd_size, loaderparams.kernel_cmdline);
 	} else {
@@ -493,8 +493,8 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 
 	//env
 
-	sprintf(memenv,"%d",loaderparams.ram_size>0xf000000?240:(loaderparams.ram_size>>20));
-	sprintf(highmemenv,"%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+	sprintf(memenv,"%d",(int)(loaderparams.ram_size>0xf000000?240:(loaderparams.ram_size>>20)));
+	sprintf(highmemenv,"%d",(int)(loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0));
 	setenv("memsize", memenv, 1);
 	setenv("highmemsize", highmemenv, 1);
 
@@ -708,10 +708,6 @@ static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 #endif
 	uint64_t ret=0;
 	int no = (addr>>8)&3;
-	uint32_t isr;
-	uint32_t en;
-
-
 
 	addr &= 0xff;
 	if(size!=4) hw_error("size not 4 %d", size);
@@ -843,8 +839,8 @@ static void mips_ls2k_init(MachineState *machine)
 	int i;
 	qemu_irq *cpu_irq;
 	qemu_irq *cpu_irq1;
-	cpu_irq = qemu_allocate_irqs(ls2k_set_cpuirq, 0, 8);
-	cpu_irq1 = qemu_allocate_irqs(ls2k_set_cpuirq, 1, 8);
+	cpu_irq = qemu_allocate_irqs(ls2k_set_cpuirq, (void*)0, 8);
+	cpu_irq1 = qemu_allocate_irqs(ls2k_set_cpuirq, (void*)1, 8);
 
 	/* init CPUs */
 

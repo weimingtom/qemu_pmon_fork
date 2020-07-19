@@ -492,8 +492,8 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	*parg_env++=0;
 
 	//env
-	sprintf(memenv,"memsize=%d",loaderparams.ram_size>=0xf000000?240:(loaderparams.ram_size>>20));
-	sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+	sprintf(memenv,"memsize=%d",(int)(loaderparams.ram_size>=0xf000000?240:(loaderparams.ram_size>>20)));
+	sprintf(highmemenv,"highmemsize=%d",(int)(loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0));
 
 
 	for(i=0;i<sizeof(pmonenv)/sizeof(char *);i++)
@@ -560,8 +560,8 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 
 	//env
 
-	sprintf(memenv,"%d",loaderparams.ram_size>0xf000000?240:(loaderparams.ram_size>>20));
-	sprintf(highmemenv,"%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+	sprintf(memenv,"%d",(int)(loaderparams.ram_size>0xf000000?240:(loaderparams.ram_size>>20)));
+	sprintf(highmemenv,"%d",(int)(loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0));
 	setenv("memsize", memenv, 1);
 	setenv("highmemsize", highmemenv, 1);
 
@@ -606,14 +606,14 @@ static int64_t load_kernel(void)
 	unsigned long long offset;
 	s = getenv("LOADOFFSET");
 	offset = s?strtoull(s, 0, 0) : 0;
-	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys1, offset,
+	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys1, (void*)offset,
                            (uint64_t *)&entry, (uint64_t *)&kernel_low,
                            (uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
 	if (offset)
-	    entry = cpu_mips_kseg0_to_phys1(offset, entry) + 0x9800000000000000ULL;
+	    entry = cpu_mips_kseg0_to_phys1((void*)offset, entry) + 0x9800000000000000ULL;
     } else {
         fprintf(stderr, "qemu: could not load kernel '%s'\n",
                 loaderparams.kernel_filename);
@@ -664,8 +664,10 @@ static void main_cpu_reset(void *opaque)
 	env->active_tc.gpr[4]=loaderparams.a0;
 	env->active_tc.gpr[5]=loaderparams.a1;
 	env->active_tc.gpr[6]=loaderparams.a2;
-	if (env->active_tc.PC < 0xFFFFFFFF80000000ULL)
+#if TARGET_LONG_SIZE == 8
+	if ((unsigned long long)env->active_tc.PC < 0xFFFFFFFF80000000ULL)
 		env->CP0_Status |= 0xe0;
+#endif
 }
 
 static int uart_irqstatus = 0;
@@ -779,10 +781,6 @@ static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
 #endif
 	uint64_t ret=0;
 	int no = (addr>>8)&3;
-	uint32_t isr;
-	uint32_t en;
-
-
 
 	addr &= 0xff;
 	if(size!=4) hw_error("size not 4 %d", size);
@@ -874,7 +872,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	CPUMIPSState *env;
 	ResetData *reset_info[2];
 	qemu_irq *ht_irq, *ls3auartpci_irq, *ls7auart_irq;
-	PCIBus **pci_bus;
+	PCIBus *pci_bus, **ppci_bus;
 	CPUClass *cc;
 	MemoryRegion *iomem_root = g_new(MemoryRegion, 1);
 	AddressSpace *as = g_new(AddressSpace, 1);
@@ -1004,7 +1002,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 
     	pci_bus = bonito_init(&ls3auartpci_irq[2]);
 	i = -1;
-	address_space_write(&address_space_memory, 0x1fe0012c, MEMTXATTRS_UNSPECIFIED, &i, 4);
+	address_space_write(&address_space_memory, 0x1fe0012c, MEMTXATTRS_UNSPECIFIED, (const uint8_t*)&i, 4);
 	{
 
 	PCIDevice *pci_dev = pci_create_multifunction(pci_bus,  PCI_DEVFN(2, 0), false, "e1000e");
@@ -1056,7 +1054,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	}
 
 
-	pci_bus =pcibus_ls3a7a_init(0, ls3a7a_irq,pci_ls3a7a_map_irq, ram_pciram, ram_pciram1);
+	ppci_bus = pcibus_ls3a7a_init(0, ls3a7a_irq,pci_ls3a7a_map_irq, ram_pciram, ram_pciram1);
 
 
 
@@ -1067,7 +1065,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	{
 #if 1
 
-	PCIDevice *pci_dev = pci_create_multifunction(pci_bus[1], -1, false, "e1000e");
+	PCIDevice *pci_dev = pci_create_multifunction(ppci_bus[1], -1, false, "e1000e");
 	DeviceState *dev = DEVICE(pci_dev);
 	if(nd_table[2].used)
 		qdev_set_nic_properties(dev, &nd_table[2]);
@@ -2158,11 +2156,8 @@ static const MemoryRegionOps ls3a_intctl_ops = {
 		.endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static cpu_irqs[4][8];
-
-int ls_raise_cpuirq(LS3a_INTCTLState *s, int introute, uint64_t isr, uint64_t ier, int disable)
+static int ls_raise_cpuirq(LS3a_INTCTLState *s, int introute, uint64_t isr, uint64_t ier, int disable)
 {
-
 	uint32_t core,irq_nr;
 	core = introute&0xf;
 	irq_nr = ((introute>>4)&0xf);
@@ -2176,9 +2171,11 @@ int ls_raise_cpuirq(LS3a_INTCTLState *s, int introute, uint64_t isr, uint64_t ie
 		else
 			set_bit((ffs(core)-1)*8 + ffs(irq_nr)+1, cpu_irqclr_bitmap);
 	}
+
+    return 0;
 }
 
-int ls_process_cpuirq(LS3a_INTCTLState *s)
+static int ls_process_cpuirq(LS3a_INTCTLState *s)
 {
 	int bit;
 	while (1) {
@@ -2197,13 +2194,14 @@ int ls_process_cpuirq(LS3a_INTCTLState *s)
 		clear_bit(bit, cpu_irqclr_bitmap);
 	}
 
+    return 0;
 }
 
 static void ht_update_irq(void *opaque,int disable)
 {
 	LS3a_INTCTLState *s = opaque;
 	uint64_t isr,ier;
-	uint32_t irtr,core,irq_nr;
+	uint32_t irtr;
 	int i;
 	isr = ls7a->intreg_pending & ~ls7a->int_mask;
 	ier = (*(uint32_t *)(s->int_route_reg + IO_CONTROL_REGS_INTEN) & 1)?ls7a->route_int[0] :0;
@@ -2237,19 +2235,17 @@ static void ht_update_irq(void *opaque,int disable)
 	}
 
 	ls_process_cpuirq(s);
+
 }
 
 static void ht_set_irq(void *opaque, int irq, int level)
 {
-	LS3a_INTCTLState *s = opaque;
-	uint64_t isr;
-
 	ht_update_irq(opaque,0);
 }
 
 static qemu_irq *ls3a_intctl_init(MemoryRegion *iomem_root, CPUMIPSState *env[])
 {
-	qemu_irq *i8259,*ht_irq;
+	qemu_irq *ht_irq;
 	LS3a_INTCTLState *s;
 	LS3a_func_args *a_irqrouter,*a_htirq;
 

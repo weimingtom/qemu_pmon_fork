@@ -15,8 +15,8 @@ typedef struct PCIRAMState{
 unsigned int mask;
 qemu_irq irq;
 uint16_t vendor_id, device_id;
-uint32_t bar[6];
-MemoryRegion *iomem[6];
+uint32_t bar[8];
+MemoryRegion *iomem[8];
 } PCIRAMState;
 
 typedef struct pciram_pci_state {
@@ -52,40 +52,40 @@ static void pci_pciram_init(PCIDevice *dev, Error **errp)
 
     for(i=0;i<7;i++)
     {
-       int io, size, type;
-       if(!d->pciram.bar[i]) continue;
-       io = d->pciram.bar[i]&1;
-       if(io)
-	{
-	 size= ~(d->pciram.bar[i]&~3)+1;
-	 type = PCI_BASE_ADDRESS_SPACE_IO;
-	}
-       else
-	{ 
-	 size = ~(d->pciram.bar[i]&~0xf)+1;
-	 type = PCI_BASE_ADDRESS_SPACE_MEMORY|(type & 0xe);
-	}
+        int io, size, type = 0;
+        if(!d->pciram.bar[i]) continue;
+        io = d->pciram.bar[i]&1;
+        if(io)
+        {
+            size= ~(d->pciram.bar[i]&~3)+1;
+            type = PCI_BASE_ADDRESS_SPACE_IO;
+        }
+        else
+        { 
+            size = ~(d->pciram.bar[i]&~0xf)+1;
+            type = PCI_BASE_ADDRESS_SPACE_MEMORY|(type & 0xe);
+        }
 
-	MemoryRegion *ram;
-	if(d->pciram.iomem[i])
-	{
-	 ram = d->pciram.iomem[i];
-	 printf("ram=%p\n", ram);
-	}
-	else
-	{
-		ram = g_new(MemoryRegion, 1);
-		memory_region_init_ram_nomigrate(ram, NULL, "pciram.ram", size, NULL);
-	}
-        
-       pci_register_bar(&d->card, i, type, ram);
+        MemoryRegion *ram;
+        if(d->pciram.iomem[i])
+        {
+            ram = d->pciram.iomem[i];
+            printf("ram=%p\n", ram);
+        }
+        else
+        {
+            ram = g_new(MemoryRegion, 1);
+            memory_region_init_ram_nomigrate(ram, NULL, "pciram.ram", size, NULL);
+        }
+
+        pci_register_bar(&d->card, i, type, ram);
     }
 
     if(d->pciram.bar[7]) 
-	{
-	*(int *)(pci_conf+0x90) = d->pciram.bar[7];
-	pci_conf[0xd2] = 1;
-	}
+    {
+        *(int *)(pci_conf+0x90) = d->pciram.bar[7];
+        pci_conf[0xd2] = 1;
+    }
 
     //d->pciram.irq = pci_allocate_irq(dev);
 }

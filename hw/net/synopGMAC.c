@@ -2146,7 +2146,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	if((desc.length&RxDisIntCompl)==0 || s->dma.DmaRxWatchdog)
 	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
 
-	printf("size: %d\n", size_ - size);
+	printf("size: %ld\n", size_ - size);
 	gmac_check_irq(s);
 	break;
 	}
@@ -2168,7 +2168,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 
 static int gmac_can_receive(NetClientState *nc)
 {
-    GMACState *s = qemu_get_nic_opaque(nc);
+    //GMACState *s = qemu_get_nic_opaque(nc);
 
     return 1;//( s->dma.DmaControl & DmaRxStart ) == DmaRxStart && s->receive_stop == 0 ;
 }

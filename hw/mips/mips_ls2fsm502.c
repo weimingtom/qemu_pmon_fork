@@ -160,8 +160,8 @@ static int64_t load_kernel(void)
 		*parg_env++=0;
 
 		//env
-		sprintf(memenv,"memsize=%d",loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20));
-		sprintf(highmemenv,"highmemsize=%d",loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0);
+		sprintf(memenv,"memsize=%d",(int)(loaderparams.ram_size>0x10000000?256:(loaderparams.ram_size>>20)));
+		sprintf(highmemenv,"highmemsize=%d",(int)(loaderparams.ram_size>0x10000000?(loaderparams.ram_size>>20)-256:0));
 
 
 		for(i=0;i<sizeof(pmonenv)/sizeof(char *);i++)

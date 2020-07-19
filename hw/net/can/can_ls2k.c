@@ -86,7 +86,7 @@ static void ls2k_can_instance_init(Object *obj)
 {
 
     ls2k_can_state *d = SYS_BUS_LS2KCAN(obj);
-    object_property_add_link(d, "canbus", TYPE_CAN_BUS,
+    object_property_add_link((Object *)d, "canbus", TYPE_CAN_BUS,
                              (Object **)&d->canbus,
                              qdev_prop_allow_set_link_before_realize,
                              0, &error_abort);

@@ -457,6 +457,7 @@ void cpu_mips_store_cause(CPUMIPSState *env, target_ulong val)
 #endif
 
 static int debug_mmu_exception;
+extern target_ulong mypc;
 
 static void raise_mmu_exception(CPUMIPSState *env, target_ulong address,
                                 int rw, int tlb_error)
@@ -535,7 +536,6 @@ static void raise_mmu_exception(CPUMIPSState *env, target_ulong address,
     env->error_code = error_code;
     if(debug_mmu_exception)
     {
-	    extern target_ulong mypc;
 	    env->active_tc.PC = mypc;
 	    do_raise_exception(env, EXCP_DEBUG, GETPC());
     }

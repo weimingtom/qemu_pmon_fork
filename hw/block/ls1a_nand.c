@@ -9,6 +9,7 @@
 #include "exec/memory.h"
 #include "sysemu/dma.h"
 #include "sysemu/sysemu.h"
+#include "hw/loader.h"
 #define DPRINTF(a...) //printf(a)
 #define HW_FLASH_H
 static DeviceState *nand_init(BlockBackend *blk, int manf_id, int chip_id);
@@ -646,7 +647,7 @@ if(d->size)
 	memory_region_init_rom_device(&d->mem, NULL, &spi_rom_ops , d, "spi flash rom", d->size, &err);
   	d->buf = memory_region_get_ram_ptr(&d->mem);
 
-	nand_reset(s);
+	nand_reset((DeviceState*)s);
 
 	for(i=0;i<1024;i=i+pagesize)
 	{
@@ -656,7 +657,7 @@ if(d->size)
 	}
 
 	memory_region_add_subregion(get_system_memory(), d->addr, &d->mem);
-	nand_reset(s);
+	nand_reset((DeviceState*)s);
 }
     sysbus_init_mmio(dev, &d->nand.iomem);
     sysbus_init_mmio(dev, &d->nand.iomem1);
@@ -696,6 +697,8 @@ static const TypeInfo ls1a_nand_info = {
 
 static void ls1a_nand_register_types(void)
 {
+    /* silent compiler */
+    (void)nand_register_types;
     type_register_static(&ls1a_nand_info);
 }
 

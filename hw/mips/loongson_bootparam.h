@@ -96,9 +96,9 @@ struct sensor_device {
 	u32 fan_policy; /* see arch/mips/include/asm/mach-loongson/loongson_hwmon.h */
 	u32 fan_percent;/* only for constant speed policy */
 	u64 base_addr;  /* base address of device registers */
-}__attribute__((packed));
+} __attribute__ ((packed));
 
-struct system_loongson{
+struct system_loongson {
 	u16 vers;     /* version of system_loongson */
 	u32 ccnuma_smp; /* 0: no numa; 1: has numa */
 	u32 sing_double_channel; /* 1:single; 2:double */
@@ -113,8 +113,8 @@ struct system_loongson{
 	char tcm_name[32];
 	u64 tcm_base_addr;
 	u64 workarounds; /* see workarounds.h */
-	u64 of_dtb_addr
-}__attribute__((packed));
+	u64 of_dtb_addr;
+} __attribute__ ((packed));
 
 struct irq_source_routing_table {
 	u16 vers;
