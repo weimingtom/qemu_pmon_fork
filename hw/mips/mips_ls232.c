@@ -414,6 +414,12 @@ static void mips_ls232_init (MachineState *machine)
 	}
 #endif
 
+	/* FIXME: ls232's real network card is not synopgmac, but the real one
+	 * is not supported by qemu currently, enable synopgmac here for only
+	 * qemu network temporarily */
+	if (nb_nics) {
+		gmac_sysbus_create(&nd_table[0], 0x1ff00000, env->irq[2]);
+	}
 
 	{
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);
