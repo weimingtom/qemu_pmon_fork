@@ -21,7 +21,6 @@
 #include "qemu/osdep.h"
 #include "hw/hw.h"
 #include "hw/sysbus.h"
-#include "trace.h"
 #include "chardev/char-fe.h"
 #include "qemu/error-report.h"
 #include "net/can_emu.h"
