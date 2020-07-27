@@ -1946,6 +1946,7 @@ do { printf("IRQ: " fmt , ##args); } while (0)
 
 
 #define HT_LINK_CONFIG_REG  0x44
+#define HT_ROUTE_MODE		0x58
 #define HT_IRQ_VECTOR_REG0	0x80	
 #define HT_IRQ_VECTOR_REG1	0x84	
 #define HT_IRQ_VECTOR_REG2	0x88	
@@ -1987,6 +1988,7 @@ typedef struct LS3a_func_args {
  uint32_t mask;
  uint8_t *mem;
 } LS3a_func_args;
+int ht_route_mode;
 
 
 static void ht_update_irq(void *opaque,int disable);
@@ -2031,6 +2033,9 @@ static uint32_t ls3a_intctl_mem_readl(void *opaque, hwaddr addr)
 
 	switch(a->base+addr)
 	{
+	case HT_CONTROL_REGS_BASE+HT_ROUTE_MODE	:
+	 ret = ht_route_mode;
+	break;
 	case HT_CONTROL_REGS_BASE+HT_LINK_CONFIG_REG:
 		ret = linkcfg;
 		linkcfg =random();
@@ -2135,6 +2140,11 @@ static void ls3a_intctl_mem_writel(void *opaque, hwaddr addr, uint32_t val)
 	*(uint32_t *)(a->mem + addr) = val;
 	ht_update_irq(s,0);
 	break;
+
+	case HT_CONTROL_REGS_BASE + HT_ROUTE_MODE:
+	 ht_route_mode = val;
+	 ht_update_irq(s,0);
+	break;
 		
 	default:
 	*(uint32_t *)(a->mem + addr) = val;
@@ -2231,6 +2241,9 @@ static void ht_update_irq(void *opaque,int disable)
 	for (i =0;i < 8; i++) {
 		*(uint32_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG0 + i*4) = ls7a->msiroute_ht[i]; 
 		ier = *(uint32_t *)(s->ht_irq_reg+HT_IRQ_ENABLE_REG0 + i *4);
+	 if((ht_route_mode & 0x700) == 0x400)
+		irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT0 + i*4);
+	 else
 		irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT0 + (i/2)*4);
 		isr = ls7a->msiroute_ht[i];
 
