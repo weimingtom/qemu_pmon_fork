@@ -26,7 +26,6 @@ static int init_boot_param(struct boot_params *bp)
   init_efi(&(bp->efi));
   init_reset_system(&(bp->reset_system));
 
-
   return 0;
 }
 
@@ -37,8 +36,9 @@ void init_efi(struct efi_loongson *efi)
 
 void init_reset_system(struct efi_reset_system_t *reset)
 {
-  reset->Shutdown = 0xffffffffbfc00000ULL;
-  reset->ResetWarm = 0xffffffffbfc00000ULL;
+  reset->Shutdown = 0xffffffffbfc000dcULL;
+  reset->ResetCold = 0xffffffffbfc000acULL;
+  reset->ResetWarm = 0xffffffffbfc000acULL;
 }
 
 void init_smbios(struct smbios_tables *smbios)

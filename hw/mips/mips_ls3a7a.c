@@ -271,6 +271,8 @@ static int reg424;
 static unsigned char mem200[256];
 static MemoryRegion *cachelock_iomem[4];
 
+static int acpi_tmrof_en = 0;
+
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
@@ -341,6 +343,17 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 
 			memory_region_transaction_commit();
 			break;
+        /* acpi pm1_en */
+        case 0x100d0010:
+            acpi_tmrof_en = val;
+            break;
+        case 0x100d0020:
+            if (acpi_tmrof_en == 0) {
+                 qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
+            } else {
+                 qemu_system_shutdown_request(SHUTDOWN_CAUSE_GUEST_SHUTDOWN);
+            }
+            break;
 	}
 }
 
@@ -1210,6 +1223,9 @@ static void mips_ls3a7a_init(MachineState *machine)
 	SIMPLE_OPS(0x10010910,0x10);
 	SIMPLE_OPS(0x1fe00100,0x4);
 	SIMPLE_OPS(0xcfdfb000000,0x1000);
+
+    /* acpi */
+	SIMPLE_OPS(0x100d0000,0x100);
 
 
 	//mips_qemu_writel((void *)0xe0040000160, 0, 1<<24, 4);

@@ -90,5 +90,31 @@ static unsigned int aui_boot_code[] = {
 0x00000000, //
 0x00000000, //nop
 0x00000000, //
-0x00000000, //
+
+/* Reset */
+0x3c0c9000,       /* lui     t0,0x9000     */    
+0x358c0e00,       /* ori     t0,t0,0xe00   */
+0x000c6438,       /* dsll    t0,t0,0x10    */
+0x358c100d,       /* ori     t0,t0,0x100d  */
+0x000c6438,       /* dsll    t0,t0,0x10    */
+0x240d0000,       /* li      t1,0          */
+0xa18d0010,       /* sb      t1,16(t0)     */
+0x240d5500,       /* li      t1,21760      */
+0xad8d0020,       /* sb      t1,32(t0)     */
+0x1000ffff,       /* b       1:            */
+0x00000000,	      /* nop	               */
+0x00000000,	      /* nop	               */
+
+/* Shutdown */
+0x3c0c9000,       /*lui     t0,0x9000     */
+0x358c0e00,       /*ori     t0,t0,0xe00   */
+0x000c6438,       /*dsll    t0,t0,0x10    */
+0x358c100d,       /*ori     t0,t0,0x100d  */
+0x000c6438,       /*dsll    t0,t0,0x10    */
+0x240d00ff,       /*li      t1,255        */
+0xa18d0010,       /*sb      t1,16(t0)     */
+0x340daa00,       /*li      t1,0xaa00     */
+0xad8d0020,       /*sb      t1,32(t0)     */
+0x1000ffff,       /*b       1:            */
+0x00000000,       /*nop                   */
   }; // <- Inserted by script to terminate array.
