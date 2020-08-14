@@ -1046,13 +1046,14 @@ static void mips_ls2k_init(MachineState *machine)
 	}
 #if 1
 {
-    PCIDevice *dev = pci_create_multifunction(pci_bus[1], -1, false, "pciram");
+    PCIDevice *dev = pci_create_multifunction(pci_bus[0], -1, false, "pciram");
     qdev_prop_set_uint16(&dev->qdev, "vendor", 0x1002);
     qdev_prop_set_uint16(&dev->qdev, "device", 0x9615);
     qdev_prop_set_uint32(&dev->qdev, "bar0", (~(0x04000-1))|1);
     qdev_init_nofail(&dev->qdev);
 }
 #endif
+            pci_create_simple(pci_bus[2], -1, "nec-usb-xhci");
 
 #if 0
 	{
@@ -1645,6 +1646,7 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     PCIBus *bus2;
     DriveInfo *hd[MAX_SATA_PORTS];
     static PCIBus *pci_bus[4];
+    int i;
 
     dev = qdev_create(NULL, TYPE_BONITO_PCI_HOST_BRIDGE);
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
@@ -1654,8 +1656,12 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
 
     /* set the pcihost pointer before bonito_initfn is called */
     //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS2K_Bonito");
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9, 0), true, "LS2K_Bonito");
-    qdev_set_id(DEVICE(d), g_strdup("pcie-9.0"));
+    for (i=0;i<4;i++)
+    {
+	char buf[16];
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9+i, 0), true, "LS2K_Bonito");
+    sprintf(buf, "pcie-%d.0", 9+i);
+    qdev_set_id(DEVICE(d), g_strdup(buf));
 
     s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
     s->pcihost = pcihost;
@@ -1666,21 +1672,9 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     bus2 = pci_bridge_get_sec_bus(br);
 
     pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
-    pci_bus[0] = bus2;
+    pci_bus[i] = bus2;
+    }
 
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(0xa, 0), true, "LS2K_Bonito");
-    qdev_set_id(DEVICE(d), g_strdup("pcie-10.0"));
-
-    s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
-    s->pcihost = pcihost;
-    pcihost->pci_dev = s;
-    br = PCI_BRIDGE(d);
-    pci_bridge_map_irq(br, "Advanced PCI Bus secondary bridge 1", board_map_irq);
-    qdev_init_nofail(DEVICE(d));
-    bus2 = pci_bridge_get_sec_bus(br);
-
-    pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
-    pci_bus[1] = bus2;
 
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(3, 0), true, "pci-synopgmac");
     dev = DEVICE(d);
