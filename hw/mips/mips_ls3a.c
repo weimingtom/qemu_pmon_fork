@@ -113,7 +113,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 	int ret;
 
 	/* Store command line.  */
-#define PBUF_SIZE 1024
+#define PBUF_SIZE 4096
 	params_size = PBUF_SIZE + 8;
 	params_buf = g_malloc(params_size);
 

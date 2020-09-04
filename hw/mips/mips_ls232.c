@@ -185,7 +185,7 @@ static int64_t load_kernel(void)
 	}
 
 	/* Store command line.  */
-#define PBUF_SIZE 1024
+#define PBUF_SIZE 4096
 	params_size = PBUF_SIZE + 8;
 	params_buf = g_malloc(params_size);
 
