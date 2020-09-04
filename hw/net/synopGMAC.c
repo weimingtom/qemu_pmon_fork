@@ -1598,8 +1598,7 @@ typedef struct gmacDmaRegisters
  uint32_t DmaRxCurrDesc     ;    /*= 0x004C      - Current host Rx Desc Register              */ 
  uint32_t DmaTxCurrAddr     ;    /*= 0x0050 CSR20 - Current host transmit buffer address      */
  uint32_t DmaRxCurrAddr     ;    /*= 0x0054 CSR21 - Current host receive buffer address       */
- uint32_t DmaHwCap          ;    /*= 0x0058 CSR22 - hw cap      */
- uint32_t unused1[9]        ;    /*unused registers*/
+ uint32_t unused1[10]        ;    /*unused registers*/
  uint32_t DmaNewFuncConfig; /*=0x0080*/
  uint32_t unused2[3];
  uint64_t Dma64RxBaseAddr;/*=0x90*/
@@ -1868,11 +1867,6 @@ static void gmac_receive_demand(GMACState *s)
 	qemu_flush_queued_packets(qemu_get_queue(s->nic));
 }
 
-static int dummyphy[32] =
-{
-0x1140, 0x796d, 0x001c, 0xc915, 0x01e1, 0xc5e1, 0x000f, 0x2001, 0x6001, 0x0300, 0x4cff, 0x0000, 0x0000, 0x0000, 0x0000, 0x3000,
-0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x00000
-};
 
 static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 {
@@ -1894,14 +1888,41 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		case GmacGmiiAddr:
 		s->mac.GmacGmiiAddr=val;
 		{
-			int phy,reg;
-			phy=(val>>11)&0x1f;
-			reg=(val>>6)&0x1f;
-			if (phy == 1)
-				s->mac.GmacGmiiData = dummyphy[reg];
-			else
-				s->mac.GmacGmiiData = (reg == PHY_ID_HI_REG || reg == PHY_ID_LOW_REG)? 0xffff:0;
+		int phy,reg;
+		phy=(val>>11)&0x1f;
+		reg=(val>>6)&0x1f;
+		switch(reg)
+		{
+			case PHY_ID_HI_REG:
+			   s->mac.GmacGmiiData = (phy==1)?0x12:0xffff;
+			   break;
+
+			case PHY_ID_LOW_REG:
+			   s->mac.GmacGmiiData = (phy==1)?0x12:0xffff;
+			   break;
+
+			case PHY_SPECIFIC_STATUS_REG:
+				s->mac.GmacGmiiData = Mii_phy_status_full_duplex|Mii_phy_status_link_up|Mii_phy_status_speed_1000;
+				break;
+			case PHY_AN_ADV_REG:
+				s->mac.GmacGmiiData = 1<<10;
+				break;
+			case PHY_CONTROL_REG:
+				 s->mac.GmacGmiiData = (1<<6)|(1<<8);
+				break;
+			case PHY_STATUS_REG:
+				 s->mac.GmacGmiiData = Mii_Link|Mii_phy_status_speed_1000;
+				break;
+			case PHY_LNK_PART_ABl_REG:
+				s->mac.GmacGmiiData = 1<<8;
+				break;
+			case PHY_SGMI_RGMI_STATUS_REG:
+				break;
+			default:
+				s->mac.GmacGmiiData = 0;
+				break;
 		}
+	   }
 		break;
 		case GmacGmiiData:
 		break;
@@ -2200,7 +2221,8 @@ static NetClientInfo net_gmac_info = {
 
 static void gmac_reg_init(GMACState *s)
 {
-	/*all regs default 0*/
+	memset(&s->dma,0,sizeof(s->dma));
+	memset(&s->mac,0,sizeof(s->mac));
 }
 
 static GMACState *gmac_new(GMACState *s,const char *model, const char *name)
@@ -2261,8 +2283,6 @@ static Property gmac_pci_properties[] = {
     DEFINE_PROP_PTR("as", gmac_pci_state, gmac.as_ptr),
     DEFINE_PROP_INT32("buswidth", gmac_pci_state, gmac.buswidth, 128),
     DEFINE_PROP_INT32("enh_desc", gmac_pci_state, gmac.enh_desc, 1),
-    DEFINE_PROP_UINT32("version", gmac_pci_state, gmac.mac.GmacVersion, 0x1137),
-    DEFINE_PROP_UINT32("hwcap", gmac_pci_state, gmac.dma.DmaHwCap, 0x190d2fbf),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -2325,8 +2345,6 @@ static Property gmac_sysbus_properties[] = {
     DEFINE_PROP_PTR("as", gmac_sysbus_state, gmac.as_ptr),
     DEFINE_PROP_INT32("buswidth", gmac_sysbus_state, gmac.buswidth, 128),
     DEFINE_PROP_INT32("enh_desc", gmac_sysbus_state, gmac.enh_desc, 0),
-    DEFINE_PROP_UINT32("version", gmac_sysbus_state, gmac.mac.GmacVersion, 0x1137),
-    DEFINE_PROP_UINT32("hwcap", gmac_sysbus_state, gmac.dma.DmaHwCap, 0x100d0f37),
     DEFINE_PROP_END_OF_LIST(),
 };
 
