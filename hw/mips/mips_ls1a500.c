@@ -59,7 +59,7 @@
 #include "hw/pci/pcie_port.h"
 #include "loongson_bootparam.h"
 #include <stdlib.h>
-#include "loongson2k_rom.h"
+#include "loongson1a500_rom.h"
 #include "hw/timer/hpet.h"
 #include "sysemu/device_tree.h"
 #include "libfdt.h"
@@ -93,7 +93,7 @@ alias_mr;})
 static const int ide_iobase[2] = { 0x1f0, 0x170 };
 static const int ide_iobase2[2] = { 0x3f6, 0x376 };
 static const int ide_irq[2] = { 14, 15 };
-static qemu_irq *ls2k_irq,*ls2k_irq1;
+static qemu_irq *ls1a500_irq,*ls1a500_irq1;
 
 /* i8254 PIT is attached to the IRQ0 at PIC i8259 */
 
@@ -107,9 +107,9 @@ static struct _loaderparams {
 
 static void *boot_params_buf;
 static void *boot_params_p;
-static PCIBus *ls2k_pci_bus;
+static PCIBus *ls1a500_pci_bus;
 #define align(x) (((x)+15)&~15)
-static int pci_ls2k_map_irq(PCIDevice *d, int irq_num);
+static int pci_ls1a500_map_irq(PCIDevice *d, int irq_num);
 
 
 extern void (*mypc_callback)(target_ulong pc, uint32_t opcode);
@@ -269,16 +269,19 @@ void __attribute__((weak)) ls1gpa_sdio_set_dmaaddr(uint32_t val)
 
 #define GPUBASE 0xd0000000
 static MemoryRegion *ddrcfg_iomem;
-static int reg424 = 0x100;
+static int reg424 = 0x800;
 
 #ifdef DEBUG_PCIEDMA
-static AddressSpace *ls2k_pci_as;
-static unsigned int ls2k_pci_addr;
+static AddressSpace *ls1a500_pci_as;
+static unsigned int ls1a500_pci_addr;
 #endif
 
 static uint64_t gpio_ov;
 static SysBusDevice *liodev[2];
 static MemoryRegion *liomr;
+static uint32_t ls2k_cpu_irqsts(int cpu, int i);
+#define GPIO0_ADDR 0x1fe10430
+#define GPIO0_OUT_ADDR 0x1fe10440
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
@@ -286,8 +289,8 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
-		case 0x1fe10510 ... 0x1fe10517:
-		memcpy((void *)&gpio_ov + addr - 0x1fe10510, (void *)&val, size);
+		case GPIO0_OUT_ADDR ... GPIO0_OUT_ADDR+7:
+		memcpy((void *)&gpio_ov + addr - GPIO0_OUT_ADDR, (void *)&val, size);
 		{
 			int i = (gpio_ov >> 48) & 1;
 			if (liomr->alias != liodev[i]->mmio[0].memory || liomr->alias_offset !=(((gpio_ov>>44)&7)*0x2000000) ) {
@@ -298,16 +301,16 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 			}
 		}
 		break;
-		case 0x1fe10c10:
+		case 0x1fe10c30:
 		ls1gpa_sdio_set_dmaaddr(val);
 		break;
-		case 0x1fe10424:
+		case 0x1fe10100:
 			reg424 = val;
 			memory_region_transaction_begin();
 			if(ddrcfg_iomem->container == get_system_memory())
 				memory_region_del_subregion(get_system_memory(), ddrcfg_iomem);
 
-			if((val&0x100) == 0)
+			if((val&0x800) == 0)
 			{
 				memory_region_add_subregion_overlap(get_system_memory(), 0x0ff00000, ddrcfg_iomem, 1);
 			}
@@ -316,10 +319,10 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 			break;
 #ifdef DEBUG_PCIEDMA
 		case 0x1fef0000:
-		dma_memory_write(ls2k_pci_as, ls2k_pci_addr, &val, 4);
+		dma_memory_write(ls1a500_pci_as, ls1a500_pci_addr, &val, 4);
 		break;
 		case 0x1fef0004:
-		ls2k_pci_addr = val;
+		ls1a500_pci_addr = val;
 		break;
 #endif
 	}
@@ -332,16 +335,25 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
-		case 0x1fe10510 ... 0x1fe10517:
-		memcpy((void *)&val , (void *)&gpio_ov + addr - 0x1fe10510, size);
+		case 0x1fe11040:
+			val = ls2k_cpu_irqsts(0, 0);
+			break;
+		case 0x1fe11048:
+			val = ls2k_cpu_irqsts(0, 1);
+			break;
+		case 0x1f06c120:
+			val = 0x55330000;
+			break;
+		case GPIO0_OUT_ADDR ... GPIO0_OUT_ADDR+7:
+		memcpy((void *)&val , (void *)&gpio_ov + addr - GPIO0_OUT_ADDR, size);
 		break;
 #ifdef DEBUG_PCIEDMA
 		case 0x1fef0000:
-		dma_memory_read(ls2k_pci_as, ls2k_pci_addr, &val, 4);
+		dma_memory_read(ls1a500_pci_as, ls1a500_pci_addr, &val, 4);
 		return val;
 		break;
 		case 0x1fef0004:
-		return ls2k_pci_addr;
+		return ls1a500_pci_addr;
 		break;
 #endif
 		case GPUBASE+4:
@@ -382,7 +394,7 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 0x1000000;
 		case 0x0ff0018c:
 		return 0x1;
-		case 0x1fe10424:
+		case 0x1fe10100:
 		return reg424;
 		default:
 		return	random();
@@ -562,7 +574,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 
 
 	ram_low_sz = loaderparams.ram_size>=0x0f000000?0x0ee00000:loaderparams.ram_size;
-	if(fdt_path_offset (fdt, "/soc/gpu@0x40080000") >= 0){
+	if(fdt_path_offset (fdt, "/soc/gpu@0x1f000000") >= 0){
 	ram_high_sz = loaderparams.ram_size>0x30000000?loaderparams.ram_size-0x30000000:0;
 	}
 	else
@@ -572,7 +584,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	
 	qemu_fdt_setprop_sized_cells(fdt, "/memory", "reg",
 			2, 0x00200000, 2, ram_low_sz,
-			2, 0x110000000, 2,  ram_high_sz);
+			2, 0x90000000, 2,  ram_high_sz);
 	memcpy(boot_params_p, fdt, size);
 
 	qemu_fdt_dumpdtb(fdt, size);
@@ -657,154 +669,18 @@ static void main_cpu_reset(void *opaque)
 	env->active_tc.gpr[6]=loaderparams.a2;
 }
 
-#define MAX_CPUS 2
-static CPUMIPSState *mycpu[MAX_CPUS];
-
-#define CORE0_STATUS_OFF       0x000
-#define CORE0_EN_OFF           0x004
-#define CORE0_SET_OFF          0x008
-#define CORE0_CLEAR_OFF        0x00c
-#define CORE0_BUF_20           0x020
-#define CORE0_BUF_28           0x028
-#define CORE0_BUF_30           0x030
-#define CORE0_BUF_38           0x038
-
-
-#define MYID 0xa0
-//#define DEBUG_LS2K
-#ifdef DEBUG_LS2K
-#define IPI_DPRINTF printf
-#else
-#define IPI_DPRINTF(...)
-#endif
-
-typedef struct gipi_single {
-    uint32_t status;
-    uint32_t en;
-    uint32_t set;
-    uint32_t clear;
-    uint32_t buf[8];
-    qemu_irq irq;
-} gipi_single;
-
-typedef struct gipiState  gipiState;
-struct gipiState {
-	gipi_single core[8];
-} ;
-
-
-static void gipi_writel(void *opaque, hwaddr addr, uint64_t val, unsigned size)
-{
-	gipiState * s = opaque;
-//	CPUState *cpu = current_cpu;
-	int no = (addr>>8)&3;
-
-
-	if(size!=4) hw_error("size not 4");
-
-	//    printf("gipi_writel addr=%llx val=%8x\n", addr, val);
-	addr &= 0xff;
-	switch(addr){
-		case CORE0_STATUS_OFF: 
-			hw_error("CORE0_SET_OFF Can't be write\n");
-			break;
-		case CORE0_EN_OFF:
-			//if((cpu->mem_io_vaddr&0xff)!=addr) break;
-			s->core[no].en = val;
-			break;
-		case CORE0_SET_OFF:
-			s->core[no].status |= val;
-			qemu_irq_raise(s->core[no].irq);
-			break;
-		case CORE0_CLEAR_OFF:
-			//if((cpu->mem_io_vaddr&0xff)!=addr) break;
-			s->core[no].status ^= val;
-			qemu_irq_lower(s->core[no].irq);
-			break;
-		case 0x20 ... 0x3c:
-			s->core[no].buf[(addr-0x20)/4] = val;
-			break;
-		default:
-			break;
-	}
-	IPI_DPRINTF("gipi_write: addr=0x%02x val=0x%02llx cpu=%d pc=%llx\n", (int)addr, (long long)val, (int)cpu->cpu_index, (long long)mypc);
-}
-
-static uint32_t ls2k_cpu_irqsts(int cpu, int i);
-static uint64_t gipi_readl(void *opaque, hwaddr addr, unsigned size)
-{
-	gipiState * s = opaque;
-#ifdef DEBUG_LS2K
-	CPUState *cpu = current_cpu;
-#endif
-	uint64_t ret=0;
-	int no = (addr>>8)&3;
-
-	addr &= 0xff;
-	if(size!=4) hw_error("size not 4 %d", size);
-
-	switch(addr){
-		case CORE0_STATUS_OFF: 
-			ret =  s->core[no].status;
-			break;
-		case CORE0_EN_OFF:
-			ret =  s->core[no].en;
-			break;
-		case CORE0_SET_OFF:
-			ret = 0;//hw_error("CORE0_SET_OFF Can't be Read\n");
-			break;
-		case CORE0_CLEAR_OFF:
-			ret = 0;//hw_error("CORE0_CLEAR_OFF Can't be Read\n");
-		case 0x20 ... 0x3c:
-			ret = s->core[no].buf[(addr-0x20)/4];
-			break;
-		case 0x40:
-			ret = ls2k_cpu_irqsts(no, 0);
-			break;
-		case 0x48:
-			ret = ls2k_cpu_irqsts(no, 1);
-			break;
-		default:
-			break;
-	}
-
-	IPI_DPRINTF("gipi_read: addr=0x%02x val=0x%02llx cpu=%d pc=%llx\n", (int)addr, (long long)ret, (int)cpu->cpu_index, (long long)mypc);
-	return ret;
-}
-
-
-
-static const MemoryRegionOps gipi_ops = {
-    .read = gipi_readl,
-    .write = gipi_writel,
-    .endianness = DEVICE_NATIVE_ENDIAN,
-};
-
-
-
-
-static int godson_ipi_init(qemu_irq parent_irq , unsigned long index, gipiState * s)
-{
-      s->core[index].irq = parent_irq;
-      return 0;
-}
-
-
-
-
-
 static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_irq, MemoryRegion *pcimr);
 
 static const int sector_len = 32 * 1024;
 
-static PCIBus **pcibus_ls2k_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1, MemoryRegion *ram4);
+static PCIBus **pcibus_ls1a500_init(int busno,qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram);
 
 
 
 static int ddr2config = 0;
 
 static CPUUnassignedAccess real_do_unassigned_access;
-static void mips_ls2k_do_unassigned_access(CPUState *cpu, hwaddr addr,
+static void mips_ls1a500_do_unassigned_access(CPUState *cpu, hwaddr addr,
                                            bool is_write, bool is_exec,
                                            int opaque, unsigned size)
 {
@@ -815,14 +691,17 @@ static void mips_ls2k_do_unassigned_access(CPUState *cpu, hwaddr addr,
     (*real_do_unassigned_access)(cpu, addr, is_write, is_exec, opaque, size);
 }
 
-static int ls2k_cpu_irq;
-static int ls2k_cpu_irq1;
-static int ls2k_cpu_irq_old;
+static CPUMIPSState *mycpu;
+static int ls1a500_cpu_irq;
+static int ls1a500_cpu_irq1;
+static int ls1a500_cpu_irq_old;
 
-static void ls2k_set_cpuirq(void *opaque, int irq, int level)
+static void ls1a500_set_cpuirq(void *opaque, int irq, int level)
 {
-	int *p = opaque?&ls2k_cpu_irq1:&ls2k_cpu_irq;
-	int ls2k_cpu_irq_new;
+	int *p = opaque?&ls1a500_cpu_irq1:&ls1a500_cpu_irq;
+	int ls1a500_cpu_irq_new;
+	if (irq >= 4)
+		return;
 
 	if (level) {
 		*p |= 1<<irq;
@@ -830,25 +709,25 @@ static void ls2k_set_cpuirq(void *opaque, int irq, int level)
 		*p &= ~(1<<irq);
 	}
 
-	ls2k_cpu_irq_new =  ls2k_cpu_irq|ls2k_cpu_irq1;
+	ls1a500_cpu_irq_new =  ls1a500_cpu_irq|ls1a500_cpu_irq1;
 
-	if( ls2k_cpu_irq_new != ls2k_cpu_irq_old)
+	if( ls1a500_cpu_irq_new != ls1a500_cpu_irq_old)
 	{
-		if(ls2k_cpu_irq_new&(1<<irq))
+		if(ls1a500_cpu_irq_new&(1<<irq))
 		{
-			qemu_irq_raise(mycpu[irq/4]->irq[2+(irq%4)]);
+			qemu_irq_raise(mycpu->irq[2+(irq%4)]);
 		}
 		else
 		{
-			qemu_irq_lower(mycpu[irq/4]->irq[2+(irq%4)]);
+			qemu_irq_lower(mycpu->irq[2+(irq%4)]);
 		}
 
-		ls2k_cpu_irq_old = ls2k_cpu_irq|ls2k_cpu_irq1;
+		ls1a500_cpu_irq_old = ls1a500_cpu_irq|ls1a500_cpu_irq1;
 	}
 }
 
 
-static void mips_ls2k_init(MachineState *machine)
+static void mips_ls1a500_init(MachineState *machine)
 {
 	ram_addr_t ram_size = machine->ram_size;
 	const char *kernel_filename = machine->kernel_filename;
@@ -870,79 +749,43 @@ static void mips_ls2k_init(MachineState *machine)
 	int i;
 	qemu_irq *cpu_irq;
 	qemu_irq *cpu_irq1;
-	cpu_irq = qemu_allocate_irqs(ls2k_set_cpuirq, (void*)0, 8);
-	cpu_irq1 = qemu_allocate_irqs(ls2k_set_cpuirq, (void*)1, 8);
+	cpu_irq = qemu_allocate_irqs(ls1a500_set_cpuirq, (void*)0, 8);
+	cpu_irq1 = qemu_allocate_irqs(ls1a500_set_cpuirq, (void*)1, 8);
 
 	/* init CPUs */
 
-	gipiState * gipis =g_malloc0(sizeof(gipiState));
-	
-	int bootcore = 0;
-	if (getenv("BOOTCORE"))
-		bootcore = strtoul(getenv("BOOTCORE"), 0, 0);
-
-	for(i = 0; i < smp_cpus; i++) {
 	cpu = MIPS_CPU(cpu_create(machine->cpu_type));
-		env = &cpu->env;
-		env->CP0_EBase |= i;
-		mycpu[i] = env;
+	env = &cpu->env;
+	mycpu = env;
 
-		cc = CPU_GET_CLASS(cpu);
-		real_do_unassigned_access = cc->do_unassigned_access;
-		cc->do_unassigned_access = mips_ls2k_do_unassigned_access;
+	cc = CPU_GET_CLASS(cpu);
+	real_do_unassigned_access = cc->do_unassigned_access;
+	cc->do_unassigned_access = mips_ls1a500_do_unassigned_access;
 
-		reset_info[i] = g_malloc0(sizeof(ResetData));
-		reset_info[i]->cpu = cpu;
-		reset_info[i]->vector = env->active_tc.PC;
-		qemu_register_reset(main_cpu_reset, reset_info[i]);
+	reset_info[0] = g_malloc0(sizeof(ResetData));
+	reset_info[0]->cpu = cpu;
+	reset_info[0]->vector = env->active_tc.PC;
+	qemu_register_reset(main_cpu_reset, reset_info[0]);
 
 	/* Init CPU internal devices */
-		cpu_mips_irq_init_cpu(cpu);
-		cpu_mips_clock_init(cpu);
-		godson_ipi_init(env->irq[6] , i, gipis);  // by zxh&dw
-	}
+	cpu_mips_irq_init_cpu(cpu);
+	cpu_mips_clock_init(cpu);
 	
-	env = mycpu[0];
-
 		/* allocate RAM */
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 
-	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
-	memory_region_add_subregion(address_space_mem, 0, ram1);
-	MemoryRegion *ram3 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram3, NULL, "lowmem2G", ram, 0, 0x80000000ULL);
-	memory_region_add_subregion(address_space_mem, 0x80000000ULL, ram3);
-	MemoryRegion *ram0 =  g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram0, NULL, "lowmem", ram, 0, ram_size);
-	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram0);
+        ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, 0x10000000, address_space_mem, 0);
+        ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, 0x80000000, address_space_mem, 0x80000000);
 	if(ram_size >= 0x40000000)
 	{
-		MemoryRegion *ram4 = g_new(MemoryRegion, 1);
-		memory_region_init_alias(ram4, NULL, "lowmem2G", ram, ram_size - 0x20000000, 0x20000000);
-		memory_region_add_subregion(address_space_mem, 0x20000000, ram4);
+		ALIAS_REGION_FROM_RAS_TO_RA(ram, ram_size - 0x20000000, 0x20000000, address_space_mem, 0x20000000);
 	}
 
-	MemoryRegion *ram_pciram = g_new(MemoryRegion, 1);
-	MemoryRegion *ram_pciram1 = g_new(MemoryRegion, 1);
-	MemoryRegion *ram_pciram2 = NULL;
-	if(ram_size >= 0x40000000)
-	{
-	ram_pciram2 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram_pciram2, NULL, "gpumem", ram, ram_size - 0x20000000, 0x20000000);
-	}
-	memory_region_init_alias(ram_pciram1, NULL, "ddrlowmem", ram, 0, 0x10000000);
-	memory_region_init_alias(ram_pciram, NULL, "ddrmem", ram, 0, memory_region_size(ram));
-
-
-        //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls2k axi", UINT32_MAX);
-        memory_region_init(iomem_root, NULL,  "ls2k axi", UINT64_MAX);
-	address_space_init(as,iomem_root, "ls2k axi memory");
-
-	MemoryRegion *ram2 = g_new(MemoryRegion, 1);
-	memory_region_init_alias(ram2, NULL, "lowmem", ram, 0, ram_size);
-        memory_region_add_subregion(iomem_root, 0, ram2);
-
+        //memory_region_init_iommu(iomem_root, NULL, &ls1a_pcidma_iommu_ops, "ls1a500 axi", UINT32_MAX);
+        memory_region_init(iomem_root, NULL,  "ls1a500 axi", UINT64_MAX);
+	address_space_init(as,iomem_root, "ls1a500 axi memory");
+        ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, 0x10000000, iomem_root, 0);
+        ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, 0x80000000, iomem_root, 0x80000000);
 
 	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
 	//memory_region_add_subregion(address_space_mem, 0x1fbf0000, iomem);
@@ -954,7 +797,8 @@ static void mips_ls2k_init(MachineState *machine)
         loaderparams.initrd_filename = initrd_filename;
         ((int64_t *)aui_boot_code)[1] = load_kernel(machine->dtb);
     }
-        ((int64_t *)aui_boot_code)[2] = bootcore;
+   else ((int64_t *)aui_boot_code)[1] = env->active_tc.PC;
+        ((int64_t *)aui_boot_code)[2] = 0;
 
     /* Try to load a BIOS image. If this fails, we continue regardless,
        but initialize the hardware ourselves. When a kernel gets
@@ -979,15 +823,16 @@ static void mips_ls2k_init(MachineState *machine)
 	ddr2config = 1;
     } else if ((flash_dinfo = drive_get(IF_PFLASH,0,0)))
 	ddr2config = 1;
-    else {
+    {
         bios = g_new(MemoryRegion, 1);
-        memory_region_init_ram(bios, NULL, "mips_r4k.bios", BIOS_SIZE, &error_fatal);
+        memory_region_init_ram(bios, NULL, "mips_r4k.bios0", BIOS_SIZE, &error_fatal);
         memory_region_set_readonly(bios, true);
-        memory_region_add_subregion(get_system_memory(), 0x1fc00000, bios);
+        memory_region_add_subregion(get_system_memory(), 0x1e000000, bios);
 
 	bios_size = sizeof(aui_boot_code);
-	rom_add_blob_fixed("bios",aui_boot_code,bios_size,0x1fc00000);
+	rom_add_blob_fixed("bios",aui_boot_code,bios_size,0x1e000000);
     }
+  reset_info[0]->vector = (int)0xbe000000;
     if (filename) {
         g_free(filename);
     }
@@ -996,36 +841,32 @@ static void mips_ls2k_init(MachineState *machine)
 	/* Register 64 KB of IO space at 0x1f000000 */
 	//isa_mmio_init(0x1ff00000, 0x00010000);
 	//isa_mem_base = 0x10000000;
-	pci_bus =pcibus_ls2k_init(0, NULL,pci_ls2k_map_irq, ram_pciram, ram_pciram1, ram_pciram2);
-	ls2k_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, cpu_irq, ls2k_pci_bus->address_space_mem);
-	ls2k_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, cpu_irq1, ls2k_pci_bus->address_space_mem);
+	pci_bus =pcibus_ls1a500_init(0, NULL,pci_ls1a500_map_irq, ram);
+	ls1a500_irq =ls2k_intctl_init(get_system_memory(), 0x1Fe11400, cpu_irq, ls1a500_pci_bus->address_space_mem);
+	ls1a500_irq1=ls2k_intctl_init(get_system_memory(), 0x1Fe11440, cpu_irq1, ls1a500_pci_bus->address_space_mem);
 
 
 	if (serial_hd(0))
-		serial_mm_init(address_space_mem, 0x1fe00000, 0,ls2k_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1ff40000, 0,ls1a500_irq[0],115200,serial_hd(0), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(1))
-		serial_mm_init(address_space_mem, 0x1fe00100, 0,ls2k_irq[0],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1ff40400, 0,ls1a500_irq[1],115200,serial_hd(1), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(2))
-		serial_mm_init(address_space_mem, 0x1fe00200, 0,ls2k_irq[0],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1ff40800, 0,ls1a500_irq[2],115200,serial_hd(2), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(3))
-		serial_mm_init(address_space_mem, 0x1fe00300, 0,ls2k_irq[0],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1ff40c00, 0,ls1a500_irq[3],115200,serial_hd(3), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(4))
-		serial_mm_init(address_space_mem, 0x1fe00400, 0,ls2k_irq[1],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
+		serial_mm_init(address_space_mem, 0x1ff41000, 0,ls1a500_irq1[30],115200,serial_hd(4), DEVICE_NATIVE_ENDIAN);
 
 	if (serial_hd(5))
-		serial_mm_init(address_space_mem, 0x1fe00500, 0,ls2k_irq[1],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
-
-
-
-
+		serial_mm_init(address_space_mem, 0x1ff41400, 0,ls1a500_irq1[30],115200,serial_hd(5), DEVICE_NATIVE_ENDIAN);
 
 
 #if 0
-	sysbus_create_simple("ls2k_acpi",0x1fe7c000, ls2k_irq[0]);
+	sysbus_create_simple("ls1a500_acpi",0x1fe7c000, ls1a500_irq[0]);
 #endif
 
 	{
@@ -1053,11 +894,10 @@ static void mips_ls2k_init(MachineState *machine)
     qdev_init_nofail(&dev->qdev);
 }
 #endif
-            pci_create_simple(pci_bus[2], -1, "nec-usb-xhci");
 
 #if 0
 	{
-		sysbus_create_simple("ls2k_wdt", 0x1fe7c060, NULL);
+		sysbus_create_simple("ls1a500_wdt", 0x1fe7c060, NULL);
 	}
 #endif
 
@@ -1065,7 +905,7 @@ static void mips_ls2k_init(MachineState *machine)
 		DeviceState *dev,*dev1;
 		void *bus;
 		qemu_irq cs_line;
-		dev=sysbus_create_simple("ls1a_spi",0x1fff0220, ls2k_irq[8]);
+		dev=sysbus_create_simple("ls1a_spi",0x1fd00000, ls1a500_irq[8]);
 		bus = qdev_get_child_bus(dev, "ssi");
 		if(flash_dinfo)
 		{
@@ -1091,7 +931,7 @@ static void mips_ls2k_init(MachineState *machine)
 	}
 
 	{
-    hwaddr flash_base   = 0x1c000000;
+    hwaddr flash_base   = 0x1a000000;
     size_t flash_sector_size        = 128 * KiB;
     size_t flash_size               = 64 * MiB;
     DriveInfo *dinfo = drive_get(IF_PFLASH, 0, 1);
@@ -1111,8 +951,8 @@ static void mips_ls2k_init(MachineState *machine)
                           1, 2, 0x1, 0x227e, 0x2248, 0x2201, 0x555, 0x2aa, 0);
         memory_region_del_subregion(get_system_memory(), liodev[1]->mmio[0].memory);
 
-    liomr = ALIAS_REGION_FROM_RAS_TO_RA(liodev[0]->mmio[0].memory, ((gpio_ov>>44)&7)*0x2000000, 0x2000000, get_system_memory(), 0x1c000000);
-mips_qemu_writel (0x1fe10510, 0, 0, 8);
+    liomr = ALIAS_REGION_FROM_RAS_TO_RA(liodev[0]->mmio[0].memory, ((gpio_ov>>44)&7)*0x2000000, 0x2000000, get_system_memory(), flash_base);
+mips_qemu_writel (GPIO0_OUT_ADDR, 0, 0, 8);
 	}
 
 
@@ -1121,13 +961,13 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 	{
 		DeviceState *dev;
 		SysBusDevice *s;
-		dev = qdev_create(NULL, "ls2k_ac97");
+		dev = qdev_create(NULL, "ls1a500_ac97");
 		printf("ac97 dev=%p\n",dev);
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
 		sysbus_mmio_map(s, 0, 0x1fe74000);
-		sysbus_connect_irq(s, 0, ls2k_irq[14]);
-		sysbus_connect_irq(s, 1, ls2k_irq[15]);
+		sysbus_connect_irq(s, 0, ls1a500_irq[14]);
+		sysbus_connect_irq(s, 1, ls1a500_irq[15]);
 	}
 #endif
 
@@ -1147,8 +987,8 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 		qdev_prop_set_uint8(dev, "cs", 0x2);
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fe06000);
-		sysbus_connect_irq(s, 0, ls2k_irq1[12]);
+		sysbus_mmio_map(s, 0, 0x1ff58040);
+		sysbus_connect_irq(s, 0, ls1a500_irq1[12]);
 	}
 
 	{
@@ -1159,9 +999,9 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 			exit(1);
 		}
 
-		ls1gpa_mmci_init(address_space_mem, 0x1fe0c000,
+		ls1gpa_mmci_init(address_space_mem, 0x1ff64000,
 				blk_by_legacy_dinfo(dinfo),
-				ls2k_irq[31]
+				ls1a500_irq[31]
 				);
 	}
 
@@ -1172,17 +1012,16 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 		dev = qdev_create(NULL, "ls1a_rtc");
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
-		sysbus_mmio_map(s, 0, 0x1fe07820);
-		sysbus_connect_irq(s, 0, ls2k_irq[14]);
-		sysbus_connect_irq(s, 1, ls2k_irq[15]);
-		sysbus_connect_irq(s, 2, ls2k_irq[16]);
+		sysbus_mmio_map(s, 0, 0x1ff6c100);
+		sysbus_connect_irq(s, 0, ls1a500_irq[16]);
+		sysbus_connect_irq(s, 1, ls1a500_irq[17]);
 	}
 #endif
 
 	{
 		DeviceState *dev;
 		void *bus;
-		dev=sysbus_create_simple("ls1a_i2c",0x1fe01000, ls2k_irq[7]);
+		dev=sysbus_create_simple("ls1a_i2c",0x1ff48000, ls1a500_irq[22]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 	}
@@ -1190,7 +1029,7 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 	{
 		DeviceState *dev;
 		void *bus;
-		dev=sysbus_create_simple("ls1a_i2c",0x1fe01800, ls2k_irq[8]);
+		dev=sysbus_create_simple("ls1a_i2c",0x1ff48800, ls1a500_irq[23]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 	}
@@ -1208,8 +1047,8 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 	object_property_parse(OBJECT(dev), "canbus0", "canbus", &err);
 	s = SYS_BUS_DEVICE(dev);
 	qdev_init_nofail(dev);
-	sysbus_connect_irq(s, 0, ls2k_irq[16]);
-	sysbus_mmio_map(s, 0, 0x1fe00c00);
+	sysbus_connect_irq(s, 0, ls1a500_irq[16]);
+	sysbus_mmio_map(s, 0, 0x1ff44000);
 }
 #endif
 {
@@ -1225,8 +1064,8 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 	object_property_parse(OBJECT(dev), "canbus1", "canbus", &err);
 	s = SYS_BUS_DEVICE(dev);
 	qdev_init_nofail(dev);
-	sysbus_connect_irq(s, 0, ls2k_irq[17]);
-	sysbus_mmio_map(s, 0, 0x1fe00d00);
+	sysbus_connect_irq(s, 0, ls1a500_irq[17]);
+	sysbus_mmio_map(s, 0, 0x1ff45000);
 }
 
 	{
@@ -1242,12 +1081,82 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
                 qdev_prop_set_uint32(hpet, HPET_INTCAP, 1);
             }
             qdev_init_nofail(hpet);
-            sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0x1fe04000);
+            sysbus_mmio_map(SYS_BUS_DEVICE(hpet), 0, 0x1ff68000);
 
-            sysbus_connect_irq(SYS_BUS_DEVICE(hpet), 0, ls2k_irq[21]);
+            sysbus_connect_irq(SYS_BUS_DEVICE(hpet), 0, ls1a500_irq[21]);
         }
 	}
 
+		{
+			DeviceState *dev;
+
+			dev = qdev_create(NULL, "sysbus-synopgmac");
+			if(nd_table[0].used)
+				qdev_set_nic_properties(dev, &nd_table[0]);
+			qdev_prop_set_ptr(dev, "as", as);
+			qdev_prop_set_int32(dev, "enh_desc", 1);
+			qdev_prop_set_uint32(dev, "version", 0xd137);
+			qdev_prop_set_uint32(dev, "hwcap", 0x1b0d2fbf);
+			qdev_init_nofail(dev);
+			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1f020000);
+			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls1a500_irq[12]);
+		}
+		{
+			DeviceState *dev;
+
+			dev = qdev_create(NULL, "sysbus-synopgmac");
+    if(nd_table[1].used)
+    qdev_set_nic_properties(dev, &nd_table[1]);
+			qdev_prop_set_ptr(dev, "as", as);
+			qdev_prop_set_int32(dev, "enh_desc", 1);
+			qdev_prop_set_uint32(dev, "version", 0xd137);
+			qdev_prop_set_uint32(dev, "hwcap", 0x1b0d2fbf);
+			qdev_init_nofail(dev);
+			sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1f030000);
+			sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls1a500_irq[14]);
+		}
+	{
+		DeviceState *dev;
+		dev = qdev_create(NULL, "exynos4210-ehci-usb");
+		qdev_prop_set_ptr(dev, "as", as);
+		qdev_init_nofail(dev);
+		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1f050000);
+		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls1a500_irq1[18]);
+	}
+	{
+		DeviceState *dev;
+		dev = qdev_create(NULL, "sysbus-ohci");
+		qdev_prop_set_uint32(dev, "num-ports", 4);
+		qdev_prop_set_uint64(dev, "dma-offset", 0);
+		qdev_prop_set_ptr(dev, "as", as);
+		qdev_init_nofail(dev);
+		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1f058000);
+		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls1a500_irq1[19]);
+
+	}
+	{
+		DeviceState *dev;
+		BusState *idebus[4];
+		DriveInfo *hd;
+		dev = qdev_create(NULL, "sysbus-ahci");
+		qdev_prop_set_uint32(dev, "num-ports", 1);
+		qdev_prop_set_ptr(dev, "as", as);
+		qdev_init_nofail(dev);
+		sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0x1f040000);
+		sysbus_connect_irq(SYS_BUS_DEVICE(dev), 0, ls1a500_irq[19]);
+		hd=drive_get_next(IF_IDE);
+		if(hd)
+		{
+			idebus[0] = qdev_get_child_bus(dev, "ide.0");
+
+			dev = qdev_create(idebus[0], hd->media_cd ? "ide-cd" : "ide-hd");
+			qdev_prop_set_uint32(dev, "unit", 0);
+			qdev_prop_set_drive(dev, "drive", blk_by_legacy_dinfo(hd),&error_fatal);
+			qdev_init_nofail(dev);
+
+        		//ide_create_drive(&ahci->dev[i].port, 0, hd[i]);
+		}
+	}
 
 	{
 
@@ -1258,8 +1167,8 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe104c0, "0x1fe104c0", 0x4);
                 memory_region_add_subregion(address_space_mem, 0x1fe104c0, iomem);
                 iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10c10, "0x1fe10c10", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fe10c10, iomem);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10c30, "0x1fe10c30", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe10c30, iomem);
 
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10480, "0x1fe10480", 0x20);
@@ -1274,8 +1183,8 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
                 memory_region_add_subregion(address_space_mem, 0x1fe104a0, iomem);
 
                 iomem = g_new(MemoryRegion, 1);
-                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10424, "0x1fe10424", 0x4);
-                memory_region_add_subregion(address_space_mem, 0x1fe10424, iomem);
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fe10100, "0x1fe10100", 0x4);
+                memory_region_add_subregion(address_space_mem, 0x1fe10100, iomem);
 #ifdef DEBUG_PCIEDMA
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)0x1fef0000, "0x1fef0000", 0x8);
@@ -1289,16 +1198,9 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
                 memory_region_init_io(ddrcfg_iomem, NULL, &mips_qemu_ops, (void *)0x0ff00000, "ddr", 0x100000);
 
 		if(ddr2config)
-			mips_qemu_writel (0, 0x1fe10424, 0x000, 4);
+			mips_qemu_writel (0, 0x1fe10100, 0x000, 4);
 	}
 
-
-	{
-	static MemoryRegion *gipi_iomem;
-	gipi_iomem = g_new(MemoryRegion, 1);
-	memory_region_init_io(gipi_iomem, NULL, &gipi_ops, (void *)gipis, "gipi", 0x200);
-        memory_region_add_subregion(get_system_memory(), 0x1fe11000, gipi_iomem);
-	}
 
 #if 0
 	{
@@ -1310,7 +1212,7 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
 		sysbus_mmio_map(s, 0, 0x1fe20000);
-		sysbus_connect_irq(s, 0, ls2k_irq1[25]);
+		sysbus_connect_irq(s, 0, ls1a500_irq1[25]);
 		hdabus = QLIST_FIRST(&dev->child_bus);
 		codec = qdev_create(hdabus, "hda-duplex");
 		qdev_init_nofail(codec);
@@ -1318,25 +1220,27 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 #endif
 	{
 		MemoryRegion *iomem = g_new(MemoryRegion, 1);
-		memory_region_init_ram(iomem, NULL, "ls2k.gpio", 0x40, &error_fatal);
-		memory_region_add_subregion(get_system_memory(), 0x1fe10500, iomem);
-		SIMPLE_OPS(0x1fe10510,8);
+		memory_region_init_ram(iomem, NULL, "ls1a500.gpio", 0x40, &error_fatal);
+		memory_region_add_subregion(get_system_memory(), GPIO0_ADDR, iomem);
+		SIMPLE_OPS(GPIO0_OUT_ADDR,8);
 	}
 
+		SIMPLE_OPS(0x1fe11040,16);
+		SIMPLE_OPS(0x1fe10400,0x28);
 	mypc_callback =  mypc_callback_for_net;
 }
 
 
 static void mips_machine_init(MachineClass *mc)
 {
-    mc->desc = "mips ls2k platform";
-    mc->init = mips_ls2k_init;
-    mc->max_cpus = 2;
+    mc->desc = "mips ls1a500 platform";
+    mc->init = mips_ls1a500_init;
+    mc->max_cpus = 1;
     mc->block_default_type = IF_IDE;
-    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("loongson2k");
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("loongson1a500");
 }
 
-DEFINE_MACHINE("ls2k", mips_machine_init)
+DEFINE_MACHINE("ls1a500", mips_machine_init)
 
 //------------
 #include "hw/pci/pci.h"
@@ -1362,52 +1266,24 @@ DEFINE_MACHINE("ls2k", mips_machine_init)
 // pci bridge
 //-----------------
 
-static int pci_ls2k_map_irq(PCIDevice *d, int pin)
+static int pci_ls1a500_map_irq(PCIDevice *d, int pin)
 {
 	int dev=(d->devfn>>3)&0x1f;
 	int fn=d->devfn& 7;
 
-	if(pci_get_bus(d) != ls2k_pci_bus)
+	if(pci_get_bus(d) != ls1a500_pci_bus)
 		return pin;
 
 	  switch(dev)
 	  {
-		case 2:
-		/*APB 2*/
-		break;
-
-		case 3:
-		/*GMAC0 3 0*/
-		/*GMAC1 3 1*/
-		return (fn==0)?12:14;
-
-		case 4:
-		/*
-		OTG: 4 0
-		EHCI: 4 1
-		OHCI: 4 2
-		*/
-		 return (fn == 0)? 49:(fn == 1)? 50:51;
-		break;
-
 		case 5:
 		/*GPU*/
 		 return 29;
 		break;
 
-		case 6:
-		/*DC*/
-		 return 28;
-		break;
-
 		case 7:
-		/*HDA*/
-		 return 4;
-		break;
-
-		case 8:
-		/*SATA*/
-		 return 19;
+		/*xhci*/
+		 return 30;
 		break;
 
 		case 9:
@@ -1419,42 +1295,17 @@ static int pci_ls2k_map_irq(PCIDevice *d, int pin)
 		/*PCIE PORT 1*/
 		 return 33;
 		break;
-
-		case 11:
-		/*PCIE PORT 2*/
-		 return 34;
-		break;
-
-		case 12:
-		 return 35;
-		/*PCIE PORT 3*/
-		break;
-
-		case 13:
-		 return 36;
-		/*PCIE1 PORT 0*/
-		break;
-
-		case 14:
-		/*PCIE1 PORT 1*/
-		 return 37;
-		break;
-
-		case 15:
-		/*DMA*/
-		break;
-
 	  }
 	
 	return  0;
 }
 
-static void pci_ls2k_set_irq(void *opaque, int irq_num, int level)
+static void pci_ls1a500_set_irq(void *opaque, int irq_num, int level)
 {
 	if(irq_num<32)
-		qemu_set_irq(ls2k_irq[irq_num],level);
+		qemu_set_irq(ls1a500_irq[irq_num],level);
 	else 
-		qemu_set_irq(ls2k_irq1[irq_num-32],level);
+		qemu_set_irq(ls1a500_irq1[irq_num-32],level);
 }
 /*self pci header*/
 #define LS2K_PCIE_PORT_HEAD_BASE_PORT(portnum)  (0x18114000 + (portnum << 22))
@@ -1468,7 +1319,7 @@ static void pci_ls2k_set_irq(void *opaque, int irq_num, int level)
 #define LS2K_PCIE_PORT_REG_CTR_STAT		0x28
 
 
-#define TYPE_BONITO_PCI_HOST_BRIDGE "ls2k-pcihost"
+#define TYPE_BONITO_PCI_HOST_BRIDGE "ls1a500-pcihost"
 typedef struct BonitoState BonitoState;
 
 #define BONITO_PCI_HOST_BRIDGE(obj) \
@@ -1526,13 +1377,12 @@ struct BonitoState {
     qemu_irq *pic;
     PCIBonitoState *pci_dev;
     MemoryRegion iomem_mem;
-    MemoryRegion iomem_submem;
-    MemoryRegion iomem_subbigmem;
     MemoryRegion iomem_io;
     AddressSpace as_mem;
     AddressSpace as_io;
     MemoryRegion data_mem;
     MemoryRegion data_mem1;
+    Notifier wakeup;
    int (*pci_map_irq)(PCIDevice *d, int irq_num);
 };
 
@@ -1610,8 +1460,8 @@ static void bonito_class_init(ObjectClass *klass, void *data)
 
     k->realize = bonito_initfn;
     k->exit = pci_bridge_exitfn;
-    k->vendor_id = 0xdf53;
-    k->device_id = 0x00d5;
+    k->vendor_id = 0x0014;
+    k->device_id = 0x1a05;
     k->revision = 0x01;
     k->class_id = PCI_CLASS_BRIDGE_HOST;
     k->is_bridge = 1;
@@ -1622,7 +1472,7 @@ static void bonito_class_init(ObjectClass *klass, void *data)
 }
 
 static const TypeInfo bonito_info = {
-    .name          = "LS2K_Bonito",
+    .name          = "LS1A500_Bonito",
     .parent        = TYPE_PCI_BRIDGE,
     .instance_size = sizeof(PCIBonitoState),
     .class_init    = bonito_class_init,
@@ -1634,8 +1484,16 @@ static const TypeInfo bonito_info = {
 
 static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn);
 
+static void pcihost_wakeup_notifier(Notifier *notifier, void *data)
+{
+	BonitoState *pcihost = container_of(notifier, BonitoState, wakeup);
+    WakeupReason *reason = data;
+#define BDFR(b,d,f,r) ((b<<16)|(d<<11)|(f<<8)|r)
+	pci_data_write(pcihost->bus,  BDFR(0,7,0,0x10), 0x1f060000, 4);
+	pci_data_write(pcihost->bus,  BDFR(0,7,0,0x4), 0x7, 4);
+}
 #define MAX_SATA_PORTS     6
-static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram, MemoryRegion *ram1, MemoryRegion *ram2)
+static PCIBus **pcibus_ls1a500_init(int busno, qemu_irq *pic, int (*board_map_irq)(PCIDevice *d, int irq_num), MemoryRegion *ram)
 {
     DeviceState *dev;
     BonitoState *pcihost;
@@ -1655,12 +1513,12 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     qdev_init_nofail(dev);
 
     /* set the pcihost pointer before bonito_initfn is called */
-    //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS2K_Bonito");
-    for (i=0;i<4;i++)
+    //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS1A500_Bonito");
+    for (i=0;i<2;i++)
     {
 	char buf[16];
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9+i, 0), true, "LS2K_Bonito");
-    sprintf(buf, "pcie-%d.0", 9+i);
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(i, 0), true, "LS1A500_Bonito");
+    sprintf(buf, "pcie-%d.0", i);
     qdev_set_id(DEVICE(d), g_strdup(buf));
 
     s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
@@ -1676,27 +1534,12 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     }
 
 
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(3, 0), true, "pci-synopgmac");
-    dev = DEVICE(d);
-    if(nd_table[0].used)
-    qdev_set_nic_properties(dev, &nd_table[0]);
-    qdev_prop_set_int32(dev, "enh_desc", 1);
-    qdev_prop_set_uint32(dev, "version", 0xd137);
-    qdev_prop_set_uint32(dev, "hwcap", 0x1b0d2fbf);
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
+{
+	DeviceState *dev;
+	dev = sysbus_create_simple("ls2h_fb", 0x1f010000, NULL);
+	qdev_prop_set_ptr(dev, "root", &pcihost->iomem_mem);
+}
 
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(3, 1), true, "pci-synopgmac");
-    dev = DEVICE(d);
-    if(nd_table[1].used)
-    qdev_set_nic_properties(dev, &nd_table[1]);
-    qdev_prop_set_int32(dev, "enh_desc", 1);
-    qdev_prop_set_uint32(dev, "version", 0xd137);
-    qdev_prop_set_uint32(dev, "hwcap", 0x1b0d2fbf);
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a03);
 
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 0), true, "pciram");
     qdev_prop_set_uint32(DEVICE(d), "bar0", ~(0x00001000-1));
@@ -1704,40 +1547,6 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a04);
 
-#if 1
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 1), true, "usb-ehci");
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a14);
-#endif
-
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(4, 2), true, "pci-ohci");
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
-
-#if 0
-    d = pci_create(pcihost->bus, PCI_DEVFN(4, 1), "pci-ehci-usb");
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a14);
-
-    d = pci_create(pcihost->bus, PCI_DEVFN(4, 2), "pci-ohci");
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
-#endif
-
-    /* ahci and SATA device, for q35 1 ahci controller is built-in */
-    d= pci_create_simple_multifunction(pcihost->bus,
-                                           PCI_DEVFN(8,0),
-                                           true, "ls2k-ahci");
-
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a08);
-
-    ide_drive_get(hd, LS2K_AHCI(d)->ahci.ports);
-    ls2k_ahci_ide_create_devs(d, hd);
 
     {
 	    //gpu
@@ -1754,27 +1563,44 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
 	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
     }
 
-    pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,0), true, "pci_ls2h_fb");
+    //pci_create_simple(pcihost->bus, PCI_DEVFN(7,0), "nec-usb-xhci");
+    {
+	MemoryRegion *address_space_mem = get_system_memory();
+	    PCIDevice *dev = pci_create_multifunction(pcihost->bus, PCI_DEVFN(7,0), false, "nec-usb-xhci");
+	    qdev_init_nofail(&dev->qdev);
+	    pci_set_word(dev->config + PCI_VENDOR_ID, 0xffff);
+	    pci_set_word(dev->config + PCI_DEVICE_ID, 0xffff);
+    pci_set_word(dev->config + PCI_COMMAND,
+                 PCI_COMMAND_MASTER|PCI_COMMAND_MEMORY|PCI_COMMAND_IO);
+    pci_set_word(dev->wmask + PCI_COMMAND, 0);
+//should set after reset
+    pcihost->wakeup.notify = pcihost_wakeup_notifier;
+    qemu_register_wakeup_notifier(&pcihost->wakeup);
+   SIMPLE_OPS(0x1f06c100,0x400);
+    }
 
     sysbus = SYS_BUS_DEVICE(pcihost);
      /*devices header*/
-    sysbus_mmio_map(sysbus, 0, 0x1a000000);
+    sysbus_mmio_map(sysbus, 0, 0x16800000);
     sysbus_mmio_map(sysbus, 1, 0xfe00000000ULL);
 
-    memory_region_add_subregion(get_system_memory(), 0x10000000UL, &pcihost->iomem_submem);
-    memory_region_add_subregion(get_system_memory(), 0x40000000UL, &pcihost->iomem_subbigmem);
-    memory_region_add_subregion(get_system_memory(), 0x18000000UL, &pcihost->iomem_io);
-
-//pci-synopgmac
+    
+    ALIAS_REGION_FROM_RAS_TO_RA(&pcihost->iomem_mem, 0x1f060000, 0x10000, get_system_memory(), 0x1f060000);
+    ALIAS_REGION_FROM_RAS_TO_RA(&pcihost->iomem_mem, 0x10000000UL,  0x02000000UL, get_system_memory(), 0x10000000UL);
+    ALIAS_REGION_FROM_RAS_TO_RA(&pcihost->iomem_mem, 0x40000000UL,  0x20000000UL, get_system_memory(), 0x40000000UL);
+    memory_region_add_subregion(get_system_memory(), 0x16400000UL, &pcihost->iomem_io);
 
     ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, 0x80000000, &pcihost->iomem_mem, 0x80000000);
 
-    memory_region_add_subregion(&pcihost->iomem_mem, 0x0UL, ram1);
-    if (ram2)
-	    memory_region_add_subregion(&pcihost->iomem_mem, 0x20000000, ram2);
-    memory_region_add_subregion(&pcihost->iomem_mem, 0x100000000UL, ram);
+    ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, 0x10000000, &pcihost->iomem_mem, 0);
+    if(memory_region_size(ram) >= 0x40000000)
+    {
+	    ALIAS_REGION_FROM_RAS_TO_RA(ram, memory_region_size(ram) - 0x20000000, 0x20000000, &pcihost->iomem_mem, 0x20000000);
+    }
 
-    ls2k_pci_bus = pcihost->bus;
+    ls1a500_pci_bus = pcihost->bus;
+//pcihost
+//pci_ls1a500_config_writel
 
     return pci_bus;
 }
@@ -1786,7 +1612,7 @@ static AddressSpace *pci_dma_context_fn(PCIBus *bus, void *opaque, int devfn)
     return &pcihost->as_mem;
 }
 
-static void pci_ls2k_config_writel (void *opaque, hwaddr addr,
+static void pci_ls1a500_config_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
 	BonitoState *phb = opaque;
@@ -1796,7 +1622,7 @@ static void pci_ls2k_config_writel (void *opaque, hwaddr addr,
 	pci_data_write(phb->bus,  addr, val, size);
 }
 
-static uint64_t pci_ls2k_config_readl (void *opaque, hwaddr addr, unsigned size)
+static uint64_t pci_ls1a500_config_readl (void *opaque, hwaddr addr, unsigned size)
 {
 	BonitoState *phb = opaque;
 	uint32_t val;
@@ -1805,14 +1631,14 @@ static uint64_t pci_ls2k_config_readl (void *opaque, hwaddr addr, unsigned size)
 
 
 	val = pci_data_read(phb->bus, addr, size);
-	//printf("pci_ls2k_config_readl 0x%x 0x%x\n", (int)addr, val);
+	//printf("pci_ls1a500_config_readl 0x%x 0x%x\n", (int)addr, val);
 	return val;
 }
 
 
-static const MemoryRegionOps pci_ls2k_config_ops = {
-    .read = pci_ls2k_config_readl,
-    .write = pci_ls2k_config_writel,
+static const MemoryRegionOps pci_ls1a500_config_ops = {
+    .read = pci_ls1a500_config_readl,
+    .write = pci_ls1a500_config_writel,
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
@@ -1836,20 +1662,17 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     memory_region_init(&pcihost->iomem_mem, OBJECT(pcihost), "system", INT64_MAX);
     address_space_init(&pcihost->as_mem, &pcihost->iomem_mem, "pcie memory");
 #ifdef DEBUG_PCIEDMA
-    ls2k_pci_as = &pcihost->as_mem;
+    ls1a500_pci_as = &pcihost->as_mem;
 #endif
 
     /* Host memory as seen from the PCI side, via the IOMMU.  */
-
-    memory_region_init_alias(&pcihost->iomem_submem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x10000000, 0x2000000);
-    memory_region_init_alias(&pcihost->iomem_subbigmem, NULL, "pcisubmem", &pcihost->iomem_mem, 0x40000000, 0x20000000);
 
     memory_region_init(&pcihost->iomem_io, OBJECT(pcihost), "system", 0x10000);
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
     phb = PCI_HOST_BRIDGE(dev);
     pcihost->bus = phb->bus = pci_register_root_bus(DEVICE(dev), "pci",
-                                pci_ls2k_set_irq, pcihost->pci_map_irq, pcihost->pic,
+                                pci_ls1a500_set_irq, pcihost->pci_map_irq, pcihost->pic,
                                 &pcihost->iomem_mem, &pcihost->iomem_io,
                                 PCI_DEVFN(0, 0), 64, TYPE_PCIE_BUS);
 
@@ -1857,16 +1680,16 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     pci_setup_iommu(pcihost->bus, pci_dma_context_fn, pcihost);
 
     /* set the south bridge pci configure  mapping */
-    memory_region_init_io(&pcihost->data_mem, NULL, &pci_ls2k_config_ops, pcihost,
-                          "south-bridge-pci-config", 0x2000000);
+    memory_region_init_io(&pcihost->data_mem, NULL, &pci_ls1a500_config_ops, pcihost,
+                          "south-bridge-pci-config", 0x800000);
     sysbus_init_mmio(sysbus, &pcihost->data_mem);
 
-    memory_region_init_io(&pcihost->data_mem1, NULL, &pci_ls2k_config_ops, pcihost,
+    memory_region_init_io(&pcihost->data_mem1, NULL, &pci_ls1a500_config_ops, pcihost,
                           "south-bridge-pci-config", 0x200000000);
     sysbus_init_mmio(sysbus, &pcihost->data_mem1);
 }
 
-static const char *ls2k_host_root_bus_path(PCIHostState *host_bridge,
+static const char *ls1a500_host_root_bus_path(PCIHostState *host_bridge,
                                           PCIBus *rootbus)
 {
     return "0000:00";
@@ -1877,7 +1700,7 @@ static void bonito_pcihost_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIHostBridgeClass *hc = PCI_HOST_BRIDGE_CLASS(klass);
 
-    hc->root_bus_path = ls2k_host_root_bus_path;
+    hc->root_bus_path = ls1a500_host_root_bus_path;
     dc->realize = bonito_pcihost_initfn;
 }
 
