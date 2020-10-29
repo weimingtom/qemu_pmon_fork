@@ -270,6 +270,8 @@ static int reg180;
 static int reg424;
 static unsigned char mem200[256];
 static MemoryRegion *cachelock_iomem[4];
+static uint64_t cachelock_base[4];
+static uint64_t cachelock_size[4];
 
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
@@ -296,24 +298,39 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 				memory_region_transaction_begin();
 				if(val & 0x80000000)
 				{
-					printf("base = 0x%llx size = 0x%llx\n", base, bsize);
+					char *buf = NULL;
+					printf("cachelock base = 0x%llx size = 0x%llx\n", base, bsize);
 					if (!cachelock_iomem[j]) {
+						buf = g_new(char, bsize);
+						address_space_read(&address_space_memory, base, MEMTXATTRS_UNSPECIFIED, buf, bsize);
 						cachelock_iomem[j] = g_new(MemoryRegion, 1);
 						memory_region_init_ram_nomigrate(cachelock_iomem[j], NULL, "mips_r4k.cachemem", bsize, &error_fatal);
+						cachelock_base[j] = base;
+						cachelock_size[j] = bsize;
 					}
-//memory_region_get_ram_ptr(MemoryRegion *mr)
 					memory_region_add_subregion_overlap(get_system_memory(), base, cachelock_iomem[j], 1);
+					memory_region_transaction_commit();
+					if (buf) {
+						address_space_write(&address_space_memory, base, MEMTXATTRS_UNSPECIFIED, buf, bsize);
+						g_free(buf);
+					}
 				}
 				else if(cachelock_iomem[j])
 				{
+					char *buf = NULL;
+					base = cachelock_base[j];
+					size = cachelock_size[j];
+					printf("uncachelock base = 0x%llx size = 0x%llx\n", base, bsize);
+					buf = g_new(char, bsize);
+					address_space_read(&address_space_memory, base, MEMTXATTRS_UNSPECIFIED, buf, bsize);
 					memory_region_del_subregion(get_system_memory(), cachelock_iomem[j]);
 					memory_region_unref(cachelock_iomem[j]);
+					memory_region_transaction_commit();
+					address_space_write(&address_space_memory, base, MEMTXATTRS_UNSPECIFIED, buf, bsize);
+					g_free(buf);
+					g_free(cachelock_iomem[j]);
+					cachelock_iomem[j] = NULL;
 				}
-
-				memory_region_transaction_commit();
-
-
-
 
 			}
 		}
@@ -1068,9 +1085,10 @@ static void mips_ls3a7a_init(MachineState *machine)
 		{
 			dev1 = ssi_create_slave_no_init(bus, "spi-flash");
 			qdev_prop_set_drive(dev1, "drive", blk_by_legacy_dinfo(flash_dinfo), &error_fatal);
-			qdev_prop_set_uint32(dev1, "size", 0x100000);
-			qdev_prop_set_uint64(dev1, "addr", 0x1fc00000);
+			qdev_prop_set_uint32(dev1, "size", 0x1000000);
+			qdev_prop_set_uint64(dev1, "addr", 0x1d000000);
 			qdev_init_nofail(dev1);
+			ALIAS_REGION(0x1d000000ULL, 0x100000UL, 0x1fc00000ULL);
 		}
 		else dev1 = ssi_create_slave(bus, "ssi-sd");
 		cs_line = qdev_get_gpio_in_named(dev1, "ssi-gpio-cs",  0);
