@@ -297,8 +297,11 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 				if(val & 0x80000000)
 				{
 					printf("base = 0x%llx size = 0x%llx\n", base, bsize);
-					if(!cachelock_iomem[j]) cachelock_iomem[j] = g_new(MemoryRegion, 1);
-					memory_region_init_ram_nomigrate(cachelock_iomem[j], NULL, "mips_r4k.cachemem", bsize, &error_fatal);
+					if (!cachelock_iomem[j]) {
+						cachelock_iomem[j] = g_new(MemoryRegion, 1);
+						memory_region_init_ram_nomigrate(cachelock_iomem[j], NULL, "mips_r4k.cachemem", bsize, &error_fatal);
+					}
+//memory_region_get_ram_ptr(MemoryRegion *mr)
 					memory_region_add_subregion_overlap(get_system_memory(), base, cachelock_iomem[j], 1);
 				}
 				else if(cachelock_iomem[j])
@@ -519,7 +522,7 @@ static int set_bootparam(ram_addr_t initrd_offset,long initrd_size)
 return 0;
 }
 
-static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
+static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 {
 	char memenv[32];
 	char highmemenv[32];
@@ -573,12 +576,33 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size)
 	init_boot_param(boot_params_buf);
 	printf("param len=%ld\n", boot_params_p-params_buf);
 
-	rom_add_blob_fixed("params", params_buf, params_size,
-			BOOTPARAM_PHYADDR);
 	loaderparams.a0 = 2;
 	loaderparams.a1 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR;
 	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
         printf("env %x\n", BOOTPARAM_PHYADDR + ret);
+
+	if(dtb)
+	{
+	int size;
+	void *fdt;
+	int err;
+        uint64_t ram_low_sz, ram_high_sz;
+	struct boot_params *bp = (void *)boot_params_buf;
+	struct system_loongson *s = (void *)&bp->efi.smbios.lp + bp->efi.smbios.lp.system_offset; 
+	
+	ret = boot_params_p-params_buf;
+	
+	s->of_dtb_addr = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
+
+	fdt = load_device_tree(dtb, &size);
+        printf("fdt %x %p\n", BOOTPARAM_PHYADDR + ret, fdt);
+
+	memcpy(boot_params_p, fdt, size);
+
+	qemu_fdt_dumpdtb(fdt, size);
+	}
+	rom_add_blob_fixed("params", params_buf, params_size,
+			BOOTPARAM_PHYADDR);
 return 0;
 }
 
@@ -587,7 +611,7 @@ static uint64_t cpu_mips_kseg0_to_phys1(void *opaque, uint64_t addr)
     return (addr & 0x1fffffffll) + (unsigned long long)opaque;
 }
 
-static int64_t load_kernel(void)
+static int64_t load_kernel(char *dtb)
 {
     int64_t entry, kernel_low, kernel_high;
     long kernel_size, initrd_size;
@@ -649,7 +673,7 @@ static int64_t load_kernel(void)
 	if(getenv("OLDENV"))
 	 set_bootparam(initrd_offset, initrd_size);
 	else
-	 set_bootparam1(initrd_offset, initrd_size);
+	 set_bootparam1(initrd_offset, initrd_size, dtb);
 	
 return entry;
 }
@@ -982,7 +1006,7 @@ static void mips_ls3a7a_init(MachineState *machine)
         loaderparams.kernel_filename = kernel_filename;
         loaderparams.kernel_cmdline = kernel_cmdline;
         loaderparams.initrd_filename = initrd_filename;
-        reset_info[0]->vector = load_kernel()?:reset_info[0]->vector;
+        reset_info[0]->vector = load_kernel(machine->dtb)?:reset_info[0]->vector;
     }
 
 
@@ -1081,6 +1105,8 @@ static void mips_ls3a7a_init(MachineState *machine)
 		pci_set_word(d->config + PCI_VENDOR_ID, 0x1002);
 		pci_set_word(d->config + PCI_DEVICE_ID, 0x6822);
 	}
+
+	pci_create_simple(ppci_bus[2], -1, "nec-usb-xhci");
 
 #if 0
 	{
@@ -1605,6 +1631,7 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     PCIBus *bus2;
     DriveInfo *hd[MAX_SATA_PORTS];
     static PCIBus *pci_bus[4];
+    int i;
 
     dev = qdev_create(NULL, TYPE_BONITO_PCI_HOST_BRIDGE);
     pcihost = BONITO_PCI_HOST_BRIDGE(dev);
@@ -1617,7 +1644,9 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 
     /* set the pcihost pointer before bonito_initfn is called */
     //d = pci_create(phb->bus, PCI_DEVFN(0, 0), "LS7A_Bonito");
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9, 0), true, "LS7A_Bonito");
+    for (i=0;i<4;i++)
+    {
+    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(9+i, 0), true, "LS7A_Bonito");
 
     s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
     s->pcihost = pcihost;
@@ -1628,20 +1657,8 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     bus2 = pci_bridge_get_sec_bus(br);
 
     pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
-    pci_bus[0] = bus2;
-
-    d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(0xa, 0), true, "LS7A_Bonito");
-
-    s = DO_UPCAST(PCIBonitoState, parent_obj.parent_obj, d);
-    s->pcihost = pcihost;
-    pcihost->pci_dev = s;
-    br = PCI_BRIDGE(d);
-    pci_bridge_map_irq(br, "Advanced PCI Bus secondary bridge 1", board_map_irq);
-    qdev_init_nofail(DEVICE(d));
-    bus2 = pci_bridge_get_sec_bus(br);
-
-    pci_setup_iommu(bus2, pci_dma_context_fn, pcihost);
-    pci_bus[1] = bus2;
+    pci_bus[i] = bus2;
+    }
 
     d = pci_create_multifunction(pcihost->bus, PCI_DEVFN(3, 0), true, "pci-synopgmac");
     dev = DEVICE(d);
@@ -1671,19 +1688,6 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     qdev_init_nofail(DEVICE(d));
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a14);
-#endif
-
-
-#if 0
-    d = pci_create(pcihost->bus, PCI_DEVFN(4, 1), "pci-ehci-usb");
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a14);
-
-    d = pci_create(pcihost->bus, PCI_DEVFN(4, 2), "pci-ohci");
-    qdev_init_nofail(DEVICE(d));
-    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
-    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a24);
 #endif
 
     /* ahci and SATA device, for q35 1 ahci controller is built-in */
