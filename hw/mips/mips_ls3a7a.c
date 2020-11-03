@@ -378,6 +378,14 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		 memcpy(&val, mem200 + addr-0x3ff00200, size);
 		 return val;
 		break;
+		case 0x1fe001b0 ... 0x1fe001b7:
+		{
+		uint64_t d = 0x0481041204110C85ULL;
+		val = 0;
+		memcpy(&val, (char *)&d + addr - 0x1fe001b0, size);
+		}
+		return val;
+		break;
 		case 0x1fe00180:
 		return reg180;
 		case 0x0ff00960:
@@ -1259,6 +1267,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	SIMPLE_OPS(0x10010910,0x10);
 	SIMPLE_OPS(0x1fe00100,0x4);
 	SIMPLE_OPS(0xcfdfb000000,0x1000);
+	SIMPLE_OPS(0x1fe001b0, 8);
 
 
 	//mips_qemu_writel((void *)0xe0040000160, 0, 1<<24, 4);
