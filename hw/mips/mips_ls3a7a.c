@@ -62,6 +62,8 @@
 #include "loongson3a_rom.h"
 #include "hw/timer/hpet.h"
 #include "ls7a_int.h"
+#include "sysemu/device_tree.h"
+#include "libfdt.h"
 
 static LS7A_INTCTLState *ls7a;
 extern target_ulong mypc;
