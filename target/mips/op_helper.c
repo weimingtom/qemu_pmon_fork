@@ -85,6 +85,7 @@ void helper_mysp( target_ulong newsp,CPUMIPSState *env)
 
 void helper_myst( target_ulong value,target_ulong addr,uint32_t mmu_idx, CPUMIPSState *env)
 {
+#if !defined(CONFIG_USER_ONLY)
     int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     target_ulong haddr, paddr;
@@ -109,6 +110,7 @@ void helper_myst( target_ulong value,target_ulong addr,uint32_t mmu_idx, CPUMIPS
 #else
     (void)paddr;
     (void)haddr;
+#endif
 #endif
 }
 
