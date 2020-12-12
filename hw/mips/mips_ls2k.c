@@ -905,7 +905,10 @@ static void mips_ls2k_init(MachineState *machine)
 	env = mycpu[0];
 
 		/* allocate RAM */
-	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
+	if (getenv("MIPS_R4K_RAM"))
+		memory_region_init_ram_from_file(ram, NULL, "MIPS_R4K_RAM", ram_size, 0, true, getenv("MIPS_R4K_RAM"), &error_fatal);
+	else 
+		memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
 
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
