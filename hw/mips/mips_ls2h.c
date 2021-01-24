@@ -558,6 +558,8 @@ static void main_cpu_reset(void *opaque)
 	CPUMIPSState *env = &s->cpu->env;
 
 	cpu_reset(CPU(s->cpu));
+	/*2h code reset sr = 1, nmi sr=0*/
+    	env->CP0_Status |= (1 << CP0St_SR);
 	//env->CP0_IntCtl = 0xfc000000;
 	env->active_tc.PC = s->vector;
 	env->active_tc.gpr[4]=loaderparams.a0;
