@@ -58,6 +58,7 @@
 #include "loongson_bootparam.h"
 #include <stdlib.h>
 #include "hw/timer/hpet.h"
+#include "exec/exec-all.h"
 #if 0
 void memory_region_ref(MemoryRegion *mr)
 {
@@ -78,6 +79,16 @@ void memory_region_ref(MemoryRegion *mr)
 }
 
 #endif
+
+#define _str(x) #x
+#define str(x) _str(x)
+#define SIMPLE_OPS(ADDR,SIZE) \
+	({\
+                MemoryRegion *iomem = g_new(MemoryRegion, 1);\
+                memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)ADDR, str(ADDR) , SIZE);\
+                memory_region_add_subregion_overlap(address_space_mem, ADDR, iomem, 1);\
+		iomem;\
+	})
 
 #define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
 
@@ -314,6 +325,20 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 		}
 
 		break;
+	case 0x1fd000ec:
+		{
+                        static int t;
+			extern target_ulong mypc;
+	                MIPSCPU *cpu;
+	                CPUMIPSState *env;
+	                cpu = MIPS_CPU(current_cpu);
+		        env = &cpu->env;
+                        
+                        t++;
+                        if(t&1)
+                                do_raise_exception_err(env, EXCP_CACHE, 0, GETPC());
+		}
+	break;
 	}
 }
 
@@ -953,6 +978,7 @@ static void mips_ls2h_init(MachineState *machine)
                 memory_region_add_subregion(address_space_mem, 0x1fd00200, iomem);
 		mips_qemu_writel((void *)0x1fd00200, 0, 0x2000, 4);
 	}
+	SIMPLE_OPS(0x1fd000ec, 4);
 
 
 #if 0
