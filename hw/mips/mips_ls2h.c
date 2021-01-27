@@ -80,6 +80,12 @@ void memory_region_ref(MemoryRegion *mr)
 
 #endif
 
+#define ALIAS_REGION_FROM_RAS_TO_RA(REGIONA,ADDR,SIZE,REGIONB,ALIAS) \
+({\
+    MemoryRegion *alias_mr = g_new(MemoryRegion, 1); \
+    memory_region_init_alias(alias_mr, NULL, NULL, REGIONA, ADDR, SIZE); \
+    memory_region_add_subregion(REGIONB, ALIAS, alias_mr); \
+alias_mr;})
 #define _str(x) #x
 #define str(x) _str(x)
 #define SIMPLE_OPS(ADDR,SIZE) \
@@ -659,6 +665,9 @@ static void mips_ls2h_init(MachineState *machine)
 	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
 	memory_region_add_subregion(address_space_mem, 0, ram1);
 	memory_region_add_subregion(address_space_mem, 0x100000000ULL, ram0);
+                                                       
+	ALIAS_REGION_FROM_RAS_TO_RA(ram, 0, ram_size, address_space_mem, 0x1000000000ULL);
+	
 
 
         memory_region_init(iomem_root, NULL,  "ls2h axi", UINT32_MAX);
