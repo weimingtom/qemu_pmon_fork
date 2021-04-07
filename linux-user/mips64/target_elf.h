@@ -12,6 +12,6 @@ static inline const char *cpu_get_model(uint32_t eflags)
     if ((eflags & EF_MIPS_ARCH) == EF_MIPS_ARCH_64R6) {
         return "I6400";
     }
-    return "5KEf";
+    return "loongson2k";
 }
 #endif
