@@ -250,6 +250,7 @@ if(((opcode & 0xffe00000) == OP_MTC0) || ((opcode & 0xffe00000) == OP_DMTC0))
 #define str(x) _str(x)
 #define SIMPLE_OPS(ADDR,SIZE) \
 	({\
+		MemoryRegion *address_space_mem = get_system_memory(); \
                 MemoryRegion *iomem = g_new(MemoryRegion, 1);\
                 memory_region_init_io(iomem, NULL, &mips_qemu_ops, (void *)ADDR, str(ADDR) , SIZE);\
                 memory_region_add_subregion_overlap(address_space_mem, ADDR, iomem, 1);\
@@ -258,6 +259,7 @@ if(((opcode & 0xffe00000) == OP_MTC0) || ((opcode & 0xffe00000) == OP_DMTC0))
 
 #define ALIAS_REGION(ADDR,SIZE,ALIAS) \
 ({\
+    MemoryRegion *address_space_mem = get_system_memory(); \
     MemoryRegion *alias_mr = g_new(MemoryRegion, 1); \
     memory_region_init_alias(alias_mr, NULL, NULL, address_space_mem, ADDR, SIZE); \
     memory_region_add_subregion(address_space_mem, ALIAS, alias_mr); \
@@ -1046,7 +1048,6 @@ static void mips_ls3a7a_init(MachineState *machine)
 	cpu_irqclr_bitmap = bitmap_new(smp_cpus*8);
 	ls7a	=ls7a_intctl_init(address_space_mem, 0x10000000ULL, ht_irq[0]);
 	ls3a7a_irq = ls7a->irqs;
-	//ALIAS_REGION(0x10000000ULL, 0x10000000ULL, 0xe0010000000UL);
 
 	ls3auartpci_irq = qemu_allocate_irqs(ls3auartpci_set_irq, env, 3);
 	ls7auart_irq = qemu_allocate_irqs(ls7auart_set_irq, ls3a7a_irq[8], 4);
@@ -1818,11 +1819,14 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     sysbus_mmio_map(sysbus, 0, 0xfe00004800);
      /*devices header*/
     sysbus_mmio_map(sysbus, 1, 0x1a000000);
-    sysbus_mmio_map(sysbus, 2, 0xefe00000000);
+    sysbus_mmio_map(sysbus, 2, 0xefdfe000000);
 
     memory_region_add_subregion(get_system_memory(), 0x10000000UL, &pcihost->iomem_submem);
     memory_region_add_subregion(get_system_memory(), 0x40000000UL, &pcihost->iomem_subbigmem);
     memory_region_add_subregion(get_system_memory(), 0x18000000UL, &pcihost->iomem_io);
+    ALIAS_REGION(0x18000000ULL, 0x10000000ULL, 0xefdfc000000UL);
+    ALIAS_REGION(0x10000000ULL, 0x10000000ULL, 0xe0010000000UL);
+
 //    MemoryRegion *iomem_subbigmem1 = g_new(MemoryRegion, 1);
 //    memory_region_init_alias(iomem_subbigmem1, NULL, "pcisubmem1", &pcihost->iomem_mem, 0x40000000, 0x40000000);
 //    memory_region_add_subregion(get_system_memory(), 0xe0040000000UL, iomem_subbigmem1);
