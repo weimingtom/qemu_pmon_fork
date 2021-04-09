@@ -277,6 +277,7 @@ static MemoryRegion *cachelock_iomem[4];
 static uint64_t cachelock_base[4];
 static uint64_t cachelock_size[4];
 
+static char ddr_level_reg[0x1000];
 static void mips_qemu_writel (void *opaque, hwaddr addr,
 		uint64_t val, unsigned size)
 {
@@ -284,9 +285,14 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 	unsigned long long base;
 	unsigned long long mask, bsize;
 	unsigned int old;
+	hwaddr offset = addr;
 	addr=((hwaddr)(long)opaque) + addr;
 	switch(addr)
 	{
+		case 0x0ff00000 ... 0x0ff01000-1:
+		case 0x40000000 ... 0x40001000-1:
+		 memcpy(ddr_level_reg + offset, &val, size);
+		break;
 		case 0x3ff00200 ... 0x3ff002ff:
 		old = *(unsigned int *)(mem200+addr-0x3ff00200);
 		memcpy(mem200 + addr-0x3ff00200, &val, size);
@@ -371,6 +377,7 @@ static void mips_qemu_writel (void *opaque, hwaddr addr,
 static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 {
 	uint64_t val;
+	hwaddr offset = addr;
 	addr=((hwaddr)(long)opaque) + addr;
 //	printf("%s 0x%llx\n", __FUNCTION__, (long long)addr);
 	switch(addr)
@@ -390,10 +397,6 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		break;
 		case 0x1fe00180:
 		return reg180;
-		case 0x0ff00960:
-		return 0x100;
-		case 0x0ff00160:
-		return random();
 		case CONFBASE+0x4b0+4:
 		return random();
 		case CONFBASE+0x4c0+4:
@@ -456,6 +459,34 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 1<<24;
 		case 0x1fe00100:
 		return 0x10000;
+		case 0x1fe001c0:
+		return 0x0909017b;
+		case 0x0ff00000 ... 0x0ff01000 - 1:
+		case 0x40000000 ... 0x40001000 - 1:
+		if (offset >= 0x160 && offset <=0x167) {
+			uint64_t data = 0x000000000f000101;
+			val = 0;
+			memcpy(&val, (char *)&data + (offset - 0x160), size);
+			return val;
+		}
+		else if (offset == 0x181 || offset == 0x185 || offset == 0x186) /*181:req,185:ready,186:done*/
+			return 1;
+		else if (offset >= 0x187 && offset <= 0x18f) {
+			int slice = offset - 0x187;
+			/*180:mode, 187,188:response*/
+			//wlvl
+			if (ddr_level_reg[0x180] == 1)
+			return ddr_level_reg[0x3a+slice*0x20] >= 1 && ddr_level_reg[0x3a+slice*0x20] < 20? 0x1:0;
+			//glvl
+			else if (ddr_level_reg[0x180] == 2)
+			return ddr_level_reg[0x38+slice*0x20] >= 1 && ddr_level_reg[0x38+slice*0x20] < 20? 0x3:0;
+			else
+			return 0;
+		} else {
+			val = 0;	
+			memcpy(&val, ddr_level_reg + offset, size);
+			return val;
+		}
 		default:
 		return random();
 	}
@@ -1289,6 +1320,8 @@ static void mips_ls3a7a_init(MachineState *machine)
 	SIMPLE_OPS(0x1fe00100,0x4);
 	SIMPLE_OPS(0xcfdfb000000,0x1000);
 	SIMPLE_OPS(0x1fe001b0, 8);
+	SIMPLE_OPS(0x100d0008, 4);
+	SIMPLE_OPS(0x1fe001c0, 4);
 
 
 	//mips_qemu_writel((void *)0xe0040000160, 0, 1<<24, 4);
