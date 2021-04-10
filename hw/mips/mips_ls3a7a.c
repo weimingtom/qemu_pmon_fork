@@ -1813,6 +1813,7 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
 	    qdev_init_nofail(DEVICE(d));
 	    pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
 	    pci_set_word(d->config + PCI_DEVICE_ID, 0x7a15);
+    	    pci_set_word(d->config + PCI_CLASS_DEVICE, PCI_CLASS_MULTIMEDIA_VIDEO);
     }
 
 #if 0
@@ -1835,6 +1836,7 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(6,1), true, "pci_ls2h_fb");
     pci_set_word(d->config + PCI_VENDOR_ID, 0x0014);
     pci_set_word(d->config + PCI_DEVICE_ID, 0x7a06);
+    pci_set_word(d->config + PCI_CLASS_DEVICE, PCI_CLASS_DISPLAY_VGA);
 
     d = pci_create_simple_multifunction(pcihost->bus, PCI_DEVFN(22,0), true, "pci-1a_spi");
     {
