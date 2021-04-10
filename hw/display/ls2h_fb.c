@@ -359,7 +359,7 @@ static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
     pci_config_set_vendor_id(pci_conf, LS2KDC_VENDOR_ID);
     pci_config_set_device_id(pci_conf, LS2KDC_DEVICE_ID);
     pci_conf[0x04] = 0x07; /* command = I/O space, Bus Master */
-    pci_config_set_class(pci_conf, PCI_CLASS_NETWORK_ETHERNET);
+    pci_config_set_class(pci_conf, PCI_CLASS_DISPLAY_VGA);
     pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL; /* header_type */
     pci_conf[PCI_INTERRUPT_PIN] = 1; /* interrupt pin A */
     pci_conf[0x34] = 0xdc;
@@ -375,6 +375,7 @@ static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
     d->dc.vram_offset = 0;
     
     d->dc.con = graphic_console_init(DEVICE(pci_dev), 0, &ls2hfb_fb_ops, &d->dc);
+    //d->dc.con = graphic_console_init(DEVICE(pci_dev), 1, &ls2hfb_fb_ops, &d->dc);
     ls2h_fb_reset(&d->dc);
 
 }
