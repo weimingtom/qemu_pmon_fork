@@ -63,7 +63,7 @@ static void pci_pciram_init(PCIDevice *dev, Error **errp)
         else
         { 
             size = ~(d->pciram.bar[i]&~0xf)+1;
-            type = PCI_BASE_ADDRESS_SPACE_MEMORY|(type & 0xe);
+            type = PCI_BASE_ADDRESS_SPACE_MEMORY|(d->pciram.bar[i] & 0xe);
         }
 
         MemoryRegion *ram;
