@@ -905,10 +905,11 @@ static void mips_ls2k_init(MachineState *machine)
 	env = mycpu[0];
 
 		/* allocate RAM */
-	if (getenv("MIPS_R4K_RAM"))
-		memory_region_init_ram_from_file(ram, NULL, "MIPS_R4K_RAM", ram_size, 0, true, getenv("MIPS_R4K_RAM"), &error_fatal);
+	if (mem_path)
+		memory_region_init_ram_from_file(ram, NULL, "MIPS_R4K_RAM", ram_size, 0, true, mem_path, &error_fatal);
 	else 
 		memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
+	//memory_region_allocate_system_memory(ram, NULL, "mips_r4k.ram", ram_size);
 
 	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
 	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
@@ -1047,15 +1048,22 @@ static void mips_ls2k_init(MachineState *machine)
 
 #endif
 	}
-#if 0
-{
-    PCIDevice *dev = pci_create_multifunction(pci_bus[0], -1, false, "pciram");
-    qdev_prop_set_uint16(&dev->qdev, "vendor", 0x1002);
-    qdev_prop_set_uint16(&dev->qdev, "device", 0x9615);
-    qdev_prop_set_uint32(&dev->qdev, "bar0", (~(0x04000-1))|1);
-    qdev_init_nofail(&dev->qdev);
-}
-#endif
+        {
+                char *mempath;
+                struct stat buf;
+                if ((mempath = getenv("PCI8619")) && (!stat(mempath,&buf))) {
+                        PCIDevice *dev = pci_create_multifunction(pci_bus[0], PCI_DEVFN(0,0), true, "pci8619");
+                        qdev_prop_set_uint16(&dev->qdev, "vendor", 0x10b5);
+                        qdev_prop_set_uint16(&dev->qdev, "device", 0x8619);
+                        qdev_prop_set_uint32(&dev->qdev, "offset", 0x0f000000);
+                        qdev_prop_set_uint32(&dev->qdev, "len", 0x01000000);
+                        qdev_prop_set_string(&dev->qdev, "mempath", mempath);
+                        qdev_init_nofail(&dev->qdev);
+                        dev = pci_create_multifunction(pci_bus[0], PCI_DEVFN(0, 1), true, "pciram");
+                        qdev_prop_set_uint32(&dev->qdev, "bar0", ~(0x00001000-1));
+                        qdev_init_nofail(&dev->qdev);
+                }
+        }
             pci_create_simple(pci_bus[2], -1, "nec-usb-xhci");
 
 #if 0

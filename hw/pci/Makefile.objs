@@ -9,3 +9,4 @@ common-obj-$(call lnot,$(CONFIG_PCI)) += pci-stub.o
 common-obj-$(CONFIG_ALL) += pci-stub.o
 obj-$(CONFIG_PCI) += pci6254.o
 obj-$(CONFIG_PCI) += pciram.o
+obj-$(CONFIG_PCI) += pci8619.o
