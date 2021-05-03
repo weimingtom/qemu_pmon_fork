@@ -39,45 +39,40 @@
 extern unsigned long long mypc;
 #endif
 
-typedef struct {
-    SysBusDevice busdev;
-    MemoryRegion iomem;
+struct ls1a_fb_states;
+typedef struct ls1a_fb_state {
+        struct ls1a_fb_states *fb;
+        QemuConsole *con;
+        MemoryRegionSection fbsection;
+        ram_addr_t vram_offset;
+        int head;
+        int width;
+        int height;
+        int invalidate;
+        int depth;
+        int bypp;
+        int enable;
+        int config;
+        int need_update;
+        int index;
+        int syncing;
+        void *type;
+} ls1a_fb_state ;
 
-    int width;
-    int height;
-    int invalidate;
-    int depth;
-    int bypp;
-    int enable;
-    int config;
-    int need_update;
-    void *type;
+typedef struct ls1a_fb_states {
+        SysBusDevice busdev;
+        MemoryRegion iomem;
 
-    QemuConsole *con;
-    int vram_size;
-    ram_addr_t vram_offset;
-    MemoryRegionSection fbsection;
+        int vram_size;
+        struct ls1a_fb_state fb_con[2];
 
-    union{
-	    MemoryRegion *root;
-	    void *root_ptr;
-    };
+        union{
+                MemoryRegion *root;
+                void *root_ptr;
+        };
 
-    int index;
-    int syncing;
-    int reg[(0x1594-0x1240)/4];
-} ls1a_fb_state;
-
-
-static const VMStateDescription vmstate_ls2h_fb = {
-    .name = "ls2h_fb",
-    .version_id = 1,
-    .minimum_version_id = 1,
-    .fields = (VMStateField[]) {
-        VMSTATE_INT32(width, ls1a_fb_state),
-        VMSTATE_END_OF_LIST()
-    }
-};
+        int reg[(0x1594-0x1240)/4];
+} ls1a_fb_states;
 
 
 #define BITS 8
@@ -107,7 +102,7 @@ static void ls2h_fb_invalidate_screen(void *opaque)
 
 static void ls2h_fb_update_screen(void *opaque)
 {
-    ls1a_fb_state *s = opaque;
+        ls1a_fb_state *s = opaque;
     DisplaySurface *surface = qemu_console_surface(s->con);
 
     int first = 0;
@@ -146,7 +141,7 @@ static void ls2h_fb_update_screen(void *opaque)
 
     if (s->invalidate) {
         framebuffer_update_memory_section(&s->fbsection,
-                                          s->root,
+                                          s->fb->root,
                                           s->vram_offset,
                                           s->width, s->width * s->bypp);
     }
@@ -206,56 +201,62 @@ static void ls2h_fb_reset(ls1a_fb_state *s)
 #define LS2H_FB_STRI_VGA_REG				(LS2H_DC_REG_BASE + 0x1290)
 #define LS2H_FB_HDISPLAY_DVO_REG			(LS2H_DC_REG_BASE + 0x1400)
 #define LS2H_FB_HDISPLAY_VGA_REG			(LS2H_DC_REG_BASE + 0x1410)
+#define LS2H_FB_VDISPLAY_DVO_REG			(LS2H_DC_REG_BASE + 0x1480)
 #define LS2H_FB_VDISPLAY_VGA_REG			(LS2H_DC_REG_BASE + 0x1490)
 
 static void ls2h_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
- ls1a_fb_state *s = opaque;
- if (addr >= 0x1240 && (addr - 0x1240) < sizeof(s->reg))
-	s->reg[(addr - 0x1240)/4] = val;
+ ls1a_fb_states *d = opaque;
+ ls1a_fb_state *s;
+ if (addr >= 0x1240 && (addr - 0x1240) < sizeof(d->reg))
+	d->reg[(addr - 0x1240)/4] = val;
 
+ s = (addr &0x10)?&d->fb_con[1]:&d->fb_con[0];
  switch(addr)
  {
-  case LS2H_FB_CFG_VGA_REG:
-	if(val&0x100)
-	{
-	  switch(val&7)
-	  {
-		  case 4:
-			  s->depth = 32;
-			  break;
-		  case 3:
-			  s->depth = 16;
-			  break;
-		  case 2:
-			  s->depth = 15;
-			  break;
-		  default:
-			  s->depth = 16;
-			  break;
-	  }
-	  s->bypp = (s->depth + 7) >> 3;
-	  s->need_update = 1;
-	ls2h_fb_size(s);
-      }
-  break;
-  case LS2H_FB_HDISPLAY_VGA_REG:
-	s->width = val&0xffff;
-	s->need_update = 1;
-	ls2h_fb_size(s);
-	break;
-  case LS2H_FB_VDISPLAY_VGA_REG:
-	s->height = val&0xffff;
-	s->need_update = 1;
-	ls2h_fb_size(s);
-	break;
+ case LS2H_FB_CFG_DVO_REG: 
+ case LS2H_FB_CFG_VGA_REG:
+         if(val&0x100)
+         {
+                 switch(val&7)
+                 {
+                 case 4:
+                         s->depth = 32;
+                         break;
+                 case 3:
+                         s->depth = 16;
+                         break;
+                 case 2:
+                         s->depth = 15;
+                         break;
+                 default:
+                         s->depth = 16;
+                         break;
+                 }
+                 s->bypp = (s->depth + 7) >> 3;
+                 s->need_update = 1;
+                 ls2h_fb_size(s);
+         }
+         break;
+ case LS2H_FB_HDISPLAY_DVO_REG:
+ case LS2H_FB_HDISPLAY_VGA_REG:
+         s->width = val&0xffff;
+         s->need_update = 1;
+         ls2h_fb_size(s);
+         break;
+ case LS2H_FB_VDISPLAY_DVO_REG:
+ case LS2H_FB_VDISPLAY_VGA_REG:
+         s->height = val&0xffff;
+         s->need_update = 1;
+         ls2h_fb_size(s);
+         break;
 
-  case LS2H_FB_ADDR0_DVO_REG:
-  case LS2H_FB_ADDR0_VGA_REG:
-  s->vram_offset = val;
-  s->need_update = 1;
-	ls2h_fb_size(s);
-  break;
+ case LS2H_FB_ADDR0_DVO_REG:
+ case LS2H_FB_ADDR0_VGA_REG:
+         s->vram_offset = val;
+         s->need_update = 1;
+         ls2h_fb_size(s);
+         break;
  }
 
 #ifdef DEBUGPC
@@ -269,7 +270,7 @@ static void ls2h_fb_writel (void *opaque, hwaddr addr, uint64_t val, unsigned si
 
 static uint64_t ls2h_fb_readl (void *opaque, hwaddr addr, unsigned size)
 {
- ls1a_fb_state *s = opaque;
+ ls1a_fb_states *s = opaque;
  if (addr >= 0x1240 && (addr - 0x1240) < sizeof(s->reg))
 	 return	s->reg[(addr - 0x1240)/4];
     return 0;
@@ -284,7 +285,7 @@ static const MemoryRegionOps ls2h_fb_ops = {
 #define TYPE_SYS_BUS_LS2HFB "ls2h_fb"
 
 #define SYS_BUS_LS2HFB(obj) \
-    OBJECT_CHECK(ls1a_fb_state, (obj), TYPE_SYS_BUS_LS2HFB)
+    OBJECT_CHECK(ls1a_fb_states, (obj), TYPE_SYS_BUS_LS2HFB)
 
 static const GraphicHwOps ls2hfb_fb_ops = {
     .invalidate  = ls2h_fb_invalidate_screen,
@@ -294,23 +295,26 @@ static const GraphicHwOps ls2hfb_fb_ops = {
 static int ls2h_fb_sysbus_init(SysBusDevice *dev)
 {
 
-    ls1a_fb_state *d = SYS_BUS_LS2HFB(dev);
+    ls1a_fb_states *d = SYS_BUS_LS2HFB(dev);
 
     memory_region_init_io(&d->iomem, NULL, &ls2h_fb_ops, (void *)d, "ls2h fb", 0x10000);
 
     sysbus_init_mmio(dev, &d->iomem);
     d->vram_size = 0;
-    d->vram_offset = 0;
     d->root = sysbus_address_space(dev);
     
-    d->con = graphic_console_init(DEVICE(dev), 0, &ls2hfb_fb_ops, d);
-    ls2h_fb_reset(d);
+    d->fb_con[0].con = graphic_console_init(DEVICE(dev), 0, &ls2hfb_fb_ops, &d->fb_con[0]);
+    d->fb_con[1].con = graphic_console_init(DEVICE(dev), 1, &ls2hfb_fb_ops, &d->fb_con[1]);
+    d->fb_con[0].fb = d;
+    d->fb_con[1].fb = d;
+    ls2h_fb_reset(&d->fb_con[0]);
+    ls2h_fb_reset(&d->fb_con[1]);
 
     return 0;
 }
 
 static Property ls2h_fb_properties[] = {
-    DEFINE_PROP_PTR("root", ls1a_fb_state, root_ptr),
+    DEFINE_PROP_PTR("root", ls1a_fb_states, root_ptr),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -327,7 +331,7 @@ static void ls2h_fb_sysbus_class_init(ObjectClass *klass, void *data)
 static const TypeInfo ls2h_fb_sysbus_info = {
     .name          = "ls2h_fb",
     .parent        = TYPE_SYS_BUS_DEVICE,
-    .instance_size = sizeof(ls1a_fb_state),
+    .instance_size = sizeof(ls1a_fb_states),
     .class_init    = ls2h_fb_sysbus_class_init,
 };
 
@@ -342,7 +346,7 @@ type_init(ls2h_fb_sysbus_register_types)
 //-------------
 typedef struct ls1a_fb_pci_state {
     PCIDevice dev;
-    ls1a_fb_state dc;
+    ls1a_fb_states dc;
 } ls1a_fb_pci_state;
 
 /* PCI interface */
@@ -372,11 +376,13 @@ static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->dc.iomem);
 
     d->dc.vram_size = 0;
-    d->dc.vram_offset = 0;
     
-    d->dc.con = graphic_console_init(DEVICE(pci_dev), 0, &ls2hfb_fb_ops, &d->dc);
-    //d->dc.con = graphic_console_init(DEVICE(pci_dev), 1, &ls2hfb_fb_ops, &d->dc);
-    ls2h_fb_reset(&d->dc);
+    d->dc.fb_con[0].con = graphic_console_init(DEVICE(pci_dev), 0, &ls2hfb_fb_ops, &d->dc.fb_con[0]);
+    d->dc.fb_con[1].con = graphic_console_init(DEVICE(pci_dev), 1, &ls2hfb_fb_ops, &d->dc.fb_con[1]);
+    d->dc.fb_con[0].fb = &d->dc;
+    d->dc.fb_con[1].fb = &d->dc;
+    ls2h_fb_reset(&d->dc.fb_con[0]);
+    ls2h_fb_reset(&d->dc.fb_con[1]);
 
 }
 
