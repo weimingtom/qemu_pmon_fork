@@ -1678,7 +1678,7 @@ static PCIBus **pcibus_ls2k_init(int busno, qemu_irq *pic, int (*board_map_irq)(
     s->pcihost = pcihost;
     pcihost->pci_dev = s;
     br = PCI_BRIDGE(d);
-    pci_bridge_map_irq(br, "Advanced PCI Bus secondary bridge 1", board_map_irq);
+    pci_bridge_map_irq(br, NULL, board_map_irq);
     qdev_init_nofail(DEVICE(d));
     bus2 = pci_bridge_get_sec_bus(br);
 
