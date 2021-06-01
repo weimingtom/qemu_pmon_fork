@@ -1196,6 +1196,9 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 		dev=sysbus_create_simple("ls1a_i2c",0x1fe01000, ls2k_irq[7]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
+		i2c_create_slave(bus, "ds1338", 0x22);
+		i2c_create_slave(bus, "ds1338", 0x24);
+		i2c_create_slave(bus, "ds1338", 0x30);
 	}
 
 	{
@@ -1204,6 +1207,9 @@ mips_qemu_writel (0x1fe10510, 0, 0, 8);
 		dev=sysbus_create_simple("ls1a_i2c",0x1fe01800, ls2k_irq[8]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
+		i2c_create_slave(bus, "ds1338", 0x22);
+		i2c_create_slave(bus, "ds1338", 0x24);
+		i2c_create_slave(bus, "ds1338", 0x30);
 	}
 #if 1
 {
