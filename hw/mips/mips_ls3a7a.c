@@ -410,6 +410,8 @@ static uint64_t mips_qemu_readl (void *opaque, hwaddr addr, unsigned size)
 		return 8;
 		case 0xefdfe0001f4:
 		return 8;
+		case 0xefdfe000044:
+		return 0x40;
 		case 0x10013ff8:
 		return 0x7a000000;
 		case 0x10010484:
@@ -1285,6 +1287,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	SIMPLE_OPS(0xefdfb000044, 4);
 
 	SIMPLE_OPS(0xefdfe0001f4, 4);
+	SIMPLE_OPS(0xefdfe000044, 4);
 
 	SIMPLE_OPS(0x10013ff8, 4);
 
