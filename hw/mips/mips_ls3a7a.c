@@ -1656,7 +1656,7 @@ static void bonito_initfn(PCIDevice *dev, Error **errp)
 
     /* set the south bridge pci configure  mapping */
     memory_region_init_io(&s->ls7aextcfg_mem, NULL, &pci_ls3a7a_config_ops, s,
-                          "south-bridge-pci-config", 0x2000000);
+                          "south-bridge-pci-config", 0x20000000);
     sysbus_init_mmio(sysbus, &s->ls7aextcfg_mem);
 
     pci_config_set_prog_interface(dev->config, PCI_CLASS_BRIDGE_PCI_INF_SUB);
@@ -1877,7 +1877,8 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     sysbus_mmio_map(sysbus, 0, 0xfe00004800);
      /*devices header*/
     sysbus_mmio_map(sysbus, 1, 0x1a000000);
-    sysbus_mmio_map(sysbus, 2, 0xefdfe000000);
+    ALIAS_REGION(0x1a000000ULL, 0x02000000ULL, 0xefdfe000000);
+    sysbus_mmio_map(sysbus, 2, 0xefe00000000);
 
     memory_region_add_subregion(get_system_memory(), 0x10000000UL, &pcihost->iomem_submem);
     memory_region_add_subregion(get_system_memory(), 0x40000000UL, &pcihost->iomem_subbigmem);
