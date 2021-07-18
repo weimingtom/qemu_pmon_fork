@@ -1653,7 +1653,7 @@ static void bonito_initfn(PCIDevice *dev, Error **errp)
 
     /* set the south bridge pci configure  mapping */
     memory_region_init_io(&s->ls7aextcfg_mem, NULL, &pci_ls3a7a_config_ops, s,
-                          "south-bridge-pci-config", 0x20000000);
+                          "south-bridge-pci-config", 0x2000000);
     sysbus_init_mmio(sysbus, &s->ls7aextcfg_mem);
 
     pci_config_set_prog_interface(dev->config, PCI_CLASS_BRIDGE_PCI_INF_SUB);
