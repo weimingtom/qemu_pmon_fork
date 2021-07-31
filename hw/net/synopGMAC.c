@@ -1937,6 +1937,7 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 			s->dma.DmaControl = 0;
 			s->dma.DmaStatus = 0;
 			s->dma.DmaInterrupt = 0;
+			s->dma.DmaBusMode = 0x00020100;
 		}
 		   break;
 		case 0x1000+DmaTxPollDemand:
