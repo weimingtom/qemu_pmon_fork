@@ -42,12 +42,13 @@ extern unsigned long long mypc;
 struct ls1a_fb_states;
 typedef struct ls1a_fb_state {
         struct ls1a_fb_states *fb;
-        QemuConsole *con;
         MemoryRegionSection fbsection;
+        QemuConsole *con;
         ram_addr_t vram_offset, vram_offset1;
         int head;
         int width;
         int height;
+        int stride;
         int invalidate;
         int depth;
         int bypp;
@@ -55,6 +56,7 @@ typedef struct ls1a_fb_state {
         int config;
         int need_update;
         int index;
+        int switch_panel;
         int syncing;
         void *type;
 } ls1a_fb_state ;
@@ -92,29 +94,36 @@ typedef struct ls1a_fb_states {
 static void ls2h_fb_raise_irq(ls1a_fb_state *s);
 static inline void ls2h_fb_size(ls1a_fb_state *s)
 {
+        int idx = s - s->fb->fb_con;
+        QemuConsole *con = s->switch_panel?s->fb->fb_con[1 - idx].con:s->con;
         s->invalidate = 1;
-        qemu_console_resize(s->con, s->width, s->height);
+        qemu_console_resize(con, s->width, s->height);
 }
 
 static void ls2h_fb_invalidate_screen(void *opaque)
 {
         ls1a_fb_state *s = opaque;
+        int idx = s - s->fb->fb_con;
+        QemuConsole *con = s->switch_panel?s->fb->fb_con[1 - idx].con:s->con;
         s->invalidate = 1;
-        qemu_console_resize(s->con, s->width, s->height);
+        qemu_console_resize(con, s->width, s->height);
 }
 
 static void ls2h_fb_update_screen(void *opaque)
 {
         ls1a_fb_state *s = opaque;
-        DisplaySurface *surface = qemu_console_surface(s->con);
+        int idx = s - s->fb->fb_con;
+        QemuConsole *con = s->switch_panel?s->fb->fb_con[1 - idx].con:s->con;
+        DisplaySurface *surface = qemu_console_surface(con);
         ram_addr_t vram_offset;
-
         int first = 0;
         int last = 0;
         drawfn fn;
+        int dest_width;
+        if (!s->enable)
+                return ;
 
-
-        int dest_width = s->width;
+        dest_width = s->width;
 
         switch (surface_bits_per_pixel(surface)) {
         case 0:
@@ -155,16 +164,16 @@ static void ls2h_fb_update_screen(void *opaque)
         framebuffer_update_display(surface, &s->fbsection,
                                    s->width,
                                    s->height,
-                                   s->width * s->bypp,
+                                   s->stride,
                                    dest_width,
                                    0,
-                                   s->invalidate,
+                                   /*s->invalidate*/1,
                                    fn,
                                    s,
                                    &first, &last);
 
         if (first >= 0) {
-                dpy_gfx_update(s->con, 0, first, s->width, last - first + 1);
+                dpy_gfx_update(con, 0, first, s->width, last - first + 1);
         }
         s->invalidate = 0;
         ls2h_fb_raise_irq(s);
@@ -213,6 +222,12 @@ static void ls2h_fb_reset(ls1a_fb_state *s)
 #define LS2H_FB_ADDR1_DVO_REG                           (LS2H_DC_REG_BASE + 0x1580)
 #define LS2H_FB_ADDR1_VGA_REG                           (LS2H_DC_REG_BASE + 0x1590)
 #define LS2H_FB_INT_REG                           	(LS2H_DC_REG_BASE + 0x1570)
+#define LS2H_FB_CUR_CFG_REG				(LS2H_DC_REG_BASE + 0x1520)
+#define LS2H_FB_CUR_ADDR_REG				(LS2H_DC_REG_BASE + 0x1530)
+#define LS2H_FB_CUR_LOC_ADDR_REG			(LS2H_DC_REG_BASE + 0x1540)
+#define LS2H_FB_CUR_BACK_REG				(LS2H_DC_REG_BASE + 0x1550)
+#define LS2H_FB_CUR_FORE_REG				(LS2H_DC_REG_BASE + 0x1560)
+
 
 #define LSDC_INT_FB1_VSYNC             0
 #define LSDC_INT_FB1_HSYNC             1
@@ -260,10 +275,12 @@ static void ls2h_fb_writel(void *opaque, hwaddr addr, uint64_t val,
                 break;
         case LS2H_FB_CFG_DVO_REG:
         case LS2H_FB_CFG_VGA_REG:
+                s->enable = (val >> 8) & 1;
+                s->switch_panel = (val >> 9) & 1;
                 if (val & 0x80)
                         s->index ^= 1;
                 d->reg[(addr - 0x1240) / 4] = (val & ~0x880) | (s->index << 11);
-                if (val & 0x100) {
+                if (s->enable) {
                         switch (val & 7) {
                         case 4:
                                 s->depth = 32;
@@ -307,6 +324,11 @@ static void ls2h_fb_writel(void *opaque, hwaddr addr, uint64_t val,
         case LS2H_FB_ADDR1_VGA_REG:
                 s->vram_offset1 = val;
                 s->need_update = 1;
+                ls2h_fb_size(s);
+                break;
+        case LS2H_FB_STRI_DVO_REG:
+        case LS2H_FB_STRI_VGA_REG:
+                s->stride = val;
                 ls2h_fb_size(s);
                 break;
         }
@@ -364,9 +386,9 @@ static int ls2h_fb_sysbus_init(SysBusDevice *dev)
         d->vram_size = 0;
         d->root = sysbus_address_space(dev);
 
-        d->fb_con[0].con = graphic_console_init(DEVICE(dev), 0, &ls2hfb_fb_ops,
+        d->fb_con[1].con = graphic_console_init(DEVICE(dev), 0, &ls2hfb_fb_ops,
                                                 &d->fb_con[0]);
-        d->fb_con[1].con = graphic_console_init(DEVICE(dev), 1, &ls2hfb_fb_ops,
+        d->fb_con[0].con = graphic_console_init(DEVICE(dev), 1, &ls2hfb_fb_ops,
                                                 &d->fb_con[1]);
         d->fb_con[0].fb = d;
         d->fb_con[1].fb = d;
@@ -440,9 +462,9 @@ static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
 
         d->dc.vram_size = 0;
 
-        d->dc.fb_con[0].con = graphic_console_init(DEVICE(pci_dev), 0, &ls2hfb_fb_ops,
+        d->dc.fb_con[1].con = graphic_console_init(DEVICE(pci_dev), 0, &ls2hfb_fb_ops,
                               &d->dc.fb_con[0]);
-        d->dc.fb_con[1].con = graphic_console_init(DEVICE(pci_dev), 1, &ls2hfb_fb_ops,
+        d->dc.fb_con[0].con = graphic_console_init(DEVICE(pci_dev), 1, &ls2hfb_fb_ops,
                               &d->dc.fb_con[1]);
         d->dc.fb_con[0].fb = &d->dc;
         d->dc.fb_con[1].fb = &d->dc;
