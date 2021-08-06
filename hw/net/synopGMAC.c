@@ -1941,8 +1941,9 @@ static void gmac_mem_writel(void *ptr, hwaddr addr, uint64_t val, unsigned size)
 		}
 		   break;
 		case 0x1000+DmaTxPollDemand:
-		gmac_transmit_demand(s);//s->dma.DmaTxCurrDesc
-		break;
+                        if (s->dma.DmaControl & DmaTxStart)
+                                gmac_transmit_demand(s);//s->dma.DmaTxCurrDesc
+                break;
 		case 0x1000+DmaRxPollDemand:
 		gmac_receive_demand(s);
 		break;
@@ -2100,7 +2101,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	dma_memory_read(s->as,s->dma.Dma64RxCurrDesc,&desc,sizeof(desc));
 	if(desc.status&DescOwnByDma)
 	{
-	  printf("desc.length=0x%x buffer1=0x%llx\n", desc.length, (long long)desc.buffer1);
+	  //printf("desc.length=0x%x buffer1=0x%llx\n", desc.length, (long long)desc.buffer1);
 	  if(desc_rxlen(s, desc))
 	  {
 		  once=min(desc_rxlen(s, desc),size);
@@ -2147,7 +2148,7 @@ static ssize_t gmac64_do_receive(NetClientState *nc, const uint8_t *buf, size_t 
 	if((desc.length&RxDisIntCompl)==0 || s->dma.DmaRxWatchdog)
 	s->dma.DmaStatus |= DmaIntRxCompleted|DmaIntNormal;
 
-	printf("size: %ld\n", size_ - size);
+	//printf("size: %ld\n", size_ - size);
 	gmac_check_irq(s);
 	break;
 	}
