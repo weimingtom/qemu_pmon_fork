@@ -314,8 +314,11 @@ static void mips_ls1b_init (MachineState *machine)
 
 		/* allocate RAM */
 	memory_region_init_ram(ram, NULL, "mips_r4k.ram", ram_size, &error_fatal);
+	MemoryRegion *ram1 = g_new(MemoryRegion, 1);
+	memory_region_init_alias(ram1, NULL, "lowmem", ram, 0, 0x10000000);
+	memory_region_add_subregion(address_space_mem, 0x40000000, ram);
 
-	memory_region_add_subregion(address_space_mem, 0, ram);
+	memory_region_add_subregion(address_space_mem, 0, ram1);
 
 	//memory_region_init_io(iomem, &mips_qemu_ops, NULL, "mips-qemu", 0x10000);
 	//memory_region_add_subregion(address_space_mem, 0x1fbf0000, iomem);
@@ -439,8 +442,9 @@ static void mips_ls1b_init (MachineState *machine)
 	}
 	sysbus_create_simple("sysbus-ahci",0x1fe30000, ls1b_irq1[4]);
 
-	if (nb_nics) {
+	{
 		gmac_sysbus_create(&nd_table[0], 0x1fe10000, ls1b_irq1[2]);
+		gmac_sysbus_create(&nd_table[1], 0x1fe20000, ls1b_irq1[3]);
 	}
 
 #if 1
