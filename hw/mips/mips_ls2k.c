@@ -544,21 +544,20 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 
 	if(dtb)
 	{
-	int size;
-	void *fdt;
-	int err;
+        int size;
+        void *fdt;
         uint64_t ram_low_sz, ram_high_sz;
-	
+
 	ret = boot_params_p-params_buf;
 	loaderparams.a2 = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
 	fdt = load_device_tree(dtb, &size);
         printf("fdt %x %p\n", BOOTPARAM_PHYADDR + ret, fdt);
 
-	err = qemu_fdt_setprop_string(fdt, "/chosen", "bootargs", cmdline);
-	if (err < 0) {
-		fprintf(stderr, "couldn't set /chosen/bootargs\n");
-		exit(-1);
+        if (fdt_path_offset(fdt, "/chosen") < 0) {
+		goto out;
 	}
+
+	qemu_fdt_setprop_string(fdt, "/chosen", "bootargs", cmdline);
 
 
 	ram_low_sz = loaderparams.ram_size>=0x0f000000?0x0ee00000:loaderparams.ram_size;
@@ -573,6 +572,7 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	qemu_fdt_setprop_sized_cells(fdt, "/memory", "reg",
 			2, 0x00200000, 2, ram_low_sz,
 			2, 0x110000000, 2,  ram_high_sz);
+out:
 	memcpy(boot_params_p, fdt, size);
 
 	qemu_fdt_dumpdtb(fdt, size);
