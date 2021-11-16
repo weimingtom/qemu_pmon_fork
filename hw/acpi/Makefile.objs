@@ -19,3 +19,4 @@ common-obj-y += acpi-stub.o
 endif
 common-obj-$(CONFIG_ALL) += acpi-stub.o ipmi-stub.o
 common-obj-$(CONFIG_ACPI) += ls1a_acpi.o
+common-obj-$(CONFIG_ACPI_LS2H) += ls2h_acpi.o
