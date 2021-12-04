@@ -1554,7 +1554,7 @@ static inline void gen_store_gpr (TCGv t, int reg)
 {
 if(check_sp)
 {
-    if(reg == 29)
+    if(reg == check_sp)
         gen_helper_mysp(t,cpu_env);
 }
 
@@ -6044,17 +6044,17 @@ static void gen_mfc0(DisasContext *ctx, TCGv arg, int reg, int sel)
             rn = "Performance0";
             break;
         case 1:
-//            gen_helper_mfc0_performance1(arg);
+            gen_mfc0_load32(arg, offsetof(CPUMIPSState, CP0_Performance1));
             rn = "Performance1";
-            goto cp0_unimplemented;
+            break;
         case 2:
 //            gen_helper_mfc0_performance2(arg);
             rn = "Performance2";
             goto cp0_unimplemented;
         case 3:
-//            gen_helper_mfc0_performance3(arg);
+            gen_mfc0_load32(arg, offsetof(CPUMIPSState, CP0_Performance3));
             rn = "Performance3";
-            goto cp0_unimplemented;
+            break;
         case 4:
 //            gen_helper_mfc0_performance4(arg);
             rn = "Performance4";
@@ -6728,17 +6728,17 @@ static void gen_mtc0(DisasContext *ctx, TCGv arg, int reg, int sel)
             rn = "Performance0";
             break;
         case 1:
-//            gen_helper_mtc0_performance1(arg);
+            gen_mtc0_store32(arg, offsetof(CPUMIPSState, CP0_Performance1));
             rn = "Performance1";
-            goto cp0_unimplemented;
+            break;
         case 2:
 //            gen_helper_mtc0_performance2(arg);
             rn = "Performance2";
             goto cp0_unimplemented;
         case 3:
-//            gen_helper_mtc0_performance3(arg);
+            gen_mtc0_store32(arg, offsetof(CPUMIPSState, CP0_Performance1));
             rn = "Performance3";
-            goto cp0_unimplemented;
+            break;
         case 4:
 //            gen_helper_mtc0_performance4(arg);
             rn = "Performance4";

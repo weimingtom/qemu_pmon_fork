@@ -71,10 +71,13 @@ if(mypc_callback)
 mypc_callback(pc, opcode);
 }
 
+extern int check_sp;
+unsigned long long check_sp_start;
+unsigned long long check_sp_end;
 void helper_mysp( target_ulong newsp,CPUMIPSState *env)
 {
 #if TARGET_LONG_SIZE == 8
-	if(newsp>0x40000000 && newsp<0x100000000ULL)
+	if(newsp>=check_sp_start && newsp<=check_sp_end)
 	{
 	printf("new sp is 0x%llx, mypc=0x%llx\n",(unsigned long long)newsp,(unsigned long long)mypc);
 	env->active_tc.PC = mypc;
@@ -82,6 +85,31 @@ void helper_mysp( target_ulong newsp,CPUMIPSState *env)
 	}
 #endif
 }
+
+static void debug_mysp_types(void)
+{
+	char *endp;
+	int reg;
+	unsigned long long start, end;
+	endp = getenv("DEBUG_MYSP");
+	if (!endp)
+		return;
+	reg = strtoul(endp, &endp, 0);
+	if (endp && endp[0] && endp[1]) {
+		endp++;
+		start = end = strtoul(endp, &endp, 0);
+		if (endp && endp[0] && endp[1]) {
+			endp++;
+			end = strtoul(endp, &endp, 0);
+		}
+		debug_mypc = 1;
+		check_sp = reg;
+		check_sp_start = start;
+		check_sp_end = end;
+	}
+}
+
+trace_init(debug_mysp_types)
 
 void helper_myst( target_ulong value,target_ulong addr,uint32_t mmu_idx, CPUMIPSState *env)
 {
@@ -1556,6 +1584,8 @@ void helper_mtc0_compare(CPUMIPSState *env, target_ulong arg1)
     qemu_mutex_unlock_iothread();
 }
 
+static uint32_t debug_status_change;
+const char *lookup_symbol(target_ulong orig_addr);
 void helper_mtc0_status(CPUMIPSState *env, target_ulong arg1)
 {
     MIPSCPU *cpu = mips_env_get_cpu(env);
@@ -1564,7 +1594,7 @@ void helper_mtc0_status(CPUMIPSState *env, target_ulong arg1)
     old = env->CP0_Status;
     cpu_mips_store_status(env, arg1);
     val = env->CP0_Status;
-//    if(old ^ arg1) printf("status change form 0x%llx to 0x%llx pc=0x%llx\n",(long long)old, (long long)arg1, (long long)mypc);
+    if ((old ^ arg1) & debug_status_change) qemu_log("status change form 0x%llx to 0x%llx pc=0x%llx %s\n", (long long)old, (long long)arg1, (long long)mypc, lookup_symbol(mypc));
 
     if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
         qemu_log("Status %08x (%08x) => %08x (%08x) Cause %08x",
@@ -1584,6 +1614,17 @@ void helper_mtc0_status(CPUMIPSState *env, target_ulong arg1)
         }
     }
 }
+
+static void debug_mystatus_types(void)
+{
+	char *s;
+	if ((s = getenv("DEBUG_MYSTATUS"))) {
+                debug_status_change = strtoul(s, 0, 0);
+	}
+}
+
+trace_init(debug_mystatus_types)
+
 
 void helper_mttc0_status(CPUMIPSState *env, target_ulong arg1)
 {

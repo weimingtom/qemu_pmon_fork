@@ -518,6 +518,8 @@ struct CPUMIPSState {
 #define CP0DB_DSS  0
     target_ulong CP0_DEPC;
     int32_t CP0_Performance0;
+    int32_t CP0_Performance1;
+    int32_t CP0_Performance3;
     int32_t CP0_ErrCtl;
 #define CP0EC_WST 29
 #define CP0EC_SPR 28
