@@ -308,8 +308,10 @@ static void *ls2k_intctl_init(MemoryRegion *mr, hwaddr addr, qemu_irq *parent_ir
                 memory_region_add_subregion(mr, addr+0xb0, iomem);
                 iomem = g_new(MemoryRegion, 1);
                 memory_region_init_io(iomem, NULL, &ls2k_msi_mem_ops, s, "ls2k_int", 8);
-                memory_region_add_subregion(pcimr, addr+0xb0, iomem);
-		msi_nonbroken = true;
+                if (pcimr) {
+                        memory_region_add_subregion(pcimr, addr + 0xb0, iomem);
+                        msi_nonbroken = true;
+                }
 	}
 
 	s->cpu_irq = parent_irq;
