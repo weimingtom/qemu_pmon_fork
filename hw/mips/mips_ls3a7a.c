@@ -651,15 +651,15 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
         uint64_t ram_low_sz, ram_high_sz;
 	struct boot_params *bp = (void *)boot_params_buf;
 	struct system_loongson *s = (void *)&bp->efi.smbios.lp + bp->efi.smbios.lp.system_offset; 
-	
-	ret = boot_params_p-params_buf;
-	
+
+        ret = boot_params_p - params_buf;
 	s->of_dtb_addr = (target_ulong)0xffffffff80000000ULL+BOOTPARAM_PHYADDR + ret;
 
 	fdt = load_device_tree(dtb, &size);
-        printf("fdt %x %p\n", BOOTPARAM_PHYADDR + ret, fdt);
 
-	memcpy(boot_params_p, fdt, size);
+        params_size = ret + size + 8;
+        params_buf = g_realloc(params_buf, params_size);
+        memcpy(params_buf + ret, fdt, size);
 
 	qemu_fdt_dumpdtb(fdt, size);
 	}
