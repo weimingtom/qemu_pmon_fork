@@ -21,6 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/mips/mips.h"
 #include "hw/mips/cpudevs.h"
@@ -82,7 +84,7 @@ static int64_t load_kernel(void)
 	}
 	kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
                            (uint64_t *)&entry, (uint64_t *)&kernel_low,
-                           (uint64_t *)&kernel_high,0,ELF_MACHINE, 1);
+                           (uint64_t *)&kernel_high,0,EM_MIPS, 1, 0);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
@@ -375,15 +377,13 @@ static void mips_ls2f_sm502_init (QEMUMachineInitArgs *args)
 
 }
 
-QEMUMachine mips_gs2f_machine = {
-    .name = "ls2f_sm502",
-    .desc = "mips gs2f platform",
-    .init = mips_ls2f_sm502_init,
-};
-
-static void mips_machine_init(void)
+static void mips_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&mips_gs2f_machine);
+    mc->desc = "mips gs2f platform";
+    mc->init = mips_ls2f_sm502_init;
+    mc->max_cpus = 1;
+    mc->block_default_type = IF_IDE;
+    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("Loongson-2F");
 }
 
-machine_init(mips_machine_init);
+DEFINE_MACHINE("ls2f_sm502", mips_machine_init)
