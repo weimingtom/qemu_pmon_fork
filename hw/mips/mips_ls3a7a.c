@@ -1090,7 +1090,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	address_space_write(&address_space_memory, 0x1fe0012c, MEMTXATTRS_UNSPECIFIED, (const uint8_t*)&i, 4);
 	{
 
-	PCIDevice *pci_dev = pci_create_multifunction(pci_bus,  PCI_DEVFN(2, 0), false, "e1000e");
+	PCIDevice *pci_dev = pci_create_multifunction(pci_bus,  PCI_DEVFN(2, 0), false, "rtl8139");
 	DeviceState *dev = DEVICE(pci_dev);
 	if(nd_table[3].used)
 		qdev_set_nic_properties(dev, &nd_table[3]);
@@ -1744,7 +1744,7 @@ static PCIBus **pcibus_ls3a7a_init(int busno, qemu_irq *pic, int (*board_map_irq
     s->pcihost = pcihost;
     pcihost->pci_dev = s;
     br = PCI_BRIDGE(d);
-    pci_bridge_map_irq(br, "Advanced PCI Bus secondary bridge 1", board_map_irq);
+    pci_bridge_map_irq(br, NULL, board_map_irq);
     qdev_init_nofail(DEVICE(d));
     bus2 = pci_bridge_get_sec_bus(br);
 
@@ -1932,7 +1932,7 @@ static void bonito_pcihost_initfn(DeviceState *dev, Error **errp)
     address_space_init(&pcihost->as_io, &pcihost->iomem_io, "pcie io");
 
     phb = PCI_HOST_BRIDGE(dev);
-    pcihost->bus = phb->bus = pci_register_root_bus(DEVICE(dev), "pci",
+    pcihost->bus = phb->bus = pci_register_root_bus(DEVICE(dev), NULL,
                                 pci_ls3a7a_set_irq, pcihost->pci_map_irq, pcihost->pic,
                                 &pcihost->iomem_mem, &pcihost->iomem_io,
                                 PCI_DEVFN(0, 0), 64, TYPE_PCIE_BUS);
