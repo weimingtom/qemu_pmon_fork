@@ -1006,6 +1006,11 @@ static void mips_ls2h_init(MachineState *machine)
 		qdev_init_nofail(codec);
 	}
 #endif
+        {
+                MemoryRegion *xbar = g_new(MemoryRegion, 1);
+                memory_region_init_ram(xbar, NULL, "xbar", 0x10000, &error_fatal);
+                memory_region_add_subregion(get_system_memory(), 0x1fd80000, xbar);
+        }
 
 	pcbuf_size = 0x100000;
 	pcbuf_pos = 0;
