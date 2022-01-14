@@ -585,7 +585,10 @@ static int set_bootparam1(ram_addr_t initrd_offset,long initrd_size, char *dtb)
 	qemu_fdt_setprop_sized_cells(fdt, "/memory", "reg",
 			2, 0x00200000, 2, ram_low_sz,
 			2, 0x90000000, 2,  ram_high_sz);
-	memcpy(boot_params_p, fdt, size);
+        ret = boot_params_p - params_buf;
+        params_size = ret + size + 8;
+        params_buf = g_realloc(params_buf, params_size);
+        memcpy(params_buf + ret, fdt, size);
 
 	qemu_fdt_dumpdtb(fdt, size);
 	}
