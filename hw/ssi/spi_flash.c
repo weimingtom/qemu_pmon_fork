@@ -45,7 +45,7 @@
 #define INFO(jedec_id, _ext_id, _sector_size, _n_sectors, _flags) jedec_id, _sector_size, _n_sectors, _flags
 #define SECT_4K 1
 
-struct spiflash_info 
+struct spiflash_info
 {
 const char *name;
 unsigned int id;
@@ -96,6 +96,9 @@ enum {
 	FLASH_SE = 0xd8,
 	FLASH_BE = 0xC7,
 	FLASH_RES = 0xAB,
+        FLASH_EN4B =  0xb7,	/* Enter 4-byte mode */
+        FLASH_EX4B =  0xe9,	/* Exit 4-byte mode */
+
 };
 
 typedef struct SPIFlashState {
@@ -110,6 +113,7 @@ typedef struct SPIFlashState {
 	uint64_t addr;
 	int isram;
 	int ftype;
+        int addrcnt;
 } SPIFlashState;
 
 static void program_page(SPIFlashState *s, int addr, unsigned char value, int count)
@@ -209,6 +213,14 @@ static uint32_t spi_flash_transfer(SSISlave *dev, uint32_t val)
 					state_count = 0;
 					s->mode = SPI_FLASH_RES_DUMMY;
 					break;
+                                case FLASH_EN4B:
+                                        s->addrcnt = 4;
+                                        s->mode = SPI_FLASH_CMD;
+                                        break;
+                                case FLASH_EX4B:
+                                        s->addrcnt = 3;
+                                        s->mode = SPI_FLASH_CMD;
+                                        break;
 			}
 			return 0xff;
 		case SPI_FLASH_READ_ADDR:
@@ -373,6 +385,7 @@ static void spi_flash_realize(SSISlave *dev, Error **errp)
 	int len;
 	Error *local_err = NULL;
 
+        s->addrcnt = 3;
 	s->mode = SPI_FLASH_CMD;
 	memory_region_init_rom_device_nomigrate(&s->mem, OBJECT(dev), &spi_rom_ops , s, "spi flash rom", FLASH_SIZE, &local_err);
   	s->buf = memory_region_get_ram_ptr(&s->mem);
