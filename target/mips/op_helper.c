@@ -30,14 +30,34 @@
 target_ulong mypc, mypc0;
 target_ulong mypcs[MAX_CPUS];
 void (*mypc_callback)( target_ulong pc, uint32_t opcode);
-int debug_st;
 int debug_mypc;
 static int debug_tlb;
+int debug_st;
+int check_st_mask_cpu;
+unsigned long long check_st_start;
+unsigned long long check_st_end;
 static void debug_st_types(void)
 {
-	if(getenv("DEBUG_ST")) {
-	debug_st = 1;
-	debug_mypc = 1;
+	char *endp;
+	int reg;
+	unsigned long long start, end;
+	endp = getenv("DEBUG_ST");
+	if (!endp)
+		return;
+
+	reg = strtoul(endp, &endp, 0);
+	if (endp && endp[0] && endp[1]) {
+		endp++;
+		start = end = strtoul(endp, &endp, 0);
+		if (endp && endp[0] && endp[1]) {
+			endp++;
+			end = strtoul(endp, &endp, 0);
+		}
+		debug_mypc = 1;
+                debug_st = 1;
+		check_st_mask_cpu = reg;
+		check_st_start = start;
+		check_st_end = end;
 	}
 }
 
@@ -125,10 +145,10 @@ void helper_myst( target_ulong value,target_ulong addr,uint32_t mmu_idx, CPUMIPS
 
     haddr = addr + env->tlb_table[mmu_idx][index].addend;
 #if TARGET_LONG_SIZE == 8
-    if ((env->CP0_EBase & 0xf) == 1 && paddr < 0xc0000000 && !(paddr >= 0x40000000 && paddr < 0x80000000) && (mypcs[1] >= 0xC000000000000000ULL || mypcs[1] < 0x9000000000000000ULL) ) {
+    if ((env->CP0_EBase & (check_st_mask_cpu >> 4)) == (check_st_mask_cpu & 0xf) && (addr >= check_st_start && addr < check_st_end)) {
 	    static int bp;
 	    if (!bp) {
-		    printf("st 0x%lx phys 0x%lx haddr 0x%lx pc 0x%lx\n", (long) addr, (long)paddr, (long)haddr, (long)mypcs[1]); bp = 1;
+		    printf("st 0x%lx phys 0x%lx haddr 0x%lx pc 0x%lx\n", (long) addr, (long)paddr, (long)haddr, (long)mypc); bp = 1;
 		    env->active_tc.PC = mypcs[1];
 		    do_raise_exception(env, EXCP_DEBUG, GETPC());
 	    }
