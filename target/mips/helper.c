@@ -24,6 +24,7 @@
 #include "exec/cpu_ldst.h"
 #include "exec/log.h"
 #include "hw/mips/cpudevs.h"
+void debug_my_status(CPUMIPSState *env, uint32_t old, uint32_t new, char *s);
 
 enum {
     TLBRET_XI = -6,
@@ -725,6 +726,7 @@ void mips_cpu_do_interrupt(CPUState *cs)
     target_ulong offset;
     int cause = -1;
     const char *name;
+    uint32_t old = env->CP0_Status;
 
     if (qemu_loglevel_mask(CPU_LOG_INT)
         && cs->exception_index != EXCP_EXT_INTERRUPT) {
@@ -1017,6 +1019,7 @@ void mips_cpu_do_interrupt(CPUState *cs)
                  env->CP0_Status, env->CP0_Cause, env->CP0_BadVAddr,
                  env->CP0_DEPC);
     }
+    debug_my_status(env, old, env->CP0_Status, __func__);
 #endif
     cs->exception_index = EXCP_NONE;
 }

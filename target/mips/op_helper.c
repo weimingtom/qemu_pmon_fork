@@ -36,6 +36,12 @@ int debug_st;
 int check_st_mask_cpu;
 unsigned long long check_st_start;
 unsigned long long check_st_end;
+static uint32_t debug_status_change;
+const char *lookup_symbol(target_ulong orig_addr);
+void debug_my_status(CPUMIPSState *env, uint32_t old, uint32_t new, char *s)
+{
+        if ((old ^ new) & debug_status_change) qemu_log("status change form 0x%08x to 0x%08x pc=0x%llx/%s (%s)\n", old, new, (long long)mypc, lookup_symbol(mypc), s);
+}
 static void debug_st_types(void)
 {
 	char *endp;
@@ -796,6 +802,7 @@ static void sync_c0_tcstatus(CPUMIPSState *cpu, int tc,
                        | (1 << CP0St_CU0)
                        | (1 << CP0St_MX)
                        | (3 << CP0St_KSU));
+    uint32_t old = cpu->CP0_Status;
 
     tcu = (v >> CP0TCSt_TCU0) & 0xf;
     tmx = (v >> CP0TCSt_TMX) & 0x1;
@@ -812,6 +819,7 @@ static void sync_c0_tcstatus(CPUMIPSState *cpu, int tc,
     /* Sync the TASID with EntryHi.  */
     cpu->CP0_EntryHi &= ~cpu->CP0_EntryHi_ASID_mask;
     cpu->CP0_EntryHi |= tasid;
+    debug_my_status(cpu, old, cpu->CP0_Status, __func__);
 
     compute_hflags(cpu);
 }
@@ -1604,8 +1612,6 @@ void helper_mtc0_compare(CPUMIPSState *env, target_ulong arg1)
     qemu_mutex_unlock_iothread();
 }
 
-static uint32_t debug_status_change;
-const char *lookup_symbol(target_ulong orig_addr);
 void helper_mtc0_status(CPUMIPSState *env, target_ulong arg1)
 {
     MIPSCPU *cpu = mips_env_get_cpu(env);
@@ -1614,7 +1620,7 @@ void helper_mtc0_status(CPUMIPSState *env, target_ulong arg1)
     old = env->CP0_Status;
     cpu_mips_store_status(env, arg1);
     val = env->CP0_Status;
-    if ((old ^ arg1) & debug_status_change) qemu_log("status change form 0x%llx to 0x%llx pc=0x%llx %s\n", (long long)old, (long long)arg1, (long long)mypc, lookup_symbol(mypc));
+    debug_my_status(env, old, val, __func__);
 
     if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
         qemu_log("Status %08x (%08x) => %08x (%08x) Cause %08x",
@@ -1651,7 +1657,6 @@ void helper_mttc0_status(CPUMIPSState *env, target_ulong arg1)
     int other_tc = env->CP0_VPEControl & (0xff << CP0VPECo_TargTC);
     uint32_t mask = env->CP0_Status_rw_bitmask & ~0xf1000018;
     CPUMIPSState *other = mips_cpu_map_tc(env, &other_tc);
-
     other->CP0_Status = (other->CP0_Status & ~mask) | (arg1 & mask);
     sync_c0_status(env, other, other_tc);
 }
@@ -2397,6 +2402,7 @@ target_ulong helper_di(CPUMIPSState *env)
     target_ulong t0 = env->CP0_Status;
 
     env->CP0_Status = t0 & ~(1 << CP0St_IE);
+    debug_my_status(env, t0, env->CP0_Status, __func__);
     return t0;
 }
 
@@ -2405,6 +2411,7 @@ target_ulong helper_ei(CPUMIPSState *env)
     target_ulong t0 = env->CP0_Status;
 
     env->CP0_Status = t0 | (1 << CP0St_IE);
+    debug_my_status(env, t0, env->CP0_Status, __func__);
     return t0;
 }
 
@@ -2458,6 +2465,7 @@ static void set_pc(CPUMIPSState *env, target_ulong error_pc)
 
 static inline void exception_return(CPUMIPSState *env)
 {
+    uint32_t old = env->CP0_Status;
     debug_pre_eret(env);
     if (env->CP0_Status & (1 << CP0St_ERL)) {
         set_pc(env, env->CP0_ErrorEPC);
@@ -2468,6 +2476,7 @@ static inline void exception_return(CPUMIPSState *env)
     }
     compute_hflags(env);
     debug_post_eret(env);
+    debug_my_status(env, old, env->CP0_Status, __func__);
 }
 
 void helper_eret(CPUMIPSState *env)
@@ -2710,6 +2719,7 @@ target_ulong helper_cfc1(CPUMIPSState *env, uint32_t reg)
 
 void helper_ctc1(CPUMIPSState *env, target_ulong arg1, uint32_t fs, uint32_t rt)
 {
+    uint32_t old = env->CP0_Status;
     switch (fs) {
     case 1:
         /* UFR Alias - Reset Status FR */
@@ -2718,6 +2728,7 @@ void helper_ctc1(CPUMIPSState *env, target_ulong arg1, uint32_t fs, uint32_t rt)
         }
         if (env->CP0_Config5 & (1 << CP0C5_UFR)) {
             env->CP0_Status &= ~(1 << CP0St_FR);
+            debug_my_status(env, old, env->CP0_Status, __func__);
             compute_hflags(env);
         } else {
             do_raise_exception(env, EXCP_RI, GETPC());
@@ -2731,6 +2742,7 @@ void helper_ctc1(CPUMIPSState *env, target_ulong arg1, uint32_t fs, uint32_t rt)
         if (env->CP0_Config5 & (1 << CP0C5_UFR)) {
             env->CP0_Status |= (1 << CP0St_FR);
             compute_hflags(env);
+            debug_my_status(env, old, env->CP0_Status, __func__);
         } else {
             do_raise_exception(env, EXCP_RI, GETPC());
         }
