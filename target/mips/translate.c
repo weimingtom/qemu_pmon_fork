@@ -11278,8 +11278,8 @@ static void gen_rdhwr(DisasContext *ctx, int rt, int rd, int sel)
         gen_store_gpr(t0, rt);
         break;
 #else
-        if ((ctx->hflags & MIPS_HFLAG_CP0) ||
-            (ctx->hflags & MIPS_HFLAG_HWRENA_ULR)) {
+        if (ctx->ulri && ((ctx->hflags & MIPS_HFLAG_CP0) ||
+             (ctx->hflags & MIPS_HFLAG_HWRENA_ULR))) {
             tcg_gen_ld_tl(t0, cpu_env,
                           offsetof(CPUMIPSState, active_tc.CP0_UserLocal));
             gen_store_gpr(t0, rt);
