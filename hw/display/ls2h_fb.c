@@ -167,7 +167,7 @@ static void ls2h_fb_update_screen(void *opaque)
         framebuffer_update_display(surface, &s->fbsection,
                                    s->width,
                                    s->height,
-                                   s->stride,
+                                   s->stride/(s->width*s->bypp)*(s->width*s->bypp),
                                    dest_width,
                                    0,
                                    /*s->invalidate*/1,
