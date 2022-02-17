@@ -37,7 +37,9 @@
 #include "hw/mips/mips.h"
 #include "hw/mips/cpudevs.h"
 #endif
+#define GPIO_PRINTF(...)
 
+#define DC_REG(d, addr) (d)->reg[(addr - 0x1240) / 4]
 struct ls1a_fb_states;
 typedef struct ls1a_fb_state {
         struct ls1a_fb_states *fb;
@@ -74,7 +76,9 @@ typedef struct ls1a_fb_states {
         };
 
         int irqstat;
-        int reg[(0x1594 - 0x1240) / 4];
+        int reg[(0x1670 - 0x1240) / 4];
+        qemu_irq gpio_out[4];
+        uint32_t ilevel, olevel, oconf;
 } ls1a_fb_states;
 
 
@@ -90,6 +94,7 @@ typedef struct ls1a_fb_states {
 #include "ls1a_fb_template.h"
 
 
+static void ls2h_fb_gpio_check(ls1a_fb_states *d);
 static void ls2h_fb_raise_irq(ls1a_fb_state *s);
 static inline void ls2h_fb_size(ls1a_fb_state *s)
 {
@@ -230,6 +235,8 @@ static void ls2h_fb_reset(ls1a_fb_state *s)
 #define LS2H_FB_CUR_LOC_ADDR_REG           (LS2H_DC_REG_BASE + 0x1540)
 #define LS2H_FB_CUR_BACK_REG               (LS2H_DC_REG_BASE + 0x1550)
 #define LS2H_FB_CUR_FORE_REG               (LS2H_DC_REG_BASE + 0x1560)
+#define LS2H_FB_GPIO_INOUT		  (LS2H_DC_REG_BASE + 0x1650)
+#define LS2H_FB_GPIO_CONF		  (LS2H_DC_REG_BASE + 0x1660)
 
 
 #define LSDC_INT_FB1_VSYNC             0
@@ -242,7 +249,7 @@ static void ls2h_fb_reset(ls1a_fb_state *s)
 
 static void ls2h_fb_check_irq(ls1a_fb_states *d)
 {
-        uint32_t irqreg = d->reg[(LS2H_FB_INT_REG - 0x1240) / 4] ;
+        uint32_t irqreg = DC_REG(d, LS2H_FB_INT_REG) ;
         if ((irqreg >> 16) & d->irqstat) {
                 qemu_irq_raise(d->irq);
         } else {
@@ -267,13 +274,17 @@ static void ls2h_fb_raise_irq(ls1a_fb_state *s)
         ls2h_fb_check_irq(d);
 }
 
+/*
+add gpio i2c
+*/
+
 static void ls2h_fb_writel(void *opaque, hwaddr addr, uint64_t val,
                            unsigned size)
 {
         ls1a_fb_states *d = opaque;
         ls1a_fb_state *s;
         if (addr >= 0x1240 && (addr - 0x1240) < sizeof(d->reg)) {
-                d->reg[(addr - 0x1240) / 4] = val;
+                DC_REG(d, addr) = val;
         }
 
         s = (addr & 0x10) ? &d->fb_con[1] : &d->fb_con[0];
@@ -289,7 +300,7 @@ static void ls2h_fb_writel(void *opaque, hwaddr addr, uint64_t val,
                 if (val & 0x80) {
                         s->index ^= 1;
                 }
-                d->reg[(addr - 0x1240) / 4] = (val & ~0x880) | (s->index << 11);
+                DC_REG(d, addr) = (val & ~0x880) | (s->index << 11);
                 if (s->enable) {
                         switch (val & 7) {
                         case 4:
@@ -341,6 +352,14 @@ static void ls2h_fb_writel(void *opaque, hwaddr addr, uint64_t val,
                 s->stride = val;
                 ls2h_fb_size(s);
                 break;
+        case LS2H_FB_GPIO_INOUT ... LS2H_FB_GPIO_INOUT + 7:
+                ls2h_fb_gpio_check(d);
+                break;
+        case LS2H_FB_GPIO_CONF ... LS2H_FB_GPIO_CONF + 7:
+                d->ilevel |= ((d->oconf ^ DC_REG(d, LS2H_FB_GPIO_CONF)) & 0xf) & DC_REG(d, LS2H_FB_GPIO_CONF);
+                d->oconf = DC_REG(d, LS2H_FB_GPIO_CONF);
+                ls2h_fb_gpio_check(d);
+                break;
         }
 
 #ifdef DEBUGPC
@@ -359,14 +378,47 @@ static uint64_t ls2h_fb_readl(void *opaque, hwaddr addr, unsigned size)
         if (addr >= 0x1240 && (addr - 0x1240) < sizeof(d->reg)) {
                 switch (addr) {
                 case LS2H_FB_INT_REG:
-                        return (d->reg[(addr - 0x1240) / 4] & 0xffff0000) |
+                        return (DC_REG(d, addr) & 0xffff0000) |
                         d->irqstat;
                         break;
+                case LS2H_FB_GPIO_INOUT:
+                        ls2h_fb_gpio_check(d);
+
+                        return d->olevel;
+                        break;
                 default:
-                        return  d->reg[(addr - 0x1240) / 4];
+                        return  DC_REG(d, addr);
                 }
         }
         return 0;
+}
+
+static void ls2h_fb_gpio_check(ls1a_fb_states *d)
+{
+    uint32_t level, diff;
+    int bit;
+    level =  (DC_REG(d, LS2H_FB_GPIO_CONF) & d->ilevel) | (~DC_REG(d, LS2H_FB_GPIO_CONF) & DC_REG(d, LS2H_FB_GPIO_INOUT));
+
+    for (diff = (d->olevel ^ level) & 0xf; diff; diff ^= 1 << bit) {
+        bit = ctz32(diff);
+        GPIO_PRINTF("gpio %d set %d\n", bit, (level >> bit) & 1);
+        qemu_set_irq(d->gpio_out[bit], (level >> bit) & 1);
+    }
+
+    level =  (DC_REG(d, LS2H_FB_GPIO_CONF) & d->ilevel) | (~DC_REG(d, LS2H_FB_GPIO_CONF) & DC_REG(d, LS2H_FB_GPIO_INOUT));
+    d->olevel = level;
+}
+
+static void ls2h_fb_gpio_set(void *opaque, int line, int level)
+{
+        ls1a_fb_states *d = opaque;
+        GPIO_PRINTF("gpio %d : level %d\n", line, level);
+
+        if (level) {
+                d->ilevel |= 1 << line;
+        } else {
+                d->ilevel &= ~(1 << line);
+        }
 }
 
 static const MemoryRegionOps ls2h_fb_ops = {
@@ -407,8 +459,15 @@ static int ls2h_fb_sysbus_init(SysBusDevice *dev)
         ls2h_fb_reset(&d->fb_con[1]);
         sysbus_init_irq(dev, &d->irq);
 
+        qdev_init_gpio_in(DEVICE(dev), ls2h_fb_gpio_set, 4);
+        qdev_init_gpio_out(DEVICE(dev), d->gpio_out, 4);
+        d->ilevel = 0xf;
+        d->olevel = 0xf;
+        DC_REG(d, LS2H_FB_GPIO_CONF) = 0xf;
+        DC_REG(d, LS2H_FB_GPIO_INOUT) = 0xf;
         return 0;
 }
+
 
 static Property ls2h_fb_properties[] = {
         DEFINE_PROP_PTR("root", ls1a_fb_states, root_ptr),
@@ -450,6 +509,12 @@ typedef struct ls1a_fb_pci_state {
 #define LS2KDC_VENDOR_ID  0x0014
 #define LS2KDC_DEVICE_ID  0x7a06
 
+static void ls2h_pci_fb_gpio_set(void *opaque, int line, int level)
+{
+        ls1a_fb_pci_state *d = opaque;
+        ls2h_fb_gpio_set(&d->dc, line, level);
+}
+
 static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
 {
         ls1a_fb_pci_state *d = DO_UPCAST(ls1a_fb_pci_state, dev, pci_dev);
@@ -484,6 +549,12 @@ static void ls1a_fb_pci_init(PCIDevice *pci_dev, Error **errp)
         ls2h_fb_reset(&d->dc.fb_con[0]);
         ls2h_fb_reset(&d->dc.fb_con[1]);
 
+        qdev_init_gpio_in(DEVICE(pci_dev), ls2h_pci_fb_gpio_set, 4);
+        qdev_init_gpio_out(DEVICE(pci_dev), d->dc.gpio_out, 4);
+        d->dc.ilevel = 0xf;
+        d->dc.olevel = 0xf;
+        DC_REG(&d->dc, LS2H_FB_GPIO_CONF) = 0xf;
+        DC_REG(&d->dc, LS2H_FB_GPIO_INOUT) = 0xf;
 }
 
 
