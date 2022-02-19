@@ -1187,9 +1187,9 @@ static void mips_ls3a7a_init(MachineState *machine)
 		qdev_init_nofail(dev);
 		s = SYS_BUS_DEVICE(dev);
 		sysbus_mmio_map(s, 0, 0x100d0120);
-		sysbus_connect_irq(s, 0, ls3a7a_irq[14]);
-		sysbus_connect_irq(s, 1, ls3a7a_irq[15]);
-		sysbus_connect_irq(s, 2, ls3a7a_irq[16]);
+		sysbus_connect_irq(s, 0, ls3a7a_irq[44]);
+		sysbus_connect_irq(s, 1, ls3a7a_irq[45]);
+		sysbus_connect_irq(s, 2, ls3a7a_irq[46]);
 	}
 #endif
 
@@ -1215,7 +1215,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		};
 
-		dev=sysbus_create_simple("ls1a_i2c",0x10090000, ls3a7a_irq[7]);
+		dev=sysbus_create_simple("ls1a_i2c",0x10090000, ls3a7a_irq[9]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 		smbus_eeprom_init_one(bus, 0x50, eeprom_spd);
@@ -1224,7 +1224,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 	{
 		DeviceState *dev;
 		void *bus;
-		dev=sysbus_create_simple("ls1a_i2c",0x10090100, ls3a7a_irq[8]);
+		dev=sysbus_create_simple("ls1a_i2c",0x10090100, ls3a7a_irq[9]);
 		bus = qdev_get_child_bus(dev, "i2c");
 		i2c_create_slave(bus, "ds1338", 0x68);
 	}
