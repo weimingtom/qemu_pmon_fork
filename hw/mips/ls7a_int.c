@@ -102,8 +102,9 @@ static void ls7a_intctl_mem_writel(void *opaque, hwaddr addr, uint64_t val, unsi
 			memcpy(((char *)&s->int_edge)+(addr-0x60), &val, size);
 			break;
 		case 0x80 ... 0x87: //int_clr
+                        val &= s->int_edge;
 			for(i=addr - 0x80, j = 0;j<size;i++, j++)
-				((char *)&s->int_mask)[i] &= ~((char *)&val)[j];
+				((char *)&s->intreg_pending)[i] &= ~((char *)&val)[j];
 	                ls7a_check_interrupts(s);
 			break;
 		case 0xa0 ... 0xa7:
@@ -181,7 +182,7 @@ static void ls7a_set_irq(void *opaque, int irq, int level)
 	if (level) {
 		s->intreg_pending |= mask;
 	} else {
-		s->intreg_pending &= ~mask;
+		s->intreg_pending &= ~mask | s->int_edge;
 	}
 	ls7a_check_interrupts(s);
 }
