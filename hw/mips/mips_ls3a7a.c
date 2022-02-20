@@ -2378,9 +2378,9 @@ static void ht_update_irq(void *opaque,int disable)
 		*(uint32_t *)(s->ht_irq_reg+HT_IRQ_VECTOR_REG0 + i*4) = ls7a->msiroute_ht[i]; 
 		ier = *(uint32_t *)(s->ht_irq_reg+HT_IRQ_ENABLE_REG0 + i *4);
 	 if((ht_route_mode & 0x700) == 0x400)
-		irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT0 + i*4);
+		irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT0 + i);
 	 else
-		irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT0 + (i/2)*4);
+		irtr = *(uint8_t *)(s->int_route_reg+INT_ROUTER_REGS_HT1_INT0 + (i/2));
 		isr = ls7a->msiroute_ht[i];
 
 		ls_raise_cpuirq(s, irtr, isr, ier, disable);
