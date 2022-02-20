@@ -1144,9 +1144,7 @@ static void mips_ls3a7a_init(MachineState *machine)
 
 
 
-#if 0
-	sysbus_create_simple("ls3a7a_acpi",0x1fe7c000, ls3a7a_irq[0]);
-#endif
+        sysbus_create_simple("ls2h_acpi", 0x100d0000, NULL);
 
 	if (!getenv("E6882"))
 	{
